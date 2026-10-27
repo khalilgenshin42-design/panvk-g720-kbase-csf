@@ -1,0 +1,25 @@
+
+name: Android-only PanVK G720 Experiment
+
+on:
+  push:
+    branches:
+      - experiment/android-only-ci
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-configuration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out experimental branch
+        uses: actions/checkout@v4
+
+      - name: Verify Android build configuration
+        run: |
+          echo "Checking Android cross-file and build options"
+          test -f android.toml
+          grep -n 'platforms\|vulkan-drivers\|panfrost-kmds' .github/workflows/build.yml || true
+          echo "Android-only experiment branch is ready."
