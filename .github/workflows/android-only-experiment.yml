@@ -108,8 +108,8 @@ jobs:
       - name: Inspect compiled library
         run: |
           file build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so
-          llvm-readelf -d build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so
-          llvm-readelf --dyn-syms build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so | grep -E 'HMI|vk_icd|vkCreateInstance|vkGetInstanceProcAddr' || true
+          readelf -d build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so
+          readelf --dyn-syms build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so | grep -E 'HMI|vk_icd|vkCreateInstance|vkGetInstanceProcAddr' || true
 
       - name: Upload experimental artifact
         uses: actions/upload-artifact@v4
