@@ -1,0 +1,118 @@
+name: Android-only PanVK G720 Experiment
+
+on:
+  push:
+    branches:
+      - experiment/android-only-ci
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-only:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out experimental branch
+        uses: actions/checkout@v4
+
+      - name: Patch Android memfd_create
+        run: |
+          sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            llvm-22-dev \
+            libclang-22-dev \
+            libclc-22-dev \
+            libllvmspirvlib-22-dev \
+            libelf-dev \
+            spirv-tools \
+            spirv-tools-dev \
+            bison \
+            flex \
+            libdrm-dev \
+            pkg-config
+          python -m pip install --upgrade pip
+          pip install mako PyYAML meson ninja packaging
+
+      - name: Generate host tools
+        run: |
+          meson setup build-host \
+            -Dplatforms=[] \
+            -Dgallium-drivers=[] \
+            -Dvulkan-drivers=[] \
+            -Dtools=panfrost \
+            -Dprecomp-compiler=enabled \
+            -Dinstall-precomp-compiler=true \
+            -Dllvm=enabled \
+            -Dmesa-clc=enabled \
+            -Dinstall-mesa-clc=true
+
+          ninja -C build-host \
+            src/compiler/clc/mesa_clc \
+            src/compiler/spirv/vtn_bindgen2 \
+            src/panfrost/clc/panfrost_compile
+
+          ln -sf build-host/src/compiler/clc/mesa_clc build-host/src/compiler/clc/mesa-clc
+          ln -sf build-host/src/compiler/spirv/vtn_bindgen2 build-host/src/compiler/spirv/vtn-bindgen2
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> "$GITHUB_PATH"
+
+      - name: Configure Android-only build
+        env:
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
+          envsubst < android.toml > android-cross.txt
+
+          meson setup build-android-only \
+            --cross-file android-cross.txt \
+            -Dbuildtype=release \
+            -Dplatforms=android \
+            -Dandroid-stub=true \
+            -Dandroid-libbacktrace=disabled \
+            -Dplatform-sdk-version=30 \
+            -Dglx=disabled \
+            -Dgbm=disabled \
+            -Degl=disabled \
+            -Dopengl=false \
+            -Dgles1=disabled \
+            -Dgles2=disabled \
+            -Dglvnd=disabled \
+            -Dvalgrind=disabled \
+            -Dgallium-drivers= \
+            -Dshared-glapi=disabled \
+            -Dzstd=disabled \
+            -Dmesa-clc=system \
+            -Dprecomp-compiler=system \
+            -Dvulkan-drivers=panfrost \
+            -Dllvm=disabled \
+            -Dpanfrost-kmds=kbase,panthor
+
+      - name: Compile experimental driver
+        run: meson compile -C build-android-only
+
+      - name: Inspect compiled library
+        run: |
+          file build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so
+          readelf -d build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so
+          readelf --dyn-syms build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so | grep -E 'HMI|vk_icd|vkCreateInstance|vkGetInstanceProcAddr' || true
+
+      - name: Upload experimental artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: panvk-g720-android-only-experimental-release
+          path: build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so
+          if-no-files-found: error
