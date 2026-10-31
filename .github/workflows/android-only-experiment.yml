@@ -17,9 +17,7 @@ jobs:
       - name: Check out experimental branch
         uses: actions/checkout@v4
 
-      - name: Patch Android memfd_create
-        run: |
-          sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
+      
 
       - name: Set up Python
         uses: actions/setup-python@v5
