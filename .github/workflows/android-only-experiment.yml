@@ -2,9 +2,6 @@
 name: Android-only PanVK G720 Experiment
 
 on:
-  push:
-    branches:
-      - experiment/android-only-ci
   workflow_dispatch:
 
 permissions:
@@ -15,12 +12,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out experimental branch
+      - name: Check out selected source branch
         uses: actions/checkout@v4
 
-      - name: Patch Android memfd_create
+      - name: Verify checkout
         run: |
-          sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
+          echo "SOURCE_REF=$GITHUB_REF"
+          echo "SOURCE_SHA=$GITHUB_SHA"
+          test -f meson.build
+          test -f android.toml
+          grep -n "uint64_t fn_addr" src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,7 +43,8 @@ jobs:
             bison \
             flex \
             libdrm-dev \
-            pkg-config
+            pkg-config \
+            patchelf
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
@@ -64,8 +66,8 @@ jobs:
             src/compiler/spirv/vtn_bindgen2 \
             src/panfrost/clc/panfrost_compile
 
-          ln -sf build-host/src/compiler/clc/mesa_clc build-host/src/compiler/clc/mesa-clc
-          ln -sf build-host/src/compiler/spirv/vtn_bindgen2 build-host/src/compiler/spirv/vtn-bindgen2
+          ln -sf mesa_clc build-host/src/compiler/clc/mesa-clc
+          ln -sf vtn_bindgen2 build-host/src/compiler/spirv/vtn-bindgen2
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> "$GITHUB_PATH"
@@ -102,18 +104,33 @@ jobs:
             -Dllvm=disabled \
             -Dpanfrost-kmds=kbase,panthor
 
-      - name: Compile experimental driver
-        run: meson compile -C build-android-only
-
-      - name: Inspect compiled library
+      - name: Compile and stage Android install
         run: |
-          file build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so
-          readelf -d build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so
-          readelf --dyn-syms build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so | grep -E 'HMI|vk_icd|vkCreateInstance|vkGetInstanceProcAddr' || true
+          meson compile -C build-android-only
+          DESTDIR="$GITHUB_WORKSPACE/stage" meson install -C build-android-only
 
-      - name: Upload experimental artifact
+      - name: Audit driver, manifest, dependencies and staged files
+        run: |
+          mkdir -p audit
+          DRIVER="build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so"
+          test -f "$DRIVER"
+          file "$DRIVER" | tee audit/file.txt
+          readelf -h "$DRIVER" > audit/elf-header.txt
+          readelf -d "$DRIVER" > audit/dynamic-section.txt
+          readelf --dyn-syms "$DRIVER" > audit/dynamic-symbols.txt
+          grep -E 'NEEDED|SONAME|RPATH|RUNPATH' audit/dynamic-section.txt || true
+          grep -E 'HMI|vk_icdGetInstanceProcAddr|vkCreateInstance|vkGetInstanceProcAddr' audit/dynamic-symbols.txt || true
+          find stage -type f -print | sort | tee audit/staged-files.txt
+          find stage -type f \( -name '*icd*.json' -o -name '*vulkan*.json' \) -print -exec cat {} \; > audit/icd-manifests.txt
+          find stage -type f -name '*.so' -exec sh -c 'echo "### $1"; readelf -d "$1" | grep -E "NEEDED|SONAME|RPATH|RUNPATH" || true' _ {} \; > audit/staged-so-dependencies.txt
+          sha256sum "$DRIVER" | tee audit/sha256.txt
+          cp "$DRIVER" stage/libvulkan_panfrost.so
+
+      - name: Upload complete experimental package and audit
         uses: actions/upload-artifact@v4
         with:
-          name: panvk-g720-android-only-experimental-release
-          path: build-android-only/src/panfrost/vulkan/libvulkan_panfrost.so
+          name: panvk-g720-android-only-experimental-package
+          path: |
+            stage/
+            audit/
           if-no-files-found: error
