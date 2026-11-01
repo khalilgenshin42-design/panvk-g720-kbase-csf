@@ -2850,7 +2850,7 @@ panvk_queue_submit_ioctl_kbase(struct panvk_queue_submit *submit,
    }
 
    if (native_gpu_waits)
-      mesa_logi("kbase: SYNC-A3 native GPU internal wait path active (%u cells)",
+      mesa_logd("kbase: SYNC-A3 native GPU internal wait path active (%u cells)",
                 gpu_wait_count);
 
    /* Flush pending synchronization requests before submitting the job, to
