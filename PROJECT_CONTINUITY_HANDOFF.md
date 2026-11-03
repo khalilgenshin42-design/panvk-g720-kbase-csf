@@ -280,3 +280,22 @@ Latest branch commits:
 - `827240a83442cf39db021f771fe97c4e931d5ff3`: match descriptor-ring reserve scope to the matching release operation.
 
 Next: wait for CI on the latest branch head, then review *all* cross-subqueue syncobj producers/consumers for scope symmetry. Only after build success should the user test this targeted candidate. The earlier run on SHA `9eae560bafeb85b1faa1da841a00881a677acd19` is an intermediate build and does not validate the latest two commits.
+
+
+## 2026-11-03 addendum — WAIT scope call-site audit and build retry
+
+- The previous CI runs on `34280b58d746dddaf4c33a33d238e6d50826b4e2` had not yet reached a final status at the time of recheck.
+- A full CSF source scan found additional old-signature WAIT call sites after adding the scope argument to the low-level builder:
+  - `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c`: descriptor ring-buffer `cs_sync32_wait` now receives the ring's selected scope; vertex-to-fragment tiler `panvk_instr_sync64_wait` now receives `cmdbuf->sync_scope`.
+  - `src/panfrost/vulkan/csf/panvk_vX_cmd_event.c`: event `panvk_instr_sync32_wait` now receives `cmdbuf->sync_scope`.
+- These are follow-up compile/API integration fixes, not proven runtime synchronization fixes.
+- Commits on `experiment/csf-sync-wait64-csg-scope`:
+  - `34280b58d746dddaf4c33a33d238e6d50826b4e2`: thread scope through instruction wrapper and barrier wait.
+  - `68034c7c705221e81d243af8c7e8164cce92ef92`: pass scope to descriptor-ring and tiler waits.
+  - `6634282aa14616931656b883aafb5519831eb888`: pass scope to event waits; this is current branch HEAD unless later commits supersede it.
+- CI triggered for the intermediate SHA `68034c7c705221e81d243af8c7e8164cce92ef92`:
+  - Android-only run `41665460748`.
+  - Android wrapper run `41665460790`.
+  - Both were in progress at the time of this addendum. Re-query before treating as pass/fail.
+- Audit all remaining direct `cs_sync32_wait`, `cs_sync64_wait`, `panvk_instr_sync32_wait`, and `panvk_instr_sync64_wait` call sites whenever the builder signature changes. Ensure no legacy signature remains in CSF source.
+- No package has been produced from these follow-up commits yet; do not ask the user to test until CI passes and package contents/checksums are verified.
