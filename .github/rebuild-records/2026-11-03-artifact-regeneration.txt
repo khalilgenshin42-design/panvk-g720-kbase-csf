@@ -1,0 +1,6 @@
+Artifact regeneration record
+Date: 2026-11-03
+Reason: The previous GitHub Actions artifact was deleted and is no longer available for download.
+Source branch: experiment/kbase-csg-scope-diagnostic
+Expected workflow: .github/workflows/android-only-experiment.yml
+Purpose: Trigger a fresh Android ARM64 experimental build and artifact upload without changing driver source code.
