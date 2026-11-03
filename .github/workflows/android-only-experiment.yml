@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - experiment/kbase-csg-scope-diagnostic
+      - experiment/csf-sync-wait64-csg-scope
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
 
