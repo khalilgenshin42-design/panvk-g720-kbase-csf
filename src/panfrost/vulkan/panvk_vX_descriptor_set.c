@@ -535,7 +535,7 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
                              uint32_t variable_count,
                              struct panvk_descriptor_set **out)
 {
-   uint32_t num_descs = layout->desc_count;
+   uint64_t num_descs = layout->desc_count;
 
    if (layout->binding_count) {
       uint32_t last_binding = layout->binding_count - 1;
@@ -543,29 +543,36 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
       if ((layout->bindings[last_binding].flags &
            VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT) &&
           !vk_descriptor_type_is_dynamic(layout->bindings[last_binding].type)) {
+         uint64_t base_descs, variable_descs;
+
          if (layout->bindings[last_binding].type ==
              VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
-            num_descs -= layout->bindings[last_binding].desc_count;
-            num_descs += panvk_get_iub_desc_count(variable_count);
+            /* Inline uniform descriptors are accounted in packed words. */
+            base_descs = layout->bindings[last_binding].desc_count;
+            variable_descs = panvk_get_iub_desc_count(variable_count);
          } else {
             uint32_t desc_stride =
                panvk_get_desc_stride(&layout->bindings[last_binding]);
-            uint64_t base_descs =
+            base_descs =
                (uint64_t)layout->bindings[last_binding].desc_count *
                desc_stride;
-            uint64_t variable_descs = (uint64_t)variable_count * desc_stride;
-
-            assert(base_descs <= num_descs);
-            uint64_t adjusted_descs = num_descs - base_descs;
-            if (variable_descs > UINT32_MAX - adjusted_descs)
-               return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
-
-            num_descs = adjusted_descs + variable_descs;
+            variable_descs = (uint64_t)variable_count * desc_stride;
          }
+
+         assert(base_descs <= num_descs);
+         uint64_t adjusted_descs = num_descs - base_descs;
+         if (variable_descs > UINT32_MAX - adjusted_descs)
+            return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
+
+         num_descs = adjusted_descs + variable_descs;
       }
    }
 
-   uint64_t descs_size = num_descs * PANVK_DESCRIPTOR_SIZE;
+   if (num_descs > UINT32_MAX)
+      return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
+
+   /* Cast before multiplying: descriptor counts are untrusted app input. */
+   uint64_t descs_size = num_descs * (uint64_t)PANVK_DESCRIPTOR_SIZE;
    uint32_t first_free_set =
       __bitset_ffs(pool->free_sets, BITSET_WORDS(pool->max_sets));
    if (first_free_set == 0 || pool->desc_heap.free_size < descs_size)
@@ -585,7 +592,7 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
    vk_descriptor_set_layout_ref(&layout->vk);
    set->pool = pool;
    set->layout = layout;
-   set->desc_count = num_descs;
+   set->desc_count = (uint32_t)num_descs;
    if (pool->desc_bo) {
       set->descs.dev = descs_dev_addr;
       set->descs.host =
