@@ -1777,6 +1777,13 @@ kbase_kmod_import_dmabuf(struct pan_kmod_dev *dev,
       goto err_close_dmabuf;
    }
 
+   if (kmod_flags & (PAN_KMOD_BO_FLAG_WB_MMAP |
+                     PAN_KMOD_BO_FLAG_GPU_UNCACHED)) {
+      mesa_logi("kbase: dma-buf import flags pan=0x%x requested=0x%" PRIx64
+                " effective=0x%" PRIx64,
+                kmod_flags, import_flags, req.out.flags);
+   }
+
    const uint64_t bo_size = req.out.va_pages * page_size;
    kbase_bo->same_va =
       (req.out.flags & (BASE_MEM_SAME_VA | BASE_MEM_NEED_MMAP)) != 0;
