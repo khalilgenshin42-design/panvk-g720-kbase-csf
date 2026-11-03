@@ -410,7 +410,7 @@ The next source-audit task from the prior read-only handoff has been completed a
 - Read the complete current handoff before continuing.
 - Base diagnostic source remains experiment/csf-sync-wait64-csg-scope at 6634282aa14616931656b883aafb5519831eb888.
 - New isolated branch: experiment/csf-notification-serialization.
-- Latest candidate branch HEAD: d5afee6669b1a6770fa2d4153afddec31f1ad365.
+- Latest candidate branch HEAD: 2be370aeb45ad952c6a0e9f940c8537e418e5fe2.
 - The diagnostic branch, existing build package, and Android vendor driver were not modified.
 - No new package has been accepted for device testing.
 
@@ -450,6 +450,7 @@ Commits on experiment/csf-notification-serialization:
 - 6641ee939130f8b4fb215846950e76c25139e72c — use cmdbuf->sync_scope for both event producer SYNC_SET32 operations.
 - 20a1cdece6885bd1569efc3325d7e2ca859f357c — log the raw Kbase coherency mode and effective allocation flags for CSF event BOs.
 - d5afee6669b1a6770fa2d4153afddec31f1ad365 — extend effective-flag logging to WB_MMAP BOs as well, so the cached event-object pool's attributes are visible.
+- 2be370aeb45ad952c6a0e9f940c8537e418e5fe2 — log requested and effective Kbase flags returned by DMA-BUF import for WB_MMAP and GPU_UNCACHED allocations.
 
 The candidate branch also adds itself to the Android-only experiment workflow branch filter.
 
@@ -460,7 +461,7 @@ The following GitHub Actions runs were observed for the candidate branch before 
 - Android-only PanVK build, run 41674211319, commit 88b583c320ba07aca5a98bfd5409ea1f9345cf1d.
 - Android NDK wrapper release/debugoptimized builds, run 41674211281, same commit.
 
-These runs were still in progress at the last check and do not validate latest HEAD 6641ee939130f8b4fb215846950e76c25139e72c. Runs 41675058107 and 41675058343 target 6641ee939130f8b4fb215846950e76c25139e72c, but are superseded. Those runs target the superseded 20a1cdece6885bd1569efc3325d7e2ca859f357c. The latest HEAD d5afee6669b1a6770fa2d4153afddec31f1ad365 has run 41675455651 (build-android-only) and run 41675455919 (build-android-wrapper release + debugoptimized). Both were queued at the last check; wait for both to finish. Do not consider an earlier SHA sufficient.
+These runs were still in progress at the last check and do not validate latest HEAD 6641ee939130f8b4fb215846950e76c25139e72c. Runs 41675058107 and 41675058343 target 6641ee939130f8b4fb215846950e76c25139e72c, but are superseded. Those runs target the superseded 20a1cdece6885bd1569efc3325d7e2ca859f357c. Those runs target the superseded d5afee6669b1a6770fa2d4153afddec31f1ad365. The latest HEAD 2be370aeb45ad952c6a0e9f940c8537e418e5fe2 has run 41675810459 (build-android-only) and run 41675810560 (build-android-wrapper release + debugoptimized). Both were queued at the last check; wait for both to finish. Do not consider an earlier SHA sufficient.
 
 ### Important unresolved checks
 
@@ -524,3 +525,14 @@ The user-specific project history confirms two different Tomb Raider results on 
 This is encouraging evidence for the earlier WAIT64 scope / descriptor-ring scope changes in that workload, but it is not a general stability proof. The new notification and event-scope candidate branch has not yet been tested on the phone.
 
 The opt-in PANVK_KBASE_SYNC_ADD64_CSG_SCOPE=1 diagnostic was previously built as a source option but has never been verified on the user's device. Its default remains SYSTEM; do not enable it in the release candidate without an A/B test and the new effective-memory-flag logs.
+
+
+### DMA-BUF coherency flag trace (new highest-priority memory audit)
+
+The Kbase import path in src/panfrost/lib/kmod/kbase_kmod.c currently constructs import_flags with BASE_MEM_COHERENT_SYSTEM unconditionally, alongside BASE_MEM_IMPORT_SHARED and CPU/GPU read/write permissions. This applies not only to externally imported dma-bufs: kbase_kmod_bo_alloc_dmabuf() allocates from /dev/dma_heap/system and then routes those internal pool BOs through kbase_kmod_import_dmabuf(). Therefore the rw and rw_nc pools may receive a SYSTEM-shareable GPU mapping even when the device is not IO-coherent.
+
+Arm's UAPI defines BASE_MEM_COHERENT_SYSTEM as outer-shareable if available, and BASE_MEM_COHERENT_LOCAL as inner-shareable. Kbase may clear COHERENT_SYSTEM when the kernel's CPU-coherency capability says it is unavailable, so the requested flags alone do not prove the effective page-table attributes.
+
+The independent Mali-G715/G720 0x88 investigation explicitly reported that a dma-buf import with COHERENT_SYSTEM set its GPU page-table shareability to SYSTEM and caused atomic SHAREABILITY_FAULTs; removing that flag fixed some cases, though a separate failure remained. This is a high-priority candidate, not yet proof that the Xiaomi 15T kernel retains the flag.
+
+The latest candidate commit 2be370aeb45ad952c6a0e9f940c8537e418e5fe2 logs, for internal WB_MMAP/GPU_UNCACHED dma-buf allocations, the PanVK flags, requested Kbase import flags, and returned effective Kbase flags. Combined with the raw coherency-mode log and direct CSF_EVENT allocation flags, this should show whether the target kernel retained BASE_MEM_COHERENT_SYSTEM. Do not remove it or substitute COHERENT_LOCAL until the returned flags and cache-sync path are understood.
