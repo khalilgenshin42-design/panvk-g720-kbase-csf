@@ -35,7 +35,7 @@ jobs:
               libclang-22-dev \
               libclc-22-dev \
               libllvmspirvlib-22-dev \
-              libspirv-tools-dev \
+              spirv-tools-dev \
               libelf-dev \
               spirv-tools \
               bison \
