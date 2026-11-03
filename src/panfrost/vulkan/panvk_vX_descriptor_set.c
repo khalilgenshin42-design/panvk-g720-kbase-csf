@@ -396,7 +396,7 @@ panvk_per_arch(CreateDescriptorPool)(
 
    if (desc_count) {
       /* Reserve one dummy sampler descriptor for each possible set. */
-      if (pCreateInfo->maxSets > UINT64_MAX - desc_count)
+      if (desc_count > UINT64_MAX - pCreateInfo->maxSets)
          return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
       desc_count += pCreateInfo->maxSets;
