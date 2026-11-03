@@ -837,6 +837,14 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
          prev_seqno = cell->seqno;
       }
       kbase_cache_invalidate_range((const void *)cell, kbase_seqno_stride());
+
+      /* Notifications are shared across every queue on this kbase context.
+       * Another queue's waiter may consume a fatal notification first, so
+       * consult the device-wide latch before accepting this subqueue's seqno. */
+      if (kbase_kmod_csf_has_error(dev->kmod.dev))
+         return vk_queue_set_lost(&queue->vk,
+                                  "kbase: CSF queue-group error");
+
       if (cell->seqno >= target_seqno ||
           (PANVK_DEBUG(KBASE_DIAG) && *ls_copy >= target_seqno) ||
           (allow_ring_drain && extract >= target_insert && !active))
@@ -3341,10 +3349,10 @@ panvk_per_arch(gpu_queue_check_status)(struct vk_queue *vk_queue)
    };
 
 #ifdef HAVE_PAN_KMOD_KBASE
-   /* kbase reports CSF faults through the notification stream consumed by
-    * completion waits.  Check its error latch instead of issuing three
-    * MEM_SYNC invalidations and reading the GPU-written subqueue contexts on
-    * every Vulkan status query. */
+   /* Drain queued CSF notifications before checking the device-wide
+    * error latch.  This avoids missing a group fault when a CQS wait completed
+    * without entering the notification fallback, and avoids reading every
+    * GPU-written subqueue context on each Vulkan status query. */
    if (gpu_queue_uses_kbase(dev)) {
       int event_status = kbase_kmod_csf_process_events(dev->kmod.dev);
       if (event_status < 0)
