@@ -111,6 +111,10 @@ struct kbase_kmod_dev {
     * reading every GPU subqueue context on every submission. */
    uint32_t csf_error;
 
+   /* Opt-in memory attribute diagnostics. Disabled by default so benchmark
+    * runs do not pay Android logcat overhead for every BO allocation. */
+   bool diag_mem_flags;
+
    /* Serialize poll+read on the shared CSF notification stream.  Multiple
     * Vulkan queues can wait concurrently on this one kbase context; without
     * this lock, two readers can both observe POLLIN and the loser can block
@@ -1534,6 +1538,8 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
                      &kbase_kmod_ops, allocator);
 
    kbase_dev->is_csf = is_csf;
+   const char *diag_mem_flags = getenv("PANVK_KBASE_DIAG_MEM_FLAGS");
+   kbase_dev->diag_mem_flags = diag_mem_flags && !strcmp(diag_mem_flags, "1");
    kbase_dev->tracking_page = tracking_page;
    kbase_dev->next_handle = 1;
    kbase_dev->dma_heap_fd = -1;
@@ -1777,11 +1783,11 @@ kbase_kmod_import_dmabuf(struct pan_kmod_dev *dev,
       goto err_close_dmabuf;
    }
 
-   if (kmod_flags & (PAN_KMOD_BO_FLAG_WB_MMAP |
-                     PAN_KMOD_BO_FLAG_GPU_UNCACHED)) {
-      mesa_logi("kbase: dma-buf import flags pan=0x%x requested=0x%" PRIx64
+   if (kbase_dev->diag_mem_flags) {
+      mesa_logi("kbase: dma-buf import flags route=%s pan=0x%x requested=0x%" PRIx64
                 " effective=0x%" PRIx64,
-                kmod_flags, import_flags, (uint64_t)req.out.flags);
+                external_import ? "external" : "dma-heap", kmod_flags,
+                import_flags, (uint64_t)req.out.flags);
    }
 
    const uint64_t bo_size = req.out.va_pages * page_size;
@@ -1939,8 +1945,9 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
       alloc_gpu_va = req.out.gpu_va;
    }
 
-   if (kmod_flags & (PAN_KMOD_BO_FLAG_CSF_EVENT |
-                      PAN_KMOD_BO_FLAG_WB_MMAP)) {
+   if (kbase_dev->diag_mem_flags &&
+       (kmod_flags & (PAN_KMOD_BO_FLAG_CSF_EVENT |
+                      PAN_KMOD_BO_FLAG_WB_MMAP))) {
       mesa_logi("kbase: BO flags requested=0x%x effective=0x%" PRIx64,
                 kmod_flags, alloc_flags);
    }
