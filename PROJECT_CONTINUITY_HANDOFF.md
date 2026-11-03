@@ -562,7 +562,7 @@ Uploaded artifact:
 - Inner SHA256SUMS verified successfully for libvulkan_panfrost.so, libpanvk_drm.so, and meta.json.
 - Driver ELF: AArch64 ELF64 shared object, Android API 30, NDK r30.
 - ICD manifest reports Vulkan API 1.4.354 and 64-bit library path /usr/local/lib/libvulkan_panfrost.so.
-- The package includes libpanvk_drm.so. The audit's missing-drm-symbols.txt is empty; unresolved DRM symbols in libvulkan_panfrost.so are expected to resolve from the included libdrm.so.
+- The package includes a private libpanvk_drm.so. The packaging script rewrites libvulkan_panfrost.so's DT_NEEDED entry from libdrm.so to libpanvk_drm.so, sets RUNPATH=$ORIGIN, and changes the private library SONAME to libpanvk_drm.so. The inner package was independently inspected with readelf and its SHA256SUMS verified; this avoids interposing on the platform libdrm.so. The staged pre-package audit's missing-drm-symbols.txt is empty.
 - meta.json labels the driver experimental and explicitly says it is not Vulkan conformant and device/game compatibility is unverified.
 
 This is a build-verified package, not a runtime-validated driver. Keep it separate from the previously tested package and import only through the user's custom Winlator/Adrenotools driver mechanism. Do not replace the Android system/vendor Vulkan driver.
@@ -572,3 +572,18 @@ Next user test when ready:
 2. Repeat the same Tomb Raider benchmark/settings used for the 2026-11-03 baseline.
 3. Capture logcat lines containing 'raw coherency mode', 'dma-buf import flags', and 'BO flags', plus any CSF group error / 0x88 / VK_ERROR_DEVICE_LOST.
 4. Do not enable PANVK_KBASE_SYNC_ADD64_CSG_SCOPE=1 yet; first inspect effective flags to determine the target kernel's CSF_EVENT mapping.
+
+
+### Complete PanVK CSF sync-instruction scope sweep
+
+All src/panfrost/vulkan/csf/*.c files were scanned for MALI_CS_SYNC_SCOPE_CSG/SYSTEM and cs_sync32/cs_sync64 operations. Remaining CSG-scoped operations were classified:
+
+- panvk_vX_cmd_dispatch.c compute barrier signal uses a per-compute-subqueue sync point and is consumed within that compute CSG; keep CSG scope.
+- panvk_vX_cmd_buffer.c progress breadcrumbs are per-subqueue diagnostic markers; keep CSG scope.
+- panvk_vX_cmd_query.c query-availability markers live in rw_nc GPU-uncached memory and are not waited on by another CSG with cs_sync32_wait; keep CSG scope pending contrary evidence.
+- panvk_vX_gpu_queue.c SYNC_ADD64 to Kbase sequence cells remains SYSTEM by default; PANVK_KBASE_SYNC_ADD64_CSG_SCOPE is diagnostic only and untested.
+- Cross-subqueue event producers now use cmdbuf->sync_scope, matching event wait consumers.
+- Descriptor-ring reserve and release use the same cmdbuf->sync_scope.
+- Cross-subqueue barriers and queue completion waits/signals use SYSTEM on Kbase.
+
+Do not blanket-replace every CSG scope with SYSTEM. The remaining CSG operations are local or explicitly diagnostic; only cross-subqueue/host-shared synchronization should use the wider scope.
