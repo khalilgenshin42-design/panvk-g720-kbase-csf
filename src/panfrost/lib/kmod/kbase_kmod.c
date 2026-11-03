@@ -793,30 +793,23 @@ kbase_kmod_csf_queue_kick(struct pan_kmod_dev *dev, uint64_t ringbuf_va)
    return 0;
 }
 
-/* Caller holds kbase_dev->csf_event_lock.  Keeping poll and read in one
- * critical section is required because the kbase fd is blocking: concurrent
- * readers can otherwise both observe POLLIN, after which one consumes the
- * event and the other blocks in read() with no notification left. */
+/* Caller holds kbase_dev->csf_event_lock.  Recheck readiness while holding
+ * the lock before reading: another waiter may have consumed the event after
+ * this thread's initial blocking poll. */
 static int
-kbase_kmod_csf_read_notification(struct pan_kmod_dev *dev,
-                                 int64_t timeout_ns, bool *consumed)
+kbase_kmod_csf_read_notification_locked(struct pan_kmod_dev *dev,
+                                        bool *consumed)
 {
    *consumed = false;
-   if (timeout_ns < 0)
-      timeout_ns = 0;
-
    struct pollfd pfd = {
       .fd = dev->fd,
       .events = POLLIN,
    };
-   struct timespec ts = {
-      .tv_sec = timeout_ns / 1000000000,
-      .tv_nsec = timeout_ns % 1000000000,
-   };
+   const struct timespec zero_timeout = {0};
 
    int ret;
    do {
-      ret = ppoll(&pfd, 1, &ts, NULL);
+      ret = ppoll(&pfd, 1, &zero_timeout, NULL);
    } while (ret < 0 && errno == EINTR);
 
    if (ret < 0)
@@ -854,9 +847,40 @@ kbase_kmod_csf_wait_event(struct pan_kmod_dev *dev, int64_t timeout_ns)
 {
    struct kbase_kmod_dev *kbase_dev =
       container_of(dev, struct kbase_kmod_dev, base);
+   if (timeout_ns < 0)
+      timeout_ns = 0;
+
+   /* Do not hold the event mutex while sleeping.  Status queries must remain
+    * nonblocking even when another queue waiter is waiting for a notification. */
+   struct pollfd pfd = {
+      .fd = dev->fd,
+      .events = POLLIN,
+   };
+   struct timespec ts = {
+      .tv_sec = timeout_ns / 1000000000,
+      .tv_nsec = timeout_ns % 1000000000,
+   };
+
+   int ret;
+   do {
+      ret = ppoll(&pfd, 1, &ts, NULL);
+   } while (ret < 0 && errno == EINTR);
+
+   if (ret < 0)
+      return -1;
+   if (ret == 0)
+      return 0;
+   if (!(pfd.revents & POLLIN)) {
+      if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+         errno = EIO;
+         return -1;
+      }
+      return 0;
+   }
+
    bool consumed;
    simple_mtx_lock(&kbase_dev->csf_event_lock);
-   int ret = kbase_kmod_csf_read_notification(dev, timeout_ns, &consumed);
+   ret = kbase_kmod_csf_read_notification_locked(dev, &consumed);
    simple_mtx_unlock(&kbase_dev->csf_event_lock);
    return ret;
 }
@@ -875,7 +899,7 @@ kbase_kmod_csf_process_events(struct pan_kmod_dev *dev)
    simple_mtx_lock(&kbase_dev->csf_event_lock);
    while (true) {
       bool consumed;
-      int ret = kbase_kmod_csf_read_notification(dev, 0, &consumed);
+      int ret = kbase_kmod_csf_read_notification_locked(dev, &consumed);
       if (ret < 0) {
          result = -1;
          break;
