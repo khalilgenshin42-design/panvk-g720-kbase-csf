@@ -1781,7 +1781,7 @@ kbase_kmod_import_dmabuf(struct pan_kmod_dev *dev,
                      PAN_KMOD_BO_FLAG_GPU_UNCACHED)) {
       mesa_logi("kbase: dma-buf import flags pan=0x%x requested=0x%" PRIx64
                 " effective=0x%" PRIx64,
-                kmod_flags, import_flags, req.out.flags);
+                kmod_flags, import_flags, (uint64_t)req.out.flags);
    }
 
    const uint64_t bo_size = req.out.va_pages * page_size;
