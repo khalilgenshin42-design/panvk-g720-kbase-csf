@@ -43,16 +43,12 @@ meson compile -C build-libdrm
 DESTDIR="${MESON_WORKING_DIR}/libdrm-stage" meson install -C build-libdrm
 
 LIBDIR="${MESON_WORKING_DIR}/libdrm-stage/usr/lib"
-test -f "${LIBDIR}/libdrm.so.2"
-test -f "${LIBDIR}/libdrm.so.2.4.0"
-test -L "${LIBDIR}/libdrm.so"
+# Upstream libdrm deliberately builds an unversioned DSO on Android.
+test -f "${LIBDIR}/libdrm.so"
+cp "${LIBDIR}/libdrm.so" "${MESON_WORKING_DIR}/shims/libdrm.so"
+readelf -d "${MESON_WORKING_DIR}/shims/libdrm.so" | grep -Fq 'Library soname: [libdrm.so]'
 
-# Keep the normal linker name for Mesa's -ldrm lookup, while preserving
-# upstream SONAME libdrm.so.2 for the Android dynamic linker.
-cp -a "${LIBDIR}"/libdrm.so* "${MESON_WORKING_DIR}/shims/"
-readelf -d "${MESON_WORKING_DIR}/shims/libdrm.so.2" | grep -Fq 'Library soname: [libdrm.so.2]'
-
-nm -D --defined-only "${MESON_WORKING_DIR}/shims/libdrm.so.2" \
+nm -D --defined-only "${MESON_WORKING_DIR}/shims/libdrm.so" \
   | awk '{print $3}' | sed 's/@.*//' | sort -u > "${MESON_WORKING_DIR}/libdrm-defined-symbols.txt"
 
 for symbol in drmSyncobjWait drmPrimeHandleToFD drmGetDevices2; do
