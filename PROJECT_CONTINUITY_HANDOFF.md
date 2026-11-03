@@ -410,7 +410,7 @@ The next source-audit task from the prior read-only handoff has been completed a
 - Read the complete current handoff before continuing.
 - Base diagnostic source remains experiment/csf-sync-wait64-csg-scope at 6634282aa14616931656b883aafb5519831eb888.
 - New isolated branch: experiment/csf-notification-serialization.
-- Latest candidate branch HEAD: 88b583c320ba07aca5a98bfd5409ea1f9345cf1d.
+- Latest candidate branch HEAD: 1a83d5f1ba1c2ff4053317593db3f89374a4c231.
 - The diagnostic branch, existing build package, and Android vendor driver were not modified.
 - No new package has been accepted for device testing.
 
@@ -433,7 +433,7 @@ A second gap was found in error reporting: a successful CQS wait can finish with
 
 The isolated candidate branch makes these changes:
 
-1. Adds a per-Kbase-device csf_event_lock around the complete poll/read operation, including initialization and all cleanup paths.
+1. Adds a per-Kbase-device csf_event_lock around the final nonblocking readiness recheck plus read, including initialization and all cleanup paths. The potentially blocking ppoll is deliberately outside the lock so a nonblocking status query cannot wait behind another queue's 20 ms notification sleep.
 2. Factors notification consumption into a locked helper and adds kbase_kmod_csf_process_events() to nonblockingly drain all currently queued notifications.
 3. Drains notifications before Kbase queue-status checks; notification poll/read failures now mark the queue lost instead of silently hiding the failure.
 4. Calls vk_device_check_status() at the end of Kbase sync wait-many, including timeout results. This covers vkGetFenceStatus(), whose common implementation does not itself perform the post-wait device-status check; vkWaitForFences() already does.
@@ -445,17 +445,18 @@ Commits on experiment/csf-notification-serialization:
 - d3051a808321241b96619832203a07f02d7ac4b2 — serialize notification poll/read and add nonblocking notification draining; add Kbase device-status checks.
 - 88310bab8c529fdbb9ba0d25c34fff77e5738bd6 — propagate the shared CSF error latch to all subqueue waiters.
 - 88b583c320ba07aca5a98bfd5409ea1f9345cf1d — prioritize cell->error over seqno completion.
+- 1a83d5f1ba1c2ff4053317593db3f89374a4c231 — keep blocking notification polling outside the event-consumer lock; recheck readiness under lock before read.
 
 The candidate branch also adds itself to the Android-only experiment workflow branch filter.
 
 ### Build validation in progress
 
-The following GitHub Actions runs were observed for the candidate branch:
+The following GitHub Actions runs were observed for the candidate branch before the latest lock-contention refinement:
 
 - Android-only PanVK build, run 41674211319, commit 88b583c320ba07aca5a98bfd5409ea1f9345cf1d.
 - Android NDK wrapper release/debugoptimized builds, run 41674211281, same commit.
 
-At the time of this addendum, dependency installation/build jobs were still running. These runs must finish successfully before any package is considered build-verified. Earlier runs for the branch's previous commits are not sufficient to validate the latest HEAD.
+These runs were still in progress at the last check and do not validate latest HEAD 1a83d5f1ba1c2ff4053317593db3f89374a4c231. Confirm that a new run is created for the latest HEAD; if not, trigger an explicit workflow dispatch or a normal Git push/contents commit on the candidate branch. Do not consider an earlier SHA sufficient.
 
 ### Important unresolved checks
 
