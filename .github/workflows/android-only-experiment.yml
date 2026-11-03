@@ -3,6 +3,9 @@ name: Android-only PanVK G720 Experiment
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - experiment/kbase-csg-scope-diagnostic
 
 permissions:
   contents: read
