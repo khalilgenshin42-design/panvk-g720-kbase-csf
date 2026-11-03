@@ -1932,8 +1932,9 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
       alloc_gpu_va = req.out.gpu_va;
    }
 
-   if (kmod_flags & PAN_KMOD_BO_FLAG_CSF_EVENT) {
-      mesa_logi("kbase: CSF event BO flags requested=0x%x effective=0x%" PRIx64,
+   if (kmod_flags & (PAN_KMOD_BO_FLAG_CSF_EVENT |
+                      PAN_KMOD_BO_FLAG_WB_MMAP)) {
+      mesa_logi("kbase: BO flags requested=0x%x effective=0x%" PRIx64,
                 kmod_flags, alloc_flags);
    }
 
