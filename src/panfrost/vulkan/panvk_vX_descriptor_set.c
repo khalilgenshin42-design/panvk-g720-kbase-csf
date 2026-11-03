@@ -370,6 +370,40 @@ panvk_per_arch(CreateDescriptorPool)(
 {
    VK_FROM_HANDLE(panvk_device, device, _device);
 
+   /*
+    * Pool sizes are supplied by the application. Accumulate in 64 bits and
+    * check the total before allocating the pool: descriptorCount is 32-bit,
+    * and multiplying it by a descriptor stride in 32 bits can wrap.
+    */
+   uint64_t desc_count = 0;
+   for (unsigned i = 0; i < pCreateInfo->poolSizeCount; ++i) {
+      if (!vk_descriptor_type_is_dynamic(pCreateInfo->pPoolSizes[i].type)) {
+         const struct panvk_descriptor_set_binding_layout layout = {
+            .type = pCreateInfo->pPoolSizes[i].type,
+            .textures_per_desc = PANVK_MAX_PLANES,
+            .samplers_per_desc = PANVK_MAX_DESCS_PER_SAMPLER,
+         };
+         uint64_t pool_desc_count =
+            (uint64_t)panvk_get_desc_stride(&layout) *
+            pCreateInfo->pPoolSizes[i].descriptorCount;
+
+         if (pool_desc_count > UINT64_MAX - desc_count)
+            return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+         desc_count += pool_desc_count;
+      }
+   }
+
+   if (desc_count) {
+      /* Reserve one dummy sampler descriptor for each possible set. */
+      if (pCreateInfo->maxSets > UINT64_MAX - desc_count)
+         return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      desc_count += pCreateInfo->maxSets;
+      if (desc_count > UINT64_MAX / PANVK_DESCRIPTOR_SIZE)
+         return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
+
    VK_MULTIALLOC(ma);
    VK_MULTIALLOC_DECL(&ma, struct panvk_descriptor_pool, pool, 1);
    VK_MULTIALLOC_DECL(&ma, BITSET_WORD, free_sets,
@@ -381,19 +415,6 @@ panvk_per_arch(CreateDescriptorPool)(
                               VK_OBJECT_TYPE_DESCRIPTOR_POOL))
       return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   uint32_t desc_count = 0;
-   for (unsigned i = 0; i < pCreateInfo->poolSizeCount; ++i) {
-      if (!vk_descriptor_type_is_dynamic(pCreateInfo->pPoolSizes[i].type)) {
-         const struct panvk_descriptor_set_binding_layout layout = {
-            .type = pCreateInfo->pPoolSizes[i].type,
-            .textures_per_desc = PANVK_MAX_PLANES,
-            .samplers_per_desc = PANVK_MAX_DESCS_PER_SAMPLER,
-         };
-         desc_count += panvk_get_desc_stride(&layout) *
-                       pCreateInfo->pPoolSizes[i].descriptorCount;
-      }
-   }
-
    /* initialize to all ones to indicate all sets are free */
    BITSET_SET_COUNT(free_sets, 0, pCreateInfo->maxSets);
    pool->free_sets = free_sets;
@@ -401,9 +422,6 @@ panvk_per_arch(CreateDescriptorPool)(
    pool->max_sets = pCreateInfo->maxSets;
 
    if (desc_count) {
-      /* adjust desc_count to account for 1 dummy sampler per descriptor set */
-      desc_count += pool->max_sets;
-
       uint64_t pool_size = desc_count * PANVK_DESCRIPTOR_SIZE;
       VkResult result = panvk_init_pool_memory(device, pool, pCreateInfo,
                                                pool_size, pAllocator);
@@ -532,9 +550,17 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
          } else {
             uint32_t desc_stride =
                panvk_get_desc_stride(&layout->bindings[last_binding]);
+            uint64_t base_descs =
+               (uint64_t)layout->bindings[last_binding].desc_count *
+               desc_stride;
+            uint64_t variable_descs = (uint64_t)variable_count * desc_stride;
 
-            num_descs -= layout->bindings[last_binding].desc_count * desc_stride;
-            num_descs += variable_count * desc_stride;
+            assert(base_descs <= num_descs);
+            uint64_t adjusted_descs = num_descs - base_descs;
+            if (variable_descs > UINT32_MAX - adjusted_descs)
+               return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
+
+            num_descs = adjusted_descs + variable_descs;
          }
       }
    }
