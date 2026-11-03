@@ -42,7 +42,7 @@ jobs:
             libllvmspirvlib-22-dev \
             libelf-dev \
             spirv-tools \
-            spirv-tools-dev \
+            libspirv-tools-dev \
             bison \
             flex \
             libdrm-dev \
