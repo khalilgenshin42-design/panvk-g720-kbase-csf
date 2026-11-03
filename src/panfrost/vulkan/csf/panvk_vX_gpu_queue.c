@@ -838,6 +838,16 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
       }
       kbase_cache_invalidate_range((const void *)cell, kbase_seqno_stride());
 
+      /* An error must take precedence over a completion marker in the same
+       * cache line; otherwise a final seqno write could mask a CS fault. */
+      if (cell->error) {
+         mesa_loge("kbase: CS error 0x%x on subqueue %u", cell->error,
+                   subqueue);
+         return vk_queue_set_lost(&queue->vk,
+                                  "kbase: CS error 0x%x on subqueue %u",
+                                  cell->error, subqueue);
+      }
+
       /* Notifications are shared across every queue on this kbase context.
        * Another queue's waiter may consume a fatal notification first, so
        * consult the device-wide latch before accepting this subqueue's seqno. */
@@ -849,14 +859,6 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
           (PANVK_DEBUG(KBASE_DIAG) && *ls_copy >= target_seqno) ||
           (allow_ring_drain && extract >= target_insert && !active))
          break;
-
-      if (cell->error) {
-         mesa_loge("kbase: CS error 0x%x on subqueue %u", cell->error,
-                   subqueue);
-         return vk_queue_set_lost(&queue->vk,
-                                  "kbase: CS error 0x%x on subqueue %u",
-                                  cell->error, subqueue);
-      }
 
       int64_t now = os_time_get_nano();
 
