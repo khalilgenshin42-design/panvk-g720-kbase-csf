@@ -8,6 +8,7 @@ on:
       - experiment/kbase-csg-scope-diagnostic
       - experiment/csf-sync-wait64-csg-scope
       - experiment/csf-notification-serialization
+      - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
 
