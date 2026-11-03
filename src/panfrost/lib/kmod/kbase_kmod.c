@@ -379,6 +379,7 @@ kbase_dev_query_props(struct kbase_kmod_dev *kbase_dev,
     */
    uint32_t coherency_mode = (uint32_t)kbase_gpuprop_get(
       buf, buf_size, KBASE_GPUPROP_RAW_COHERENCY_MODE, 0);
+   mesa_logi("kbase: raw coherency mode %u", coherency_mode);
    props->is_io_coherent = false;
 
    /* Timestamp: expose if gpu_id is non-zero (safe assumption). */
@@ -1929,6 +1930,11 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
 
       alloc_flags = req.out.flags;
       alloc_gpu_va = req.out.gpu_va;
+   }
+
+   if (kmod_flags & PAN_KMOD_BO_FLAG_CSF_EVENT) {
+      mesa_logi("kbase: CSF event BO flags requested=0x%x effective=0x%" PRIx64,
+                kmod_flags, alloc_flags);
    }
 
    kbase_bo->same_va = (alloc_flags & BASE_MEM_SAME_VA) != 0;
