@@ -1757,7 +1757,8 @@ calc_render_descs_size(struct panvk_cmd_buffer *cmdbuf)
 }
 
 static void
-cs_render_desc_ringbuf_reserve(struct cs_builder *b, uint32_t size)
+cs_render_desc_ringbuf_reserve(struct cs_builder *b, uint32_t size,
+                             enum mali_cs_sync_scope scope)
 {
    /* Make sure we don't allocate more than the ringbuf size. */
    assert(size <= RENDER_DESC_RINGBUF_SIZE);
@@ -1778,8 +1779,11 @@ cs_render_desc_ringbuf_reserve(struct cs_builder *b, uint32_t size)
 
    /* Decrement the syncobj to reflect the fact we're reserving memory. */
    cs_move32_to(b, sz_reg, -size);
-   cs_sync32_add(b, false, MALI_CS_SYNC_SCOPE_CSG, sz_reg, ringbuf_sync,
-                 cs_now());
+   /* The descriptor ring is shared between vertex and fragment
+    * subqueues. On Kbase those subqueues own distinct CSGs, so use the same
+    * scope as the matching release operation rather than assuming a shared
+    * CSG as the Panthor path does. */
+   cs_sync32_add(b, false, scope, sz_reg, ringbuf_sync, cs_now());
 }
 
 static void
@@ -1892,7 +1896,7 @@ get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
    if (simul_use) {
       uint32_t descs_sz = calc_render_descs_size(cmdbuf);
 
-      cs_render_desc_ringbuf_reserve(b, descs_sz);
+      cs_render_desc_ringbuf_reserve(b, descs_sz, cmdbuf->sync_scope);
 
       /* Reserve ringbuf mem. */
       cs_update_vt_ctx(b) {
