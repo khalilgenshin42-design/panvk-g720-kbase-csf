@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - experiment/kbase-csg-scope-diagnostic
+      - work/android-libdrm-runtime-audit-latest
 
 permissions:
   contents: read
@@ -75,6 +76,15 @@ jobs:
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> "$GITHUB_PATH"
 
+      - name: Build real Android ARM64 libdrm
+        env:
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
+          envsubst < android.toml > android-cross.txt
+          bash .github/scripts/build-android-libdrm.sh
+
       - name: Configure Android-only build
         env:
           PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
@@ -126,16 +136,16 @@ jobs:
           # Kbase is the selected kernel backend. Mesa's shared Panfrost
           # helpers still use libdrm for generic BO import/sync paths, so
           # ship the Android-target libdrm support library beside the ICD.
-          grep -Fq 'Shared library: [libdrm.so]' audit/dynamic-section.txt
-          test -f shims/libdrm.so
-          readelf -d shims/libdrm.so > audit/libdrm-dynamic-section.txt
-          readelf --dyn-syms shims/libdrm.so > audit/libdrm-dynamic-symbols.txt
-          grep -Fq 'Library soname: [libdrm.so]' audit/libdrm-dynamic-section.txt
+          grep -Fq 'Shared library: [libdrm.so.2]' audit/dynamic-section.txt
+          test -f shims/libdrm.so.2
+          readelf -d shims/libdrm.so.2 > audit/libdrm-dynamic-section.txt
+          readelf --dyn-syms shims/libdrm.so.2 > audit/libdrm-dynamic-symbols.txt
+          grep -Fq 'Library soname: [libdrm.so.2]' audit/libdrm-dynamic-section.txt
 
           # Fail if the driver imports a DRM symbol that the bundled library
           # cannot resolve. This checks ABI coverage rather than banning the
           # generic helper dependency.
-          nm -D --defined-only shims/libdrm.so | awk '{print $3}' | sed 's/@.*//' | sort -u > audit/libdrm-defined-symbols.txt
+          nm -D --defined-only shims/libdrm.so.2 | awk '{print $3}' | sed 's/@.*//' | sort -u > audit/libdrm-defined-symbols.txt
           readelf --dyn-syms "$DRIVER" | awk '$7 == "UND" && $8 ~ /^drm[A-Za-z0-9_]+/ {print $8}' | sed 's/@.*//' | sort -u > audit/driver-undefined-drm-symbols.txt
           comm -23 audit/driver-undefined-drm-symbols.txt audit/libdrm-defined-symbols.txt > audit/missing-drm-symbols.txt
           if test -s audit/missing-drm-symbols.txt; then
@@ -147,8 +157,8 @@ jobs:
           # RUNPATH on the installed ICD is $ORIGIN/../../android_stub.
           # From usr/local/lib this resolves to usr/android_stub.
           mkdir -p stage/usr/android_stub
-          cp shims/libdrm.so stage/usr/android_stub/libdrm.so
-          readelf -d stage/usr/android_stub/libdrm.so > audit/staged-libdrm-dynamic-section.txt
+          cp -L shims/libdrm.so.2 stage/usr/android_stub/libdrm.so.2
+          readelf -d stage/usr/android_stub/libdrm.so.2 > audit/staged-libdrm-dynamic-section.txt
           find stage -type f -print | sort | tee audit/staged-files.txt
           find stage -type f \( -name '*icd*.json' -o -name '*vulkan*.json' \) -print -exec cat {} \; > audit/icd-manifests.txt
           find stage -type f -name '*.so' -exec sh -c 'echo "### $1"; readelf -d "$1" | grep -E "NEEDED|SONAME|RPATH|RUNPATH" || true' _ {} \; > audit/staged-so-dependencies.txt
