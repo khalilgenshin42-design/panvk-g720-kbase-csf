@@ -399,3 +399,77 @@ Audit items still open:
 
 Potential stale comment found:
 - The top-level comment in `src/panfrost/lib/kmod/kbase_kmod.c` still says command submission is not wired up, while this branch contains an operational Kbase CSF submission implementation in `panvk_vX_gpu_queue.c`. This is documentation drift, not a runtime bug; update only when preparing a focused documentation cleanup.
+
+
+## 2026-11-03 addendum — Kbase sync payload and CSF notification audit (in progress)
+
+The next source-audit task from the prior read-only handoff has been completed and a separate experimental branch now carries a candidate fix. This addendum supersedes the earlier read-only section's next actions 1–3; it does not declare the candidate runtime-validated.
+
+### Exact source and branch state
+
+- Read the complete current handoff before continuing.
+- Base diagnostic source remains experiment/csf-sync-wait64-csg-scope at 6634282aa14616931656b883aafb5519831eb888.
+- New isolated branch: experiment/csf-notification-serialization.
+- Latest candidate branch HEAD: 88b583c320ba07aca5a98bfd5409ea1f9345cf1d.
+- The diagnostic branch, existing build package, and Android vendor driver were not modified.
+- No new package has been accepted for device testing.
+
+### Actual Vulkan/Kbase sync implementation located
+
+The panvk_kbase_sync_* implementation is embedded in src/panfrost/vulkan/panvk_physical_device.c, not a standalone sync source file.
+
+- kbase_cpu_sync_type is a CPU-backed binary sync type because Kbase does not provide DRM syncobjs.
+- Timeline semaphores use Mesa's vk_sync_timeline software wrapper over that binary type.
+- Pending PanVK GPU payloads store a wait callback, export callback, data pointer, and per-subqueue sequence-number targets.
+- kbase_cpu_sync_wait_one() transitions payloads through RESET, PENDING, WAITING, SIGNALED, and FAILED.
+- kbase_cpu_sync_wait_many() implements wait-all sequentially and wait-any by polling each payload with a zero timeout and yielding between passes.
+- Native GPU WAIT64 is an optimization for eligible internal pending payloads; imported sync_file payloads and ineligible cases use the CPU/KCPU route.
+
+### Notification-path findings and candidate changes
+
+The shared Kbase device descriptor has one CSF notification stream. The original kbase_kmod_csf_wait_event() performed ppoll() followed by a blocking read() without serializing readers. Separate Vulkan queues can wait concurrently on the same Kbase context. Two readers can therefore both observe readiness, after which one consumes the notification and the other can block in read() waiting for an event that has already been consumed. This is a source-level concurrency hazard; device reproduction is still pending.
+
+A second gap was found in error reporting: a successful CQS wait can finish without entering the notification fallback. The CSF group-error latch is set when userspace consumes a notification, while the previous Kbase queue-status check only read that latch. Thus an already-queued group error could remain unseen by a status query if the CQS completion path bypassed notification consumption.
+
+The isolated candidate branch makes these changes:
+
+1. Adds a per-Kbase-device csf_event_lock around the complete poll/read operation, including initialization and all cleanup paths.
+2. Factors notification consumption into a locked helper and adds kbase_kmod_csf_process_events() to nonblockingly drain all currently queued notifications.
+3. Drains notifications before Kbase queue-status checks; notification poll/read failures now mark the queue lost instead of silently hiding the failure.
+4. Calls vk_device_check_status() at the end of Kbase sync wait-many, including timeout results. This covers vkGetFenceStatus(), whose common implementation does not itself perform the post-wait device-status check; vkWaitForFences() already does.
+5. Makes every subqueue waiter check the device-wide CSF error latch, because another queue's waiter may consume the notification first.
+6. Checks the GPU-written cell->error before accepting a sequence-number completion marker, so a completion marker cannot mask a CS error in the same cell.
+
+Commits on experiment/csf-notification-serialization:
+
+- d3051a808321241b96619832203a07f02d7ac4b2 — serialize notification poll/read and add nonblocking notification draining; add Kbase device-status checks.
+- 88310bab8c529fdbb9ba0d25c34fff77e5738bd6 — propagate the shared CSF error latch to all subqueue waiters.
+- 88b583c320ba07aca5a98bfd5409ea1f9345cf1d — prioritize cell->error over seqno completion.
+
+The candidate branch also adds itself to the Android-only experiment workflow branch filter.
+
+### Build validation in progress
+
+The following GitHub Actions runs were observed for the candidate branch:
+
+- Android-only PanVK build, run 41674211319, commit 88b583c320ba07aca5a98bfd5409ea1f9345cf1d.
+- Android NDK wrapper release/debugoptimized builds, run 41674211281, same commit.
+
+At the time of this addendum, dependency installation/build jobs were still running. These runs must finish successfully before any package is considered build-verified. Earlier runs for the branch's previous commits are not sufficient to validate the latest HEAD.
+
+### Important unresolved checks
+
+- Runtime validation of the notification mutex and error propagation has not yet occurred on the Xiaomi 15T / Dimensity 8400 Ultra / Mali-G720 MC7.
+- The original 14.0 FPS Tomb Raider result remains the last reported benchmark. The log did not establish a CSF fatal fault; the final window-destruction and Wine fence assertion may be normal shutdown. Do not infer an active-game crash from those final messages.
+- The seqno cell is allocated with PAN_KMOD_BO_FLAG_CSF_EVENT. The Kbase conversion clears BASE_MEM_COHERENT_LOCAL for that flag. Arm's CSF UAPI says CSF event memory uses an uncached GPU mapping when outer-shareable coherence is unavailable, so do not blindly add GPU_UNCACHED or change cache policy. The exact device's raw coherency mode and the effective allocation flags returned by its kernel still need diagnostic logging or device evidence.
+- A separate imported-sync-file timeout issue remains to inspect: kbase_sync_file_wait_func() uses millisecond poll() timeout conversion, which floors sub-millisecond remaining time to zero and can return early. Keep this separate from the notification patch until verified.
+- kbase_cpu_sync_wait_many() wait-any currently polls with zero-timeout waits and sched_yield(); this is a potential CPU-overhead optimization target, not a correctness fix yet.
+- The public Mali-G715 r38p1 report in MineGraph-bilibili/panvk-Android issue #3 found missing SYNC_WAIT scope encoding, but the CSG-scope change did not eliminate its 0x88 faults; the report suspects firmware/microcode internal atomics and proposes LOAD + conditional branch as a decisive experiment. That is a different GPU/kernel report. Do not copy its scope workaround blindly onto G720. Preserve SYSTEM scope for the cross-CSG waits already documented above.
+
+### Next actions
+
+1. Wait for the latest Android-only and wrapper CI runs to finish; inspect failed job logs if either fails.
+2. Review the final commit diff and build artifact provenance. Do not test an artifact built from an earlier SHA.
+3. If both builds pass, prepare a separately named candidate package from the exact latest HEAD; retain the existing verified package and System Driver fallback.
+4. Only then ask the user to test the same Tomb Raider workload. Prefer capturing logs during active gameplay and separately at shutdown, noting the exact manual-close time.
+5. Add diagnostic logging for raw Kbase coherency mode and effective BASE_MEM_CSF_EVENT allocation flags before making any memory-attribute or cache-policy change.
