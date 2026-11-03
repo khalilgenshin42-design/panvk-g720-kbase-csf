@@ -668,8 +668,16 @@ kbase_subqueue_emit_job(struct panvk_gpu_queue *queue, uint32_t subqueue,
       cs_wait_slot(&b, SB_ID(LS));
    }
    cs_move64_to(&b, val64, 1);
-   cs_sync64_add(&b, true, MALI_CS_SYNC_SCOPE_SYSTEM, val64, addr64,
-                 cs_defer(0, SB_ID(DEFERRED_SYNC)));
+   /* Diagnostic-only A/B switch for non-outer-shareable kbase systems.
+    * SYSTEM-scope SYNC_ADD64 is a candidate source of GPU shareability
+    * faults (exception 0x88).  CSG scope is not a production default: the
+    * cross-CSG visibility contract must be validated on target hardware. */
+   const bool csg_sync_add =
+      debug_get_bool_option("PANVK_KBASE_SYNC_ADD64_CSG_SCOPE", false);
+   cs_sync64_add(&b, true,
+                 csg_sync_add ? MALI_CS_SYNC_SCOPE_CSG
+                              : MALI_CS_SYNC_SCOPE_SYSTEM,
+                 val64, addr64, cs_defer(0, SB_ID(DEFERRED_SYNC)));
 
    /* Fault-recovery boundary, matching the panthor kernel sequence. */
    cs_error_barrier(&b);

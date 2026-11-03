@@ -3,6 +3,9 @@ name: Android-only PanVK G720 Experiment
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - experiment/kbase-csg-scope-diagnostic
 
 permissions:
   contents: read
@@ -102,7 +105,7 @@ jobs:
             -Dprecomp-compiler=system \
             -Dvulkan-drivers=panfrost \
             -Dllvm=disabled \
-            -Dpanfrost-kmds=kbase,panthor
+            -Dpanfrost-kmds=kbase
 
       - name: Compile and stage Android install
         run: |
@@ -120,6 +123,32 @@ jobs:
           readelf --dyn-syms "$DRIVER" > audit/dynamic-symbols.txt
           grep -E 'NEEDED|SONAME|RPATH|RUNPATH' audit/dynamic-section.txt || true
           grep -E 'HMI|vk_icdGetInstanceProcAddr|vkCreateInstance|vkGetInstanceProcAddr' audit/dynamic-symbols.txt || true
+          # Kbase is the selected kernel backend. Mesa's shared Panfrost
+          # helpers still use libdrm for generic BO import/sync paths, so
+          # ship the Android-target libdrm support library beside the ICD.
+          grep -Fq 'Shared library: [libdrm.so]' audit/dynamic-section.txt
+          test -f shims/libdrm.so
+          readelf -d shims/libdrm.so > audit/libdrm-dynamic-section.txt
+          readelf --dyn-syms shims/libdrm.so > audit/libdrm-dynamic-symbols.txt
+          grep -Fq 'Library soname: [libdrm.so]' audit/libdrm-dynamic-section.txt
+
+          # Fail if the driver imports a DRM symbol that the bundled library
+          # cannot resolve. This checks ABI coverage rather than banning the
+          # generic helper dependency.
+          nm -D --defined-only shims/libdrm.so | awk '{print $3}' | sed 's/@.*//' | sort -u > audit/libdrm-defined-symbols.txt
+          readelf --dyn-syms "$DRIVER" | awk '$7 == "UND" && $8 ~ /^drm[A-Za-z0-9_]+/ {print $8}' | sed 's/@.*//' | sort -u > audit/driver-undefined-drm-symbols.txt
+          comm -23 audit/driver-undefined-drm-symbols.txt audit/libdrm-defined-symbols.txt > audit/missing-drm-symbols.txt
+          if test -s audit/missing-drm-symbols.txt; then
+            cat audit/missing-drm-symbols.txt >&2
+            echo 'Bundled libdrm is missing symbols required by the driver' >&2
+            exit 1
+          fi
+
+          # RUNPATH on the installed ICD is $ORIGIN/../../android_stub.
+          # From usr/local/lib this resolves to usr/android_stub.
+          mkdir -p stage/usr/android_stub
+          cp shims/libdrm.so stage/usr/android_stub/libdrm.so
+          readelf -d stage/usr/android_stub/libdrm.so > audit/staged-libdrm-dynamic-section.txt
           find stage -type f -print | sort | tee audit/staged-files.txt
           find stage -type f \( -name '*icd*.json' -o -name '*vulkan*.json' \) -print -exec cat {} \; > audit/icd-manifests.txt
           find stage -type f -name '*.so' -exec sh -c 'echo "### $1"; readelf -d "$1" | grep -E "NEEDED|SONAME|RPATH|RUNPATH" || true' _ {} \; > audit/staged-so-dependencies.txt
