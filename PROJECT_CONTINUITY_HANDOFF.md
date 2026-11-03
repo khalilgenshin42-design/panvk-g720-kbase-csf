@@ -512,3 +512,15 @@ These logs are intended to establish the exact G720 MC7 kernel's CSF event-memor
 
 
 The event-scope candidate needs one additional caution: event sync objects are allocated from mempools.rw, whose Kbase allocation requests WB_MMAP and, through to_kbase_mem_flags(), retains BASE_MEM_COHERENT_LOCAL by default. The Kbase mapping only requests BASE_MEM_COHERENT_SYSTEM when PAN_KMOD_BO_FLAG_IO_COHERENT is set. The latest diagnostic log therefore covers both WB_MMAP and CSF_EVENT allocations, allowing the effective kernel flags for the event pool and seqno cells to be compared. The event producer scope change is still an unvalidated candidate; do not call it the confirmed 0x88 fix until the effective attributes and device behavior are known.
+
+
+### Reconciled device-test history (do not conflate these runs)
+
+The user-specific project history confirms two different Tomb Raider results on the Xiaomi 15T / Dimensity 8400-Ultra / Mali-G720 MC7:
+
+- 2026-11-01: 900×506 benchmark, Min 9.0 / Max 18.9 / Avg 14.6 FPS. The captured logs contained GPU_SHAREABILITY_FAULT exception 0x88 on CSF groups 0, 1, and 2, followed by VK_ERROR_DEVICE_LOST.
+- 2026-11-03: build from diagnostic commit 6634282aa14616931656b883aafb5519831eb888, Min 7.9 / Max 18.9 / Avg 14.0 FPS. The captured log did not contain 0x88, QueueSubmit failure -4, or VK_ERROR_DEVICE_LOST. The user suspected the final window-destruction sequence may be from manually closing the game after the benchmark; do not classify that as a driver crash without additional evidence.
+
+This is encouraging evidence for the earlier WAIT64 scope / descriptor-ring scope changes in that workload, but it is not a general stability proof. The new notification and event-scope candidate branch has not yet been tested on the phone.
+
+The opt-in PANVK_KBASE_SYNC_ADD64_CSG_SCOPE=1 diagnostic was previously built as a source option but has never been verified on the user's device. Its default remains SYSTEM; do not enable it in the release candidate without an A/B test and the new effective-memory-flag logs.
