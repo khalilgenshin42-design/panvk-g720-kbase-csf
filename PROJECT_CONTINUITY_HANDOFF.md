@@ -540,3 +540,35 @@ The candidate commits 20a1cdece6885bd1569efc3325d7e2ca859f357c, d5afee6669b1a677
 
 
 The upstream Kbase implementation inspected during this audit explicitly sets BASE_MEM_SAME_VA | BASE_MEM_CACHED_CPU | BASE_MEM_COHERENT_SYSTEM when handling BASE_MEM_CSF_EVENT in kbase_api_mem_alloc_ex(). It documents COHERENT_SYSTEM as avoiding explicit cache maintenance around event-memory access. This supports keeping SYSTEM-scope queue completion operations as the default until the target kernel's returned flags prove otherwise. The optional CSG-scope SYNC_ADD64 override remains untested and must not be enabled merely because another device reported a shareability fault.
+
+
+### Corrected candidate build and package audit (2026-11-03)
+
+Latest source branch HEAD: 7e5d7a936b9f3a77255570b121f21626e1e6411b.
+
+Build results:
+- Android-only PanVK build: workflow run 41676901159 — SUCCESS, including Android ARM64 compile, staged-file audit, manifest/dependency audit, flat Winlator/Adrenotools ZIP packaging, and artifact upload.
+- Android-wrapper Release: workflow run 41676901559 — SUCCESS.
+- Android-wrapper DebugOptimized: still running at the time of this update; not required for the Android-only package but wait for final result before closing build validation.
+- Earlier runs 41675810459/41675810560 failed on the __u64/PRIx64 format mismatch and must not be used.
+
+Uploaded artifact:
+- Artifact name: panvk-g720-android-only-experimental-package
+- Artifact ID: 13250204981
+- Artifact size: 16,664,931 bytes
+- Outer artifact ZIP SHA-256: a746fe2c34e2119f0433e04f348681614794de49972e8de0d992341d9f06dcfc
+- Inner driver package: PanVK-G720-experimental.zip
+- Inner package SHA-256: 82e7c185fa47fe6d43f8644fe294735d3f5349119c8fbbab22313a98b48b43c1
+- Inner SHA256SUMS verified successfully for libvulkan_panfrost.so, libpanvk_drm.so, and meta.json.
+- Driver ELF: AArch64 ELF64 shared object, Android API 30, NDK r30.
+- ICD manifest reports Vulkan API 1.4.354 and 64-bit library path /usr/local/lib/libvulkan_panfrost.so.
+- The package includes libpanvk_drm.so. The audit's missing-drm-symbols.txt is empty; unresolved DRM symbols in libvulkan_panfrost.so are expected to resolve from the included libdrm.so.
+- meta.json labels the driver experimental and explicitly says it is not Vulkan conformant and device/game compatibility is unverified.
+
+This is a build-verified package, not a runtime-validated driver. Keep it separate from the previously tested package and import only through the user's custom Winlator/Adrenotools driver mechanism. Do not replace the Android system/vendor Vulkan driver.
+
+Next user test when ready:
+1. Import this ZIP as a separate custom driver profile, keeping the previous tested profile available for rollback.
+2. Repeat the same Tomb Raider benchmark/settings used for the 2026-11-03 baseline.
+3. Capture logcat lines containing 'raw coherency mode', 'dma-buf import flags', and 'BO flags', plus any CSF group error / 0x88 / VK_ERROR_DEVICE_LOST.
+4. Do not enable PANVK_KBASE_SYNC_ADD64_CSG_SCOPE=1 yet; first inspect effective flags to determine the target kernel's CSF_EVENT mapping.
