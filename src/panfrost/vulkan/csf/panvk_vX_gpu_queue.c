@@ -554,8 +554,13 @@ kbase_subqueue_emit_job(struct panvk_gpu_queue *queue, uint32_t subqueue,
       for (uint32_t i = 0; i < gpu_wait_count; i++) {
          cs_move64_to(&b, wait_addr64, gpu_waits[i].addr);
          cs_move64_to(&b, wait_ref64, gpu_waits[i].target_minus_one);
-         cs_sync64_wait(&b, false, MALI_CS_CONDITION_GREATER,
-                        wait_ref64, wait_addr64);
+         /* Kbase CSF sync payloads are local to this command-stream group.
+          * SYSTEM-scope SYNC_WAIT64 performs a system-shareable atomic read,
+          * which can trigger GPU_SHAREABILITY_FAULT on non-I/O-coherent Mali
+          * systems. Match the CSG-scoped producer and keep the wait within
+          * the same group. */
+         cs_sync64_wait(&b, false, MALI_CS_SYNC_SCOPE_CSG,
+                        MALI_CS_CONDITION_GREATER, wait_ref64, wait_addr64);
       }
    }
 
