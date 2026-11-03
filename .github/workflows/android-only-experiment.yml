@@ -146,7 +146,7 @@ jobs:
           # cannot resolve. This checks ABI coverage rather than banning the
           # generic helper dependency.
           nm -D --defined-only shims/libdrm.so | awk '{print $3}' | sed 's/@.*//' | sort -u > audit/libdrm-defined-symbols.txt
-          readelf --dyn-syms "$DRIVER" | awk '$7 == "UND" && $8 ~ /^drm[A-Za-z0-9_]+/ {print $8}' | sed 's/@.*//' | sort -u > audit/driver-undefined-drm-symbols.txt
+          readelf --wide --dyn-syms "$DRIVER" | awk '$7 == "UND" && $8 ~ /^drm[A-Za-z0-9_]+/ {print $8}' | sed 's/@.*//' | sort -u > audit/driver-undefined-drm-symbols.txt
           comm -23 audit/driver-undefined-drm-symbols.txt audit/libdrm-defined-symbols.txt > audit/missing-drm-symbols.txt
           if test -s audit/missing-drm-symbols.txt; then
             cat audit/missing-drm-symbols.txt >&2
