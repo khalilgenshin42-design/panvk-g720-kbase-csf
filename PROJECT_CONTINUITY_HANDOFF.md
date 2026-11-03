@@ -218,7 +218,6 @@ Our exact packaging source branch was checked:
 
 Diagnostic experiment branch created:
 `experiment/csf-sync-wait64-csg-scope`
-
 Changes made:
 1. Added `Scope` (2 bits, start=1, enum CS Sync Scope) to both SYNC_WAIT32 and SYNC_WAIT64 structures in v10/v12/v13/v14 GenXML.
 2. Added `enum mali_cs_sync_scope scope` parameter to generated `cs_sync*_wait` builder macro and writes `I.scope = scope`.
@@ -438,7 +437,6 @@ The isolated candidate branch makes these changes:
 5. Makes every subqueue waiter check the device-wide CSF error latch, because another queue's waiter may consume the notification first.
 6. Checks the GPU-written cell->error before accepting a sequence-number completion marker, so a completion marker cannot mask a CS error in the same cell.
 7. Changes both CmdResetEvent2 and CmdSetEvent2 producer SYNC_SET32 operations from hard-coded CSG scope to cmdbuf->sync_scope, matching CmdWaitEvents2. On Kbase this is SYSTEM, because the event sync objects are shared across the three subqueues/CSGs and are also read by the host.
-
 Commits on experiment/csf-notification-serialization:
 
 - d3051a808321241b96619832203a07f02d7ac4b2 — serialize notification poll/read and add nonblocking notification draining; add Kbase device-status checks.
@@ -659,7 +657,6 @@ Next engineering direction:
 5. Do not enable PANVK_KBASE_SYNC_ADD64_CSG_SCOPE=1, remove BASE_MEM_COHERENT_SYSTEM, or make broad scope changes until this evidence is available.
 6. Treat close-time swapchain/fence assertion separately from in-benchmark GPU stability.
 
-
 ### Follow-up: completed-run interpretation and performance regression isolation (2026-11-03)
 
 User confirmed the 10.2 FPS Tomb Raider benchmark reached the normal results screen and completed successfully; game closure occurred afterward. The FPS result is valid. See the preceding correction addendum; teardown-only swapchain/fence messages must not invalidate the score.
@@ -824,3 +821,16 @@ Performance comparison:
 3. Inspect the WSI/fence teardown path and timestamp ordering; do not modify it until it is clear whether the error occurs during active benchmark rendering or only when the game/window is closed.
 4. If the actual PanVK submission path is confirmed and the WSI messages are teardown-only, next isolate performance overhead with a controlled quiet-build A/B/repeat. Do not alter synchronization semantics to chase a single FPS result.
 5. Update this handoff with any user confirmation about benchmark completion/close timing and every subsequent source, build, or device-test step.
+
+
+### Correction: reconcile DXVK device identity with PanVK source (2026-11-03)
+
+A follow-up source audit resolves the apparent DXVK driver-version mismatch recorded above:
+
+- In `src/panfrost/vulkan/panvk_vX_physical_device.c` on `experiment/kbase-diag-opt-in`, the physical-device properties initializer sets `driverVersion = 0x06802095u` (around line 841). Vulkan version encoding decodes this to major 26, minor 2, patch 149 — exactly the `26.2.149` reported by DXVK in this archive.
+- The same PanVK source sets `VkPhysicalDeviceDriverProperties.driverName = "panvk"` and `driverInfo = "Mesa " PACKAGE_VERSION MESA_GIT_SHA1` (around lines 1352–1354).
+- Therefore the DXVK-visible `26.2.149` is consistent with the tested PanVK build's own declared driverVersion; it is not evidence that DXVK bypassed PanVK. The `Wrapper(Mali-G720 MC7)` device name and `wrapper-gamenative` container label are consistent with the Winlator wrapper front-end, while PanVK is loaded as the selected custom Vulkan backend. The Android hook path and PanVK runtime messages independently confirm that the PanVK library is loaded and executing.
+- Official Winlator Mali setup documentation instructs Mali users to select Graphics Driver = Wrapper; custom Vulkan drivers are managed separately through the Adrenotools/custom-driver mechanism. See https://github.com/GunaCharanTeja/WinlatorMali (README on branch `bionic-mali-1.2`).
+- Revised interpretation: **no driver-stack mismatch is demonstrated by this log**. The wrapper is part of the intended Winlator Mali path; the exact Vulkan dispatch chain is still worth tracing if future evidence conflicts, but it is no longer the leading concern. Do not ask the user to change away from Wrapper for this test.
+
+This correction supersedes the prior addendum's wording that treated `wrapper-gamenative` plus the DXVK-visible Wrapper identity as a suspicious discrepancy. Preserve the raw observations, but use this source-level driverVersion match when interpreting them.
