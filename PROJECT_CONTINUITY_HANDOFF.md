@@ -200,3 +200,57 @@ The user explicitly asked that all work remain accessible to future GPT sessions
 "Continue Project panvk drivef. Read PROJECT_CONTINUITY_HANDOFF.md in khalilgenshin42-design/panvk-g720-kbase-csf, then inspect the latest branches and continue from the recorded fault investigation."
 
 Do not claim that every GPT version automatically shares live conversation memory. Durable GitHub docs/commits/artifacts are the reliable cross-session record. Update this file after every major milestone, including commit SHA, workflow run, artifact ID, checksum, test results, and next action.
+
+
+## Addendum: confirmed WAIT64 scope defect and diagnostic patch (2026-11-03 15:17 UTC)
+
+A decisive source comparison has identified a highly plausible cause of the user's exact 0x88 fault.
+
+- Upstream community investigation: https://github.com/MineGraph-bilibili/panvk-Android/issues/3
+- The issue describes a non-I/O-coherent Mali G715 (MT6985) with the same `GPU_SHAREABILITY_FAULT 0x88`.
+- Their command-stream census isolated `SYNC_WAIT64` emitted with default `System` scope. Their GenXML had no Scope field for `SYNC_WAIT32/64`, unlike `SYNC_ADD64`. Their patch added Scope at bits start=1 size=2, passed CSG scope into wait emission, and changed the encoded wait atom from `0x...0000` to `0x...0004`. They still observed 0x88 afterward, so it was a real defect but not a complete root-cause fix.
+- The issue found a later remaining possibility in firmware/microcode: the SYNC_WAIT operation's internal atomic read may ignore the scope field. Their proposed decisive workaround is replacing SYNC_WAIT with load + conditional branch loop.
+
+Our exact packaging source branch was checked:
+- `src/panfrost/genxml/v10.xml`, `v12.xml`, `v13.xml`, `v14.xml`: `CS SYNC_WAIT32` and `CS SYNC_WAIT64` structs had Error Reject / Condition / Data / Address / Opcode but no Scope field. `SYNC_ADD32/64` and `SYNC_SET32/64` did have Scope.
+- `src/panfrost/genxml/cs_builder.h`: `cs_sync32_wait` / `cs_sync64_wait` macro had no scope parameter and did not set `I.scope`.
+- `src/panfrost/vulkan/csf/panvk_vX_gpu_queue.c`: GPU WAIT64 path emits `cs_sync64_wait(... GREATER ...)` for eligible local waits. The same file has a diagnostic option `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE`, default false, for ADD64 scope.
+- This directly intersects the user's successful DXVK initialization followed by CSF GPU fault.
+
+Diagnostic experiment branch created:
+`experiment/csf-sync-wait64-csg-scope`
+
+Changes made:
+1. Added `Scope` (2 bits, start=1, enum CS Sync Scope) to both SYNC_WAIT32 and SYNC_WAIT64 structures in v10/v12/v13/v14 GenXML.
+2. Added `enum mali_cs_sync_scope scope` parameter to generated `cs_sync*_wait` builder macro and writes `I.scope = scope`.
+3. Changed the only currently found PanVK CSF WAIT64 emission site to pass `MALI_CS_SYNC_SCOPE_CSG`, with an explanatory comment.
+4. Added this branch to Android-only CI workflow push filters.
+
+Commits on experiment branch, chronological:
+- `ceb26466639fb91535b9657770cb582c9f07193a` (v10 GenXML)
+- `dbfc6ca8fef3d4652b1f463029b5a54559b81fc6` (v12 GenXML)
+- `410dd200c744103b42c9a22f3daae3e8b2e8760d` (v13 GenXML)
+- `f02f253d46e98e51889ee97596e5e90e8fc87868` (v14 GenXML)
+- `2c987a748942e5871806bbf2996ef3bd86c6b6e2` (cs_builder scope param)
+- `56ece3fa412a660d95669cd7497f72e71233a915` (PanVK WAIT64 call passes CSG)
+- `9eae560bafeb85b1faa1da841a00881a677acd19` (CI branch trigger)
+
+CI runs triggered by per-file commits; the latest full-change run is:
+- Run ID `41662126467` (also a duplicate run `41662126541` on same SHA)
+- URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/41662126467
+- SHA: `9eae560bafeb85b1faa1da841a00881a677acd19`
+Check this run to establish whether generated GenXML/build succeeds. Earlier intermediate runs were triggered before all changes landed and are not the final validation.
+
+Decode user's exact status `0x00c00488` using upstream UAPI bit definitions:
+- exception type bits [7:0] = 0x88 = GPU_SHAREABILITY_FAULT.
+- access type bits [9:8] = 0 = ATOMIC.
+- address-valid bit [10] = 1.
+- JASID-valid bit [11] = 0.
+- JASID bits [15:12] = 0 (invalid per valid bit).
+- source ID bits [31:16] = 0x00c0.
+This is stronger evidence for an atomic shareability fault. The earlier community issue's prose loosely described [15:8] as atomic; use the actual UAPI macros ([9:8]) for decoding.
+
+Do not declare this patch a fix until it builds and user tests it. Even if it suppresses this specific WAIT64 fault, the upstream investigation explicitly observed 0x88 continuing after adding the scope field, so follow with diagnostics and, if needed, a LOAD+conditional-branch wait workaround. Preserve CPU/KCPU fallbacks for ineligible waits. Do not globally alter all atomics or cache sync behavior.
+
+Source for exception definitions:
+https://chromium.googlesource.com/chromiumos/third_party/kernel/+/cf07462966736cdc97946fa2434e1d2f00d30b6c/drivers/gpu/arm/bifrost/include/uapi/mali_kbase_gpu_regmap_csf.h
