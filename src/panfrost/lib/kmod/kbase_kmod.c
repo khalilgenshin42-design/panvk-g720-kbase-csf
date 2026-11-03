@@ -111,6 +111,12 @@ struct kbase_kmod_dev {
     * reading every GPU subqueue context on every submission. */
    uint32_t csf_error;
 
+   /* Serialize poll+read on the shared CSF notification stream.  Multiple
+    * Vulkan queues can wait concurrently on this one kbase context; without
+    * this lock, two readers can both observe POLLIN and the loser can block
+    * forever after the winner consumes the only notification. */
+   simple_mtx_t csf_event_lock;
+
    /* A persistent kernel CPU queue turns GPU timeline writes into pollable
     * sync_file fences.  At most one CQS wait is pending on this queue. */
    struct {
@@ -787,15 +793,18 @@ kbase_kmod_csf_queue_kick(struct pan_kmod_dev *dev, uint64_t ringbuf_va)
    return 0;
 }
 
-int
-kbase_kmod_csf_wait_event(struct pan_kmod_dev *dev, int64_t timeout_ns)
+/* Caller holds kbase_dev->csf_event_lock.  Keeping poll and read in one
+ * critical section is required because the kbase fd is blocking: concurrent
+ * readers can otherwise both observe POLLIN, after which one consumes the
+ * event and the other blocks in read() with no notification left. */
+static int
+kbase_kmod_csf_read_notification(struct pan_kmod_dev *dev,
+                                 int64_t timeout_ns, bool *consumed)
 {
-   /* Block until the kernel has a CSF notification pending, then consume one
-    * notification with read().  This is what drives kernel-side
-    * servicing of the submitted work (tiler-heap OOM growth, sync-update
-    * wakeups, group scheduling) — a pure userspace spin on the seqno cell
-    * never gives the driver's event path a chance to run.  Mirrors
-    * panfork's poll()+read() CSF wait model. */
+   *consumed = false;
+   if (timeout_ns < 0)
+      timeout_ns = 0;
+
    struct pollfd pfd = {
       .fd = dev->fd,
       .events = POLLIN,
@@ -805,33 +814,79 @@ kbase_kmod_csf_wait_event(struct pan_kmod_dev *dev, int64_t timeout_ns)
       .tv_nsec = timeout_ns % 1000000000,
    };
 
-   int ret = ppoll(&pfd, 1, &ts, NULL);
-   if (ret < 0)
-      return (errno == EINTR) ? 0 : -1;
+   int ret;
+   do {
+      ret = ppoll(&pfd, 1, &ts, NULL);
+   } while (ret < 0 && errno == EINTR);
 
-   if (ret == 0 || !(pfd.revents & POLLIN))
+   if (ret < 0)
+      return -1;
+   if (ret == 0)
       return 0;
 
-   /* The kbase fd is blocking.  Read exactly one notification after poll;
-    * trying to drain it until EAGAIN would block forever after the final
-    * pending record.  Another queued record will make the next poll return
-    * immediately. */
+   if (!(pfd.revents & POLLIN)) {
+      if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+         errno = EIO;
+         return -1;
+      }
+      return 0;
+   }
+
    struct base_csf_notification event;
    ssize_t rd;
-
    do {
       rd = read(dev->fd, &event, sizeof(event));
    } while (rd < 0 && errno == EINTR);
 
    if (rd < 0)
       return -1;
-
    if (rd != sizeof(event)) {
       errno = EIO;
       return -1;
    }
 
+   *consumed = true;
    return kbase_log_csf_notification(dev, &event);
+}
+
+int
+kbase_kmod_csf_wait_event(struct pan_kmod_dev *dev, int64_t timeout_ns)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   bool consumed;
+   simple_mtx_lock(&kbase_dev->csf_event_lock);
+   int ret = kbase_kmod_csf_read_notification(dev, timeout_ns, &consumed);
+   simple_mtx_unlock(&kbase_dev->csf_event_lock);
+   return ret;
+}
+
+int
+kbase_kmod_csf_process_events(struct pan_kmod_dev *dev)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   int result = 0;
+
+   /* A successful CQS wait can finish without entering the notification
+    * fallback.  Drain already-queued notifications here so queue-status and
+    * fence queries cannot miss a CSF group error merely because its seqno
+    * target was also observed as complete. */
+   simple_mtx_lock(&kbase_dev->csf_event_lock);
+   while (true) {
+      bool consumed;
+      int ret = kbase_kmod_csf_read_notification(dev, 0, &consumed);
+      if (ret < 0) {
+         result = -1;
+         break;
+      }
+      if (ret > 0)
+         result = 1;
+      if (!consumed)
+         break;
+   }
+   simple_mtx_unlock(&kbase_dev->csf_event_lock);
+   return result;
 }
 
 static int
@@ -1460,6 +1515,7 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
    kbase_dev->kcpu.fence_fd = -1;
    simple_mtx_init(&kbase_dev->kcpu.lock, mtx_plain);
    simple_mtx_init(&kbase_dev->sync_exports.lock, mtx_plain);
+   simple_mtx_init(&kbase_dev->csf_event_lock, mtx_plain);
    kbase_dev->sync_exports.head = NULL;
    kbase_dev->sync_exports.signaled_fd = -1;
    kbase_dev->sync_exports.signaled_queue_id = 0;
@@ -1473,6 +1529,7 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       pan_kmod_dev_cleanup(&kbase_dev->base);
       simple_mtx_destroy(&kbase_dev->sync_exports.lock);
       simple_mtx_destroy(&kbase_dev->kcpu.lock);
+      simple_mtx_destroy(&kbase_dev->csf_event_lock);
       pan_kmod_free(allocator, kbase_dev);
       return NULL;
    }
@@ -1514,6 +1571,7 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       pan_kmod_dev_cleanup(&kbase_dev->base);
       simple_mtx_destroy(&kbase_dev->sync_exports.lock);
       simple_mtx_destroy(&kbase_dev->kcpu.lock);
+      simple_mtx_destroy(&kbase_dev->csf_event_lock);
       pan_kmod_free(allocator, kbase_dev);
       return NULL;
    }
@@ -1564,7 +1622,8 @@ kbase_kmod_dev_destroy(struct pan_kmod_dev *dev)
    }
    simple_mtx_unlock(&kbase_dev->kcpu.lock);
    simple_mtx_destroy(&kbase_dev->sync_exports.lock);
-      simple_mtx_destroy(&kbase_dev->kcpu.lock);
+   simple_mtx_destroy(&kbase_dev->kcpu.lock);
+   simple_mtx_destroy(&kbase_dev->csf_event_lock);
 
    if (kbase_dev->user_reg_page)
       munmap(kbase_dev->user_reg_page, 4096);

@@ -59,6 +59,10 @@ int kbase_kmod_csf_queue_kick(struct pan_kmod_dev *dev, uint64_t ringbuf_va);
  * Returns 0 on success (event consumed or timeout), -1 on error. */
 int kbase_kmod_csf_wait_event(struct pan_kmod_dev *dev, int64_t timeout_ns);
 
+/* Drain all currently queued CSF notifications without blocking.  Returns
+ * 1 if a queue-group error was observed, 0 if none, or -1 on poll/read error. */
+int kbase_kmod_csf_process_events(struct pan_kmod_dev *dev);
+
 /* Wait for a 64-bit CSF event object to become greater than target_minus_one
  * using a kernel CPU queue and a sync_file fence.  The event address must
  * refer to a 16-byte-aligned BASE_MEM_CSF_EVENT allocation.  Returns 1 when

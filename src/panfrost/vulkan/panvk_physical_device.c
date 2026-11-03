@@ -860,33 +860,45 @@ kbase_cpu_sync_wait_many(struct vk_device *device,
                          uint64_t abs_timeout_ns)
 {
    bool wait_any = !!(wait_flags & VK_SYNC_WAIT_ANY);
+   VkResult result = VK_SUCCESS;
+   VkResult status;
 
    if (!wait_any) {
       for (uint32_t i = 0; i < wait_count; i++) {
          struct kbase_cpu_sync *ks =
             container_of(waits[i].sync, struct kbase_cpu_sync, sync);
-         VkResult result = kbase_cpu_sync_wait_one(
-            device, ks, wait_flags, abs_timeout_ns);
+         result = kbase_cpu_sync_wait_one(device, ks, wait_flags,
+                                          abs_timeout_ns);
          if (result != VK_SUCCESS)
-            return result;
+            break;
       }
-      return VK_SUCCESS;
+   } else {
+      while (true) {
+         for (uint32_t i = 0; i < wait_count; i++) {
+            struct kbase_cpu_sync *ks =
+               container_of(waits[i].sync, struct kbase_cpu_sync, sync);
+            result = kbase_cpu_sync_wait_one(device, ks, wait_flags, 0);
+            if (result == VK_SUCCESS)
+               goto check_device_status;
+            if (result != VK_TIMEOUT)
+               goto check_device_status;
+         }
+         if (abs_timeout_ns == 0 || os_time_get_nano() >= abs_timeout_ns) {
+            result = VK_TIMEOUT;
+            break;
+         }
+         sched_yield();
+      }
    }
 
-   while (true) {
-      for (uint32_t i = 0; i < wait_count; i++) {
-         struct kbase_cpu_sync *ks =
-            container_of(waits[i].sync, struct kbase_cpu_sync, sync);
-         VkResult result = kbase_cpu_sync_wait_one(device, ks, wait_flags, 0);
-         if (result == VK_SUCCESS)
-            return VK_SUCCESS;
-         if (result != VK_TIMEOUT)
-            return result;
-      }
-      if (abs_timeout_ns == 0 || os_time_get_nano() >= abs_timeout_ns)
-         return VK_TIMEOUT;
-      sched_yield();
-   }
+check_device_status:
+   ;
+   /* vkWaitForFences performs this check in the common entrypoint, but
+    * vkGetFenceStatus does not.  Drain Kbase's notification stream after both
+    * successful and timed-out waits so a completed seqno cannot hide a
+    * pending CSF group-error notification from Vulkan's device-status path. */
+   status = vk_device_check_status(device);
+   return status != VK_SUCCESS ? status : result;
 }
 
 static VkResult

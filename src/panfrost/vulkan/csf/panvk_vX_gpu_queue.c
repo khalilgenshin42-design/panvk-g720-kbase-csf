@@ -970,6 +970,9 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
 
       if (cqs_ret < 0) {
          int error_type = kbase_kmod_csf_wait_event(dev->kmod.dev, remaining);
+         if (error_type < 0)
+            return vk_queue_set_lost(&queue->vk,
+                                     "kbase: CSF notification read failed");
 
          if (dev->debug.decode_ctx && insert > extract && error_type) {
             // pandecode_user_msg(dev->debug.decode_ctx,
@@ -3343,6 +3346,11 @@ panvk_per_arch(gpu_queue_check_status)(struct vk_queue *vk_queue)
     * MEM_SYNC invalidations and reading the GPU-written subqueue contexts on
     * every Vulkan status query. */
    if (gpu_queue_uses_kbase(dev)) {
+      int event_status = kbase_kmod_csf_process_events(dev->kmod.dev);
+      if (event_status < 0)
+         return vk_queue_set_lost(&queue->vk,
+                                  "kbase: failed to process CSF notifications");
+
       if (kbase_kmod_csf_has_error(dev->kmod.dev)) {
          u_printf_with_ctx(stdout, &dev->printf.ctx);
          return vk_queue_set_lost(&queue->vk,
