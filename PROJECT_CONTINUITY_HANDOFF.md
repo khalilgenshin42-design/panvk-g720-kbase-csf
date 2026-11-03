@@ -410,7 +410,7 @@ The next source-audit task from the prior read-only handoff has been completed a
 - Read the complete current handoff before continuing.
 - Base diagnostic source remains experiment/csf-sync-wait64-csg-scope at 6634282aa14616931656b883aafb5519831eb888.
 - New isolated branch: experiment/csf-notification-serialization.
-- Latest candidate branch HEAD: 6641ee939130f8b4fb215846950e76c25139e72c.
+- Latest candidate branch HEAD: 20a1cdece6885bd1569efc3325d7e2ca859f357c.
 - The diagnostic branch, existing build package, and Android vendor driver were not modified.
 - No new package has been accepted for device testing.
 
@@ -448,6 +448,7 @@ Commits on experiment/csf-notification-serialization:
 - 88b583c320ba07aca5a98bfd5409ea1f9345cf1d — prioritize cell->error over seqno completion.
 - 1a83d5f1ba1c2ff4053317593db3f89374a4c231 — keep blocking notification polling outside the event-consumer lock; recheck readiness under lock before read.
 - 6641ee939130f8b4fb215846950e76c25139e72c — use cmdbuf->sync_scope for both event producer SYNC_SET32 operations.
+- 20a1cdece6885bd1569efc3325d7e2ca859f357c — log the raw Kbase coherency mode and effective allocation flags for CSF event BOs.
 
 The candidate branch also adds itself to the Android-only experiment workflow branch filter.
 
@@ -458,7 +459,7 @@ The following GitHub Actions runs were observed for the candidate branch before 
 - Android-only PanVK build, run 41674211319, commit 88b583c320ba07aca5a98bfd5409ea1f9345cf1d.
 - Android NDK wrapper release/debugoptimized builds, run 41674211281, same commit.
 
-These runs were still in progress at the last check and do not validate latest HEAD 6641ee939130f8b4fb215846950e76c25139e72c. New latest-HEAD runs were then observed: run 41675058107 and run 41675058343, both for 6641ee939130f8b4fb215846950e76c25139e72c. Identify which is Android-only and which is wrapper release/debugoptimized, then wait for both to finish. Do not consider an earlier SHA sufficient.
+These runs were still in progress at the last check and do not validate latest HEAD 6641ee939130f8b4fb215846950e76c25139e72c. Runs 41675058107 and 41675058343 target 6641ee939130f8b4fb215846950e76c25139e72c, but are superseded. The latest HEAD 20a1cdece6885bd1569efc3325d7e2ca859f357c has run 41675180630 (build-android-only) and run 41675180676 (build-android-wrapper release + debugoptimized). Both were queued at the last check; wait for both to finish. Do not consider an earlier SHA sufficient.
 
 ### Important unresolved checks
 
@@ -499,3 +500,11 @@ Other hard-coded CSG operations were classified rather than changed blindly:
 A separate upstream report is directly relevant to this MT6899/Mali-G720 MC7 target: wonderkast02/panvk-g720-kbase-csf issue #9. Its author later corrected the original VT-subqueue hang diagnosis: the real cause was a 32-bit truncated CS call address in the provoking-vertex helper, not the proposed VT-lead throttle or the earlier cross-subqueue scope patch. The current candidate source already has uint64_t fn_addr and passes it through cs_move64_to in panvk_vX_cmd_draw.c, so that specific C1 translation-fault fix is present. Do not port the superseded VT-lead patch. The same upstream issue separately reports intermittent 0x88 shareability faults in GL programs even after the address fix, so the shareability investigation remains relevant and distinct.
 
 The upstream issue also documents the earlier event producer scope change to cmdbuf->sync_scope. That change is now applied here for the event sync objects, independently of the corrected C1 root cause.
+
+
+The latest candidate commit also adds two diagnostic log points without changing memory policy:
+
+- Kbase raw coherency mode (0 = none, 1 = ACE-Lite, 2 = ACE) during device property discovery.
+- Requested and effective kernel allocation flags for every PAN_KMOD_BO_FLAG_CSF_EVENT BO.
+
+These logs are intended to establish the exact G720 MC7 kernel's CSF event-memory attributes before deciding whether SYSTEM-scope SYNC_ADD64 is valid or whether the opt-in CSG-scope diagnostic should be tested. Do not change the default scope yet.
