@@ -1775,7 +1775,7 @@ cs_render_desc_ringbuf_reserve(struct cs_builder *b, uint32_t size,
 
    /* Wait for the other end to release memory. */
    cs_move32_to(b, sz_reg, size - 1);
-   cs_sync32_wait(b, false, MALI_CS_CONDITION_GREATER, sz_reg, ringbuf_sync);
+   cs_sync32_wait(b, false, scope, MALI_CS_CONDITION_GREATER, sz_reg, ringbuf_sync);
 
    /* Decrement the syncobj to reflect the fact we're reserving memory. */
    cs_move32_to(b, sz_reg, -size);
@@ -6318,8 +6318,8 @@ wait_finish_tiling(struct panvk_cmd_buffer *cmdbuf)
                 rel_vt_sync_point);
 
    panvk_instr_sync64_wait(cmdbuf, PANVK_SUBQUEUE_FRAGMENT, false,
-                           MALI_CS_CONDITION_GREATER, vt_sync_point,
-                           vt_sync_addr);
+                           cmdbuf->sync_scope, MALI_CS_CONDITION_GREATER,
+                           vt_sync_point, vt_sync_addr);
 }
 
 static uint32_t
