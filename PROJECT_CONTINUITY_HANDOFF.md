@@ -410,7 +410,7 @@ The next source-audit task from the prior read-only handoff has been completed a
 - Read the complete current handoff before continuing.
 - Base diagnostic source remains experiment/csf-sync-wait64-csg-scope at 6634282aa14616931656b883aafb5519831eb888.
 - New isolated branch: experiment/csf-notification-serialization.
-- Latest candidate branch HEAD: 20a1cdece6885bd1569efc3325d7e2ca859f357c.
+- Latest candidate branch HEAD: d5afee6669b1a6770fa2d4153afddec31f1ad365.
 - The diagnostic branch, existing build package, and Android vendor driver were not modified.
 - No new package has been accepted for device testing.
 
@@ -449,6 +449,7 @@ Commits on experiment/csf-notification-serialization:
 - 1a83d5f1ba1c2ff4053317593db3f89374a4c231 — keep blocking notification polling outside the event-consumer lock; recheck readiness under lock before read.
 - 6641ee939130f8b4fb215846950e76c25139e72c — use cmdbuf->sync_scope for both event producer SYNC_SET32 operations.
 - 20a1cdece6885bd1569efc3325d7e2ca859f357c — log the raw Kbase coherency mode and effective allocation flags for CSF event BOs.
+- d5afee6669b1a6770fa2d4153afddec31f1ad365 — extend effective-flag logging to WB_MMAP BOs as well, so the cached event-object pool's attributes are visible.
 
 The candidate branch also adds itself to the Android-only experiment workflow branch filter.
 
@@ -459,7 +460,7 @@ The following GitHub Actions runs were observed for the candidate branch before 
 - Android-only PanVK build, run 41674211319, commit 88b583c320ba07aca5a98bfd5409ea1f9345cf1d.
 - Android NDK wrapper release/debugoptimized builds, run 41674211281, same commit.
 
-These runs were still in progress at the last check and do not validate latest HEAD 6641ee939130f8b4fb215846950e76c25139e72c. Runs 41675058107 and 41675058343 target 6641ee939130f8b4fb215846950e76c25139e72c, but are superseded. The latest HEAD 20a1cdece6885bd1569efc3325d7e2ca859f357c has run 41675180630 (build-android-only) and run 41675180676 (build-android-wrapper release + debugoptimized). Both were queued at the last check; wait for both to finish. Do not consider an earlier SHA sufficient.
+These runs were still in progress at the last check and do not validate latest HEAD 6641ee939130f8b4fb215846950e76c25139e72c. Runs 41675058107 and 41675058343 target 6641ee939130f8b4fb215846950e76c25139e72c, but are superseded. Those runs target the superseded 20a1cdece6885bd1569efc3325d7e2ca859f357c. The latest HEAD d5afee6669b1a6770fa2d4153afddec31f1ad365 has run 41675455651 (build-android-only) and run 41675455919 (build-android-wrapper release + debugoptimized). Both were queued at the last check; wait for both to finish. Do not consider an earlier SHA sufficient.
 
 ### Important unresolved checks
 
@@ -508,3 +509,6 @@ The latest candidate commit also adds two diagnostic log points without changing
 - Requested and effective kernel allocation flags for every PAN_KMOD_BO_FLAG_CSF_EVENT BO.
 
 These logs are intended to establish the exact G720 MC7 kernel's CSF event-memory attributes before deciding whether SYSTEM-scope SYNC_ADD64 is valid or whether the opt-in CSG-scope diagnostic should be tested. Do not change the default scope yet.
+
+
+The event-scope candidate needs one additional caution: event sync objects are allocated from mempools.rw, whose Kbase allocation requests WB_MMAP and, through to_kbase_mem_flags(), retains BASE_MEM_COHERENT_LOCAL by default. The Kbase mapping only requests BASE_MEM_COHERENT_SYSTEM when PAN_KMOD_BO_FLAG_IO_COHERENT is set. The latest diagnostic log therefore covers both WB_MMAP and CSF_EVENT allocations, allowing the effective kernel flags for the event pool and seqno cells to be compared. The event producer scope change is still an unvalidated candidate; do not call it the confirmed 0x88 fix until the effective attributes and device behavior are known.
