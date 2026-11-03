@@ -834,3 +834,76 @@ A follow-up source audit resolves the apparent DXVK driver-version mismatch reco
 - Revised interpretation: **no driver-stack mismatch is demonstrated by this log**. The wrapper is part of the intended Winlator Mali path; the exact Vulkan dispatch chain is still worth tracing if future evidence conflicts, but it is no longer the leading concern. Do not ask the user to change away from Wrapper for this test.
 
 This correction supersedes the prior addendum's wording that treated `wrapper-gamenative` plus the DXVK-visible Wrapper identity as a suspicious discrepancy. Preserve the raw observations, but use this source-level driverVersion match when interpreting them.
+
+
+## 2026-11-03 continuation audit — source comparison, CI refresh, and current stop point
+
+This update was made after reopening the project in a new conversation. The full handoff above was read first; source and workflow state were independently rechecked against GitHub.
+
+### Current branch and CI verification
+
+- `experiment/csf-notification-serialization` remains at `7e5d7a936b9f3a77255570b121f21626e1e6411b`.
+- Android-only build run `41676901159`: SUCCESS.
+- Android wrapper run `41676901559`: SUCCESS.
+- `experiment/kbase-diag-opt-in` remains at `a87d179f3cdb77946df0c2858cd4370794645e27`.
+- Android-only package run `41684252087`: SUCCESS.
+- Android wrapper run `41684252078`: SUCCESS.
+- Both candidate source branches and their CI runs remain separate. No source branch was force-pushed, merged, or deleted during this audit.
+- The latest device-tested package is the Android-only package from `experiment/kbase-diag-opt-in` at `a87d179f3cdb77946df0c2858cd4370794645e27`, not either wrapper-only workflow artifact.
+
+### Source comparison against the 14.0 FPS candidate
+
+GitHub's compare endpoint confirms that `7e5d7a936b9f3a77255570b121f21626e1e6411b` is exactly 10 commits ahead of `6634282aa14616931656b883aafb5519831eb888`, with no divergence. The 10 commits modify six files:
+
+- `.github/workflows/android-only-experiment.yml`: CI branch trigger only.
+- `src/panfrost/lib/kmod/kbase_kmod.c`: +119 / -22; notification reader serialization/draining, event error handling, and opt-in allocation/import diagnostics.
+- `src/panfrost/lib/kmod/kbase_kmod.h`: notification API declarations.
+- `src/panfrost/vulkan/csf/panvk_vX_cmd_event.c`: two event producer SYNC_SET32 operations use `cmdbuf->sync_scope`.
+- `src/panfrost/vulkan/csf/panvk_vX_gpu_queue.c`: notification/error propagation and queue-wait checks.
+- `src/panfrost/vulkan/panvk_physical_device.c`: Kbase CPU sync wait-many/device-status handling.
+
+The follow-on comparison `7e5d7a936b9f3a77255570b121f21626e1e6411b` -> `a87d179f3cdb77946df0c2858cd4370794645e27` is only two commits and changes only `kbase_kmod.c` plus the workflow trigger. It gates high-frequency memory-flag diagnostics behind `PANVK_KBASE_DIAG_MEM_FLAGS=1`; default is OFF. It does not change synchronization, event scope, allocation policy, or cache behavior.
+
+This narrows the measured performance change:
+- The 14.0 FPS run used source `6634282...`.
+- The completed 10.2 FPS run used the notification/event candidate `7e5d7a...`.
+- The later 10.6 FPS run used `a87d179...`, which retains the same functional candidate changes but defaults the allocation diagnostics to quiet.
+- Therefore the 10.2 -> 10.6 difference does not show recovery to 14.0, and the quiet-log follow-on did not obviously recover the earlier score. The 0.4 FPS difference is too small and uncontrolled to assign causality. The 14.0 -> 10.2/10.6 difference is associated with the 10-commit functional/diagnostic delta, but is not yet attributable to any one change.
+
+### Focused hot-path review
+
+The current candidate source was inspected directly:
+
+1. `gpu_queue_check_status()` calls `kbase_kmod_csf_process_events()` on Kbase. That function takes the event-consumer mutex and performs zero-timeout `ppoll()` readiness checks, reading queued notifications until empty. It is a Vulkan queue-status path, not an unconditional operation in every normal queue-submit call. Do not remove it casually: the prior code could leave a fatal notification queued when a CQS completion bypassed the notification fallback.
+2. `kbase_subqueue_wait_seqno()` checks the device-wide CSF error latch inside its wait loop. This is a cheap in-memory latch read, not a poll/read syscall. It prevents one queue from accepting completion after another queue consumed the shared fatal notification.
+3. `kbase_cpu_sync_wait_many()` now calls `vk_device_check_status()` after wait-many, including wait-any and timeout outcomes. This closes the `vkGetFenceStatus()` gap because the common `vkWaitForFences()` entry point already performs its own post-wait status check. The wait-any path itself loops over zero-timeout per-sync polls and `sched_yield()`; it can be CPU-expensive when used with pending syncs, but that loop predates/exists independently of the one final device-status check.
+4. The 18:44 runtime capture contains only two successful `kbase_queue_wait_current` messages and no captured 0x88/device-lost signature. It does not include a high-resolution profile or enough counters to show how frequently the status path ran.
+
+Engineering conclusion: notification processing and sync wait-many status checks are correctness-sensitive and plausible profiling targets, but current evidence does not justify disabling them or changing synchronization semantics. If optimizing, first add low-overhead, opt-in counters/timing around these specific paths, or design a correctness-preserving A/B that isolates one change. Do not equate the status-path `ppoll` with every frame's queue-submit cost.
+
+### Upstream issue review
+
+- Read MineGraph-bilibili/panvk-Android issue #3: https://github.com/MineGraph-bilibili/panvk-Android/issues/3
+  - Its author confirms the missing WAIT32/64 Scope encoding was a genuine bug, but adding CSG scope did not eliminate 0x88 on their G715/r38p1 target.
+  - Their next proposed discriminating experiment is replacing SYNC_WAIT with a LOAD + conditional branch loop, because firmware may perform an internal atomic read with System scope regardless of the encoded scope.
+  - This is a separate device/kernel report. Our G720 code preserves SYSTEM scope for cross-CSG waits; do not transplant the G715 CSG workaround blindly.
+- Read leegao/mesa-funnymdzz issue #2 and comments: https://github.com/leegao/mesa-funnymdzz/issues/2
+  - The author identifies exception 0x88 as GPU_SHAREABILITY_FAULT and the access as atomic.
+  - Their hypothesis concerns SYSTEM-shareable dma-buf mappings and inconsistent shareability attributes across GPU accesses; it is useful evidence, not proof that the Xiaomi kernel retains the requested flag.
+- The target device's raw coherency mode is logged as 0. The target kernel's effective CSF_EVENT allocation flags observed in the earlier diagnostic run were `0x8340f`, including `BASE_MEM_COHERENT_SYSTEM`; do not override this based only on raw mode 0. The 18:44 quiet run did not enable `PANVK_KBASE_DIAG_MEM_FLAGS`, so it does not expose the effective flags for the AHB/dma-buf import route.
+
+### Runtime evidence and exact next test
+
+- 18:18 run: user confirmed the normal benchmark results screen was reached; Min 1.9 / Max 17.4 / Avg 10.2 FPS is a valid completed datapoint. Final Wine/WSI errors followed game closure and should be treated as shutdown observations unless reproduced during gameplay.
+- 18:44 run: Min 3.7 / Max 17.2 / Avg 10.6 FPS. PanVK was selected and loaded; 30 dma-buf allocation successes and 14 AHB import messages were present; no captured 0x88, CSF fatal error, QueueSubmit -4, or explicit VK_ERROR_DEVICE_LOST. The final X11 surface/swapchain/fence messages occurred at session end; whether they were entirely caused by normal close remains uncertain for this run.
+- Preserve all three benchmark scores (14.0, 10.2, 10.6) separately. Do not claim the candidate fixed the 0x88 issue permanently or improved performance.
+
+The next device action should be a **short diagnostic-only run**, not another FPS benchmark:
+1. Use the same `a87d179...` custom PanVK package and same Winlator wrapper/driver profile.
+2. Temporarily set `PANVK_KBASE_DIAG_MEM_FLAGS=1` in the Winlator environment for the game process only. Keep `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` unset.
+3. Launch Tomb Raider only long enough to initialize the Vulkan device and exercise its normal AHB/dma-buf imports; no benchmark is required. Capture logcat/Wine output, then close normally.
+4. Return the lines for `raw coherency mode`, `dma-buf import flags`, and `BO flags`, including the full requested/effective values and allocation route. This will determine whether the Xiaomi kernel retains SYSTEM shareability on imported pool/AHB mappings.
+5. Afterward remove the diagnostic environment variable and keep it unset for all performance benchmarks.
+
+Do not change Kbase import flags, cache synchronization, CSF event scope, WAIT64 scope, or queue-notification correctness code until the diagnostic import attributes are decoded. No new source code change or package was justified by this static audit; the next required evidence must come from the target device.
+
