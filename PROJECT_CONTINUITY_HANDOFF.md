@@ -410,7 +410,7 @@ The next source-audit task from the prior read-only handoff has been completed a
 - Read the complete current handoff before continuing.
 - Base diagnostic source remains experiment/csf-sync-wait64-csg-scope at 6634282aa14616931656b883aafb5519831eb888.
 - New isolated branch: experiment/csf-notification-serialization.
-- Latest candidate branch HEAD: 2be370aeb45ad952c6a0e9f940c8537e418e5fe2.
+- Latest candidate branch HEAD: 7e5d7a936b9f3a77255570b121f21626e1e6411b.
 - The diagnostic branch, existing build package, and Android vendor driver were not modified.
 - No new package has been accepted for device testing.
 
@@ -451,6 +451,7 @@ Commits on experiment/csf-notification-serialization:
 - 20a1cdece6885bd1569efc3325d7e2ca859f357c — log the raw Kbase coherency mode and effective allocation flags for CSF event BOs.
 - d5afee6669b1a6770fa2d4153afddec31f1ad365 — extend effective-flag logging to WB_MMAP BOs as well, so the cached event-object pool's attributes are visible.
 - 2be370aeb45ad952c6a0e9f940c8537e418e5fe2 — log requested and effective Kbase flags returned by DMA-BUF import for WB_MMAP and GPU_UNCACHED allocations.
+- 7e5d7a936b9f3a77255570b121f21626e1e6411b — cast the UAPI __u64 returned flags to uint64_t for portable PRIx64 logging.
 
 The candidate branch also adds itself to the Android-only experiment workflow branch filter.
 
