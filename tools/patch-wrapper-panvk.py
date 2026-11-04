@@ -205,11 +205,11 @@ replace_once(
 
 replace_once(
     physical,
-    "   vk_common_GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);\\n",
-    "   VK_FROM_HANDLE(wrapper_physical_device, pdevice, physicalDevice);\\n"
-    "   vk_common_GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);\\n"
-    "   if (pdevice->is_panvk)\\n"
-    "      return;\\n",
+    "   vk_common_GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);\n",
+    "   VK_FROM_HANDLE(wrapper_physical_device, pdevice, physicalDevice);\n"
+    "   vk_common_GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);\n"
+    "   if (pdevice->is_panvk)\n"
+    "      return;\n",
     "stop feature2 spoofing for PanVK",
 )
 
