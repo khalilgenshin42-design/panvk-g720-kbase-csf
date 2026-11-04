@@ -117,7 +117,7 @@ kbase_profile_read(uint64_t *counter)
    return __atomic_load_n(counter, __ATOMIC_RELAXED);
 }
 
-/* Emit a cumulative snapshot every 256 Kbase queue submissions. This
+/* Emit a cumulative snapshot every 32 Kbase queue submissions. This
  * reporting point is reached by the live rendering queue, unlike queue
  * destruction, which can happen during temporary device/queue probing. */
 #define KBASE_PROFILE_SUBMIT_SNAPSHOT_INTERVAL 32
