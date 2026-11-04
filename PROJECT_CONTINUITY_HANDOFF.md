@@ -1012,3 +1012,26 @@ Keep historical results distinct:
 ### Next action / engineering decision
 
 Do not change Kbase memory flags, cache maintenance, coherency handling, CSF event scope, WAIT64 scope, or queue-notification synchronization based on this capture. No in-game GPU fault or device-lost signature was observed. Keep `PANVK_KBASE_DIAG_MEM_FLAGS` absent and `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` unset for further performance runs. The next useful step is a repeat of the same benchmark with unchanged settings to establish run-to-run variance; separately investigate the recurring shutdown mutex/fence assertion without conflating it with the in-game FPS result.
+
+## 2026-11-04 continuation — repeated clean benchmark and optimization decision
+
+### Repeat result (user-reported)
+
+- User repeated the same Tomb Raider benchmark after the 02:06:38 clean capture and reported the same result: **Min 8.7 / Max 18.0 / Average 13.5 FPS**.
+- No second log archive was attached with this repeat, so only the FPS result is confirmed; do not claim a second independent log-level verification.
+- Treat 13.5 FPS average as repeatable under the user's unchanged test configuration and the working clean baseline. This improves confidence that it is not a one-off 12.9/13.5 fluctuation.
+
+### Source audit before optimization
+
+- Re-verified the current tested source branch `experiment/kbase-diag-opt-in` at `a87d179f3cdb77946df0c2858cd4370794645e27` and its Android-only packaging workflow.
+- Compared the 14.0 FPS candidate `6634282aa14616931656b883aafb5519831eb888` with the current candidate: current is 12 commits ahead, touching six files (`kbase_kmod.c/.h`, `panvk_vX_cmd_event.c`, `panvk_vX_gpu_queue.c`, `panvk_physical_device.c`, and Android-only CI workflow).
+- The later CPU sync wait-many path contains a WAIT_ANY loop that repeatedly calls zero-timeout `kbase_cpu_sync_wait_one()` for each sync and then `sched_yield()`. This is a plausible CPU-overhead target only when Vulkan callers use WAIT_ANY with pending syncs; current Tomb Raider logs do not establish that it is a meaningful frame-time hotspot.
+- `gpu_queue_check_status()` drains Kbase CSF notifications and checks the device-wide fatal-error latch. `kbase_kmod_csf_process_events()` serializes notification reads and performs a zero-timeout `ppoll()` even when the stream is empty. This is correctness-sensitive and only runs on queue/device status queries, not unconditionally on every submit; do not remove it or weaken fatal-error propagation without a measured call-rate/profile and replacement correctness proof.
+- `kbase_subqueue_wait_seqno()` performs explicit cache invalidation and a system-scope barrier before consuming GPU-written completion/error cells. This is correctness-critical; do not weaken `dc civac`/`dsb sy` or skip invalidation based on FPS alone.
+
+### Optimization decision
+
+- Do not make a speculative synchronization, cache-maintenance, memory-attribute, or scheduler change. There is no GPU fault signature and no evidence yet identifying the frame-time bottleneck.
+- The next source experiment should add opt-in, low-overhead counters/timing around (1) queue/device status checks and notification draining, (2) Kbase CPU WAIT_ANY polling, and (3) Kbase subqueue wait/CQS completion. Counters must be disabled by default, avoid per-frame log spam, and report aggregated counts/time only when explicitly enabled or at controlled teardown.
+- Use those measurements to choose one isolated optimization. Preserve the current `a87d179...` branch as the known-good comparison and build a separate experiment branch; do not merge or package an unvalidated candidate as the recommended driver.
+- No source behavior change or new driver package is claimed in this update.
