@@ -2694,7 +2694,8 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
     * distance arrays. That path needs a separate lowering preserving the
     * user-visible values.
     */
-   direct_vs_fs &= !direct_fs_reads_clip_cull;
+   direct_vs_fs &= !direct_fs_reads_clip_cull &&
+                   direct_vs_clip_count + direct_vs_cull_count <= 8;
 
    /* Vulkan runtime passes us shaders in stage order */
    for (i = 0; i < shader_count; i++) {
