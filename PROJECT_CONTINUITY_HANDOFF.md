@@ -1616,3 +1616,13 @@ The 12.4 FPS result is not evidence that the PanVK compiler or shader-core dispa
 4. Then test the already build-validated `experiment/kbase-single-csg` PanVK package with strict wrapper. It shares one Kbase CSG across three CSIs, restricts CSG-scoped WAIT64 to same-VkQueue producers, retains CPU/KCPU fallback for cross-VkQueue waits, and adds 32-submit profiling plus heap renewal counters.
 5. After capturing those profiles, make targeted changes to heap renewal cadence, queue synchronization, and DXVK memory/frame queue policy. Change one dimension at a time; never hardcode 7 GPU cores or expose unsupported Vulkan features.
 6. Keep all packages separate from the phone's stock/vendor Vulkan driver. Preserve System Driver fallback.
+
+
+### Descriptor-pool and cache-sync audit after the new log
+
+- Audited `src/panfrost/vulkan/panvk_vX_descriptor_set.c` on `experiment/kbase-single-csg`.
+- Descriptor-pool size accumulation uses 64-bit intermediates and explicit overflow checks before multiplying by `PANVK_DESCRIPTOR_SIZE`. Variable descriptor-count adjustment also checks overflow. The earlier arithmetic-hardening commit is present.
+- Non-host-only descriptor pools use one PanVK private BO with `PAN_KMOD_BO_FLAG_WB_MMAP`; descriptor sets suballocate from a VMA heap in that BO. Host-only pools use a host allocation. Pool allocation failure is propagated instead of wrapping the size.
+- Descriptor updates mark dirty byte ranges; `panvk_descriptor_set_flush()` queues only the dirty range. Generic `pan_kmod_queue_bo_map_sync()` coalesces overlapping/adjacent ranges for the same BO and sync type, and batches pending syncs until queue submission. Kbase then issues `KBASE_IOCTL_MEM_SYNC` for the coalesced ranges. It is therefore incorrect to assume one Kbase ioctl per descriptor update.
+- The pending-sync queue has a 4096-operation safety limit and flushes the batch when that limit is reached. A performance optimization here must be driven by measured pending-range count, merged bytes, and MEM_SYNC time; do not replace it with unconditional whole-pool flushes, which could greatly increase cache traffic for large pools.
+- No descriptor-pool code was changed in this audit. Current code has no demonstrated integer-overflow defect; allocation size/latency and deferred cache-sync costs remain candidates for instrumentation if a real descriptor-heavy workload exposes them.
