@@ -1693,11 +1693,105 @@ panvk_compile_gs_rast_variant(
                             variant);
 }
 
+/* User clip/cull distances are carried as ordinary varyings on Mali.
+ * This first implementation is deliberately limited to direct VS -> FS
+ * pipelines; geometry/tessellation propagation is a separate follow-up.
+ */
+static bool
+panvk_nir_lower_cull_vs(nir_shader *nir, unsigned clip_count)
+{
+   bool progress = false;
+
+   nir_foreach_function_impl(impl, nir) {
+      nir_builder b = nir_builder_create(impl);
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            if (intr->intrinsic != nir_intrinsic_store_deref)
+               continue;
+
+            nir_deref_instr *d = nir_src_as_deref(intr->src[0]);
+            if (d->deref_type != nir_deref_type_array)
+               continue;
+
+            nir_variable *var = nir_deref_instr_get_variable(d);
+            if (!var || var->data.mode != nir_var_shader_out ||
+                !var->data.compact ||
+                var->data.location != VARYING_SLOT_CLIP_DIST0)
+               continue;
+
+            b.cursor = nir_before_instr(instr);
+            nir_def *value = intr->src[1].ssa;
+            nir_def *index =
+               nir_iadd_imm(&b, d->arr.index.ssa, var->data.location_frac);
+            nir_def *cull = nir_b2f32(&b, nir_flt_imm(&b, value, 0.0));
+            nir_def *out =
+               nir_bcsel(&b, nir_uge_imm(&b, index, clip_count), cull, value);
+            nir_src_rewrite(&intr->src[1], out);
+            progress = true;
+         }
+      }
+      nir_progress(progress, impl, nir_metadata_control_flow);
+   }
+
+   return progress;
+}
+
+static bool
+panvk_nir_lower_clip_cull_fs(nir_shader *nir, unsigned clip_count,
+                             unsigned cull_count)
+{
+   const unsigned total = clip_count + cull_count;
+   if (!total || total > 8)
+      return false;
+
+   /* Until explicit FS reads are handled, leave shaders which declare their
+    * own distance inputs untouched. The Vulkan feature bits remain disabled.
+    */
+   nir_foreach_shader_in_variable(var, nir) {
+      if (var->data.location == VARYING_SLOT_CLIP_DIST0 ||
+          var->data.location == VARYING_SLOT_CLIP_DIST1)
+         return false;
+   }
+
+   nir_variable *in[2] = {NULL, NULL};
+   for (unsigned s = 0; s < DIV_ROUND_UP(total, 4); s++) {
+      in[s] = nir_variable_create(nir, nir_var_shader_in, glsl_vec4_type(),
+                                  s ? "panvk_clip_dist1" : "panvk_clip_dist0");
+      in[s]->data.location = VARYING_SLOT_CLIP_DIST0 + s;
+      in[s]->data.interpolation = INTERP_MODE_NONE;
+   }
+
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
+   nir_def *kill = nir_imm_false(&b);
+   nir_def *values[2] = {NULL, NULL};
+
+   for (unsigned i = 0; i < total; i++) {
+      if (!values[i / 4])
+         values[i / 4] = nir_load_var(&b, in[i / 4]);
+
+      nir_def *value = nir_channel(&b, values[i / 4], i % 4);
+      nir_def *outside =
+         i < clip_count ? nir_flt_imm(&b, value, 0.0)
+                        : nir_fge_imm(&b, value, 0.9999);
+      kill = nir_ior(&b, kill, outside);
+   }
+
+   nir_discard_if(&b, kill);
+   nir_progress(true, impl, nir_metadata_none);
+   return true;
+}
+
 static VkResult
 panvk_compile_shader(struct panvk_device *dev,
                      struct vk_shader_compile_info *info,
                      const struct vk_graphics_pipeline_state *state,
                      const struct pan_varying_layout *vs_varying_layout,
+                     int prev_clip_count, int prev_cull_count,
                      const uint32_t *noperspective_varyings,
                      const VkAllocationCallbacks *pAllocator,
                      struct vk_shader **shader_out)
@@ -1906,6 +2000,17 @@ panvk_compile_shader(struct panvk_device *dev,
             inputs.no_idvs = true;
          } else {
             inputs.no_idvs = false;
+         }
+
+         /* Cull-distance indicators are needed only for a direct VS -> FS
+          * pipeline. Keep the XFB variant's original values intact.
+          */
+         if (v == PANVK_VS_VARIANT_HW &&
+             info->next_stage_mask == VK_SHADER_STAGE_FRAGMENT_BIT &&
+             nir->info.cull_distance_array_size) {
+            NIR_PASS(_, nir, nir_lower_var_copies);
+            NIR_PASS(_, nir, panvk_nir_lower_cull_vs,
+                     nir->info.clip_distance_array_size);
          }
 
          panvk_lower_nir(dev, nir, info->set_layout_count,
@@ -2377,6 +2482,10 @@ panvk_compile_shader(struct panvk_device *dev,
          nir->info.fs.uses_sample_shading = true;
 
       /* We need to lower input attachments before we lower descriptors */
+      if (prev_clip_count || prev_cull_count)
+         NIR_PASS(_, nir, panvk_nir_lower_clip_cull_fs,
+                  prev_clip_count, prev_cull_count);
+
       NIR_PASS(_, nir, panvk_per_arch(nir_lower_input_attachment_loads),
                state, &variant->fs.input_attachment_read);
 
@@ -2550,6 +2659,21 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
       use_static_noperspective = true;
    }
 
+   /* The first clip/cull implementation is limited to a direct VS -> FS
+    * link. Capture the counts before the VS NIR is consumed and freed.
+    */
+   int direct_vs_clip_count = 0;
+   int direct_vs_cull_count = 0;
+   bool direct_vs_fs = false;
+   for (uint32_t j = 0; j < shader_count; j++) {
+      if (infos[j].stage == MESA_SHADER_VERTEX &&
+          infos[j].next_stage_mask == VK_SHADER_STAGE_FRAGMENT_BIT) {
+         direct_vs_clip_count = infos[j].nir->info.clip_distance_array_size;
+         direct_vs_cull_count = infos[j].nir->info.cull_distance_array_size;
+         direct_vs_fs = true;
+      }
+   }
+
    /* Vulkan runtime passes us shaders in stage order */
    for (i = 0; i < shader_count; i++) {
       const uint32_t *noperspective_varyings_ptr =
@@ -2576,7 +2700,15 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
          }
       }
 
+      const int prev_clip_count =
+         infos[i].stage == MESA_SHADER_FRAGMENT && direct_vs_fs
+            ? direct_vs_clip_count : 0;
+      const int prev_cull_count =
+         infos[i].stage == MESA_SHADER_FRAGMENT && direct_vs_fs
+            ? direct_vs_cull_count : 0;
+
       result = panvk_compile_shader(dev, &infos[i], state, vs_varying_layout,
+                                    prev_clip_count, prev_cull_count,
                                     noperspective_varyings_ptr, pAllocator,
                                     &shaders_out[i]);
 
@@ -3209,6 +3341,13 @@ varying_format(gl_varying_slot loc, enum pipe_format pfmt)
    }
 }
 
+static inline bool
+panvk_varying_is_generic(gl_varying_slot loc)
+{
+   return loc >= VARYING_SLOT_VAR0 || loc == VARYING_SLOT_CLIP_DIST0 ||
+          loc == VARYING_SLOT_CLIP_DIST1;
+}
+
 static VkResult
 emit_varying_attrs(struct panvk_pool *desc_pool,
                    const struct pan_varying_layout *varyings,
@@ -3239,7 +3378,7 @@ emit_varying_attrs(struct panvk_pool *desc_pool,
             gl_varying_slot loc = slot->location;
 
             enum pipe_format pfmt = PIPE_FORMAT_NONE;
-            bool is_hw = loc < VARYING_SLOT_VAR0;
+            bool is_hw = !panvk_varying_is_generic(loc);
             bool is_present = is_hw || bit_sizes[loc] != 0;
 
             if (is_present && !is_hw) {
@@ -3315,8 +3454,8 @@ panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
          continue;
 
       const gl_varying_slot pos = fs_var->location;
-      /* Skip special varyings. */
-      if (pos < VARYING_SLOT_VAR0)
+      /* Clip distances are ordinary varyings on Mali after NIR lowering. */
+      if (!panvk_varying_is_generic(pos))
          continue;
 
       /* Special buffers are handled explicitly before this loop, everything
@@ -3524,7 +3663,7 @@ VkResult panvk_per_arch(create_shader)(
    panvk_preprocess_nir(dev->vk.physical, nir, &rs);
 
    struct vk_shader *vk_shader;
-   VkResult result = panvk_compile_shader(dev, &info, NULL, NULL, NULL, NULL,
+   VkResult result = panvk_compile_shader(dev, &info, NULL, 0, 0, NULL, NULL,
                                           &vk_shader);
    if (result != VK_SUCCESS)
       return result;
