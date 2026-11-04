@@ -1,0 +1,170 @@
+name: Android ARM64 PanVK-safe GameNative wrapper
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/wrapper-panvk-honest-features
+
+permissions:
+  contents: read
+
+jobs:
+  build-panvk-safe-wrapper:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PanVK project and patch script
+        uses: actions/checkout@v4
+
+      - name: Check out pinned GameNative wrapper source
+        uses: actions/checkout@v4
+        with:
+          repository: FristOneRR-Admin/FristOneRR-Wrapperv1
+          ref: d77762fce867ba46e16a0e9f8df626add11a56b3
+          path: wrapper-src
+
+      - name: Check out SPIRV-Tools
+        uses: actions/checkout@v4
+        with:
+          repository: KhronosGroup/SPIRV-Tools
+          ref: b570f00a782a7bf4006964e8284dd8c10c4c549b
+          path: SPIRV-Tools
+
+      - name: Install Android wrapper build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            python3-mako \
+            python3-yaml \
+            bison \
+            flex \
+            glslang-tools \
+            spirv-tools \
+            git \
+            zip \
+            patchelf
+          python -m pip install --upgrade pip
+          pip install mako PyYAML meson ninja packaging
+
+      - name: Fetch SPIRV-Tools dependencies and build Android ARM64 static libraries
+        run: |
+          cd SPIRV-Tools
+          python3 utils/git-sync-deps
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          cmake -S . -B build-android-arm64 \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-30 \
+            -DSPIRV-Headers_SOURCE_DIR="$GITHUB_WORKSPACE/SPIRV-Tools/external/spirv-headers" \
+            -DSPIRV_SKIP_EXECUTABLES=ON \
+            -DSPIRV_SKIP_TESTS=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-android-arm64 --target SPIRV-Tools-opt SPIRV-Tools --parallel 2
+
+          mkdir -p "$GITHUB_WORKSPACE/wrapper-src/src/vulkan/wrapper/lib"
+          find build-android-arm64 -name 'libSPIRV-Tools-opt.a' -o -name 'libSPIRV-Tools.a' \
+            | while read -r lib; do cp "$lib" "$GITHUB_WORKSPACE/wrapper-src/src/vulkan/wrapper/lib/"; done
+          cp -a include/. "$GITHUB_WORKSPACE/wrapper-src/src/vulkan/wrapper/include/spirv-tools/"
+          test -s "$GITHUB_WORKSPACE/wrapper-src/src/vulkan/wrapper/lib/libSPIRV-Tools-opt.a"
+          test -s "$GITHUB_WORKSPACE/wrapper-src/src/vulkan/wrapper/lib/libSPIRV-Tools.a"
+
+      - name: Apply PanVK-specific feature and BC image-limit fixes
+        run: |
+          python tools/patch-wrapper-panvk.py "$GITHUB_WORKSPACE/wrapper-src"
+          grep -n 'is_panvk' wrapper-src/src/vulkan/wrapper/wrapper_objects.h
+          grep -n 'VK_DRIVER_ID_MESA_PANVK' wrapper-src/src/vulkan/wrapper/wrapper_physical_device.c
+          grep -n 'emulated_format' wrapper-src/src/vulkan/wrapper/wrapper_physical_device.c
+
+      - name: Prepare Android cross environment
+        run: |
+          cp -a shims wrapper-src/shims
+          cp android.toml wrapper-src/android.toml
+          cd wrapper-src
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export MESON_WORKING_DIR="$PWD"
+          envsubst < android.toml > android-cross.txt
+
+      - name: Configure and compile wrapper ICD
+        working-directory: wrapper-src
+        env:
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/wrapper-src/shims
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export MESON_WORKING_DIR="$PWD"
+          envsubst < android.toml > android-cross.txt
+
+          meson setup build-wrapper \
+            --cross-file android-cross.txt \
+            -Dbuildtype=release \
+            -Dplatforms=android,x11 \
+            -Dandroid-stub=true \
+            -Dandroid-libbacktrace=disabled \
+            -Dplatform-sdk-version=30 \
+            -Dglx=disabled \
+            -Dgbm=disabled \
+            -Degl=disabled \
+            -Dopengl=false \
+            -Dgles1=disabled \
+            -Dgles2=disabled \
+            -Dglvnd=disabled \
+            -Dvalgrind=disabled \
+            -Dgallium-drivers= \
+            -Dshared-glapi=disabled \
+            -Dzstd=disabled \
+            -Dmesa-clc=disabled \
+            -Dprecomp-compiler=disabled \
+            -Dvulkan-drivers=wrapper \
+            -Dllvm=disabled
+
+          meson compile -C build-wrapper
+          DESTDIR="$PWD/stage" meson install -C build-wrapper
+
+      - name: Audit and package strict wrapper
+        working-directory: wrapper-src
+        run: |
+          mkdir -p package audit
+          WRAPPER="$(find build-wrapper -name libvulkan_wrapper.so -type f | head -n 1)"
+          test -n "$WRAPPER"
+          cp "$WRAPPER" package/libvulkan_wrapper.so
+          find stage -type f -name 'wrapper_icd*.json' -exec cp {} package/ \;
+
+          file package/libvulkan_wrapper.so | tee audit/file.txt
+          readelf -h package/libvulkan_wrapper.so > audit/elf-header.txt
+          readelf -d package/libvulkan_wrapper.so > audit/dynamic-section.txt
+          readelf --dyn-syms package/libvulkan_wrapper.so > audit/dynamic-symbols.txt
+          grep -E 'NEEDED|SONAME|RPATH|RUNPATH' audit/dynamic-section.txt || true
+          grep -E 'adrenotools_open_libvulkan|vk_icdGetInstanceProcAddr|vkCreateInstance' audit/dynamic-symbols.txt || true
+
+          cat > package/meta.json <<'EOF'
+          {
+            "schemaVersion": 1,
+            "name": "PanVK-safe GameNative wrapper",
+            "description": "PanVK-aware Mesa Vulkan wrapper. Preserves underlying PanVK feature reporting and queries real replacement-image limits for BC emulation.",
+            "author": "khalilgenshin42-design",
+            "packageVersion": "1.1-panvk-strict-${GITHUB_SHA::12}",
+            "vendor": "Mesa",
+            "driverVersion": "1.1-panvk-strict",
+            "minApi": 30,
+            "libraryName": "libvulkan_wrapper.so"
+          }
+          EOF
+
+          (cd package && sha256sum * > SHA256SUMS)
+          (cd package && zip -9 -r ../PanVK-safe-Wrapper-Android-arm64.zip .)
+          sha256sum PanVK-safe-Wrapper-Android-arm64.zip | tee audit/package-sha256.txt
+          find package -maxdepth 1 -type f -print | sort | tee audit/package-contents.txt
+
+      - name: Upload wrapper package and audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: panvk-safe-gamenative-wrapper-android-arm64
+          path: |
+            wrapper-src/PanVK-safe-Wrapper-Android-arm64.zip
+            wrapper-src/audit/
+          if-no-files-found: error
