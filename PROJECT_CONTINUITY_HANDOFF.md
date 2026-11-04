@@ -1467,3 +1467,27 @@ No system/vendor Vulkan driver was modified. All work remains in isolated experi
 
 - `VK_DRIVER_VERSION` in the current PanVK source is hard-coded as `0x06802095`, which decodes to `26.2.149`. The runtime's `Driver version 26.2.149` is therefore consistent with this source's driverVersion field and does not, by itself, prove that the wrong build was loaded.
 - The source package `VERSION` string and Vulkan `driverVersion` field are distinct; use a runtime build fingerprint or package provenance to identify the exact loaded binary rather than comparing those two strings.
+
+
+### DXVK 1.7.2 extension compatibility cross-check
+
+The exact extensions listed as enabled by the Tomb Raider D3D11 DXVK 1.7.2 log were compared against the current PanVK v12 extension table. Every listed extension has a corresponding PanVK declaration:
+- `VK_EXT_4444_formats`
+- `VK_EXT_custom_border_color`
+- `VK_EXT_depth_clip_enable`
+- `VK_EXT_extended_dynamic_state`
+- `VK_EXT_host_query_reset`
+- `VK_EXT_robustness2`
+- `VK_EXT_shader_demote_to_helper_invocation`
+- `VK_EXT_shader_stencil_export`
+- `VK_EXT_transform_feedback` (gated to PAN_ARCH >= 10)
+- `VK_EXT_vertex_attribute_divisor`
+- `VK_KHR_create_renderpass2`
+- `VK_KHR_depth_stencil_resolve`
+- `VK_KHR_draw_indirect_count` (gated to PAN_ARCH >= 10)
+- `VK_KHR_driver_properties`
+- `VK_KHR_image_format_list`
+- `VK_KHR_sampler_mirror_clamp_to_edge`
+- `VK_KHR_swapchain` (WSI build)
+
+The log additionally reports `VK_EXT_conditional_rendering`; PanVK exposes it for PAN_ARCH >= 10, so G720 v12 qualifies. Therefore, no missing extension in the actual DXVK 1.7.2 enabled-extension list has been identified. Do not add redundant extension declarations. The separate feature-bit discrepancy (multiViewport/clip/cull/geometryStreams/BC) remains open and must be resolved at runtime; an extension being listed as enabled does not prove all of its optional features are supported.
