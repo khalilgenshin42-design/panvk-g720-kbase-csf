@@ -3264,11 +3264,13 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
       return panvk_queue_vm_bind(vk_queue, vk_submit, queue->syncobj_handle);
    }
 
+#ifdef HAVE_PAN_KMOD_KBASE
    const bool profile_kbase =
       gpu_queue_uses_kbase(to_panvk_device(vk_queue->base.device)) &&
       kbase_profile_enabled();
    const int64_t profile_start =
       profile_kbase ? os_time_get_nano() : 0;
+#endif
 
    panvk_queue_submit_init(&submit, vk_queue);
    panvk_queue_submit_init_storage(&submit, vk_submit, &stack_storage);
