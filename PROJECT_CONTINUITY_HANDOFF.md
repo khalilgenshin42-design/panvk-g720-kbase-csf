@@ -1562,3 +1562,57 @@ Latest workflow run: **41888494088**, currently in progress at SPIRV-Tools check
 5. Keep the System Driver fallback. Never install either experimental package over Android's system/vendor Vulkan driver.
 
 The 12.4 FPS result is not evidence that the PanVK compiler or shader-core dispatch is wrong. The current logs show no GPU fault/device loss; the more concrete current risks are wrapper feature spoofing, overreported BC replacement image limits, cold DXVK state cache, and unknown queue/heap renewal costs. Optimize these measured issues before changing shader compiler scheduling or enabling additional Vulkan extensions.
+
+
+---
+
+## 2026-11-04 late continuation — Tomb Raider 19:09 log audit and strict-wrapper hardening
+
+### New device benchmark
+
+- User-reported FPS: **Min 3.5 / Max 18.5 / Avg 12.4**.
+- Uploaded archive: `TombRaider_logs_2026-11-04_19-09-48.zip`; capture timestamp in `wine_debug.log`: 2026-11-04 19:07:28.
+- Device: Xiaomi 25069PTEBG / MT6899, Android 16, Winlator Mali 1.2.1 Bionic (23), Wine 10-arm64ec-0, Tomb Raider Definitive Edition, 900x506.
+- This is a modest regression versus the immediately prior clean 13.1 FPS run (about -5.3% average); the 3.5 FPS minimum indicates substantial stutter or a slow section. Do not attribute the delta to one source without repeated controlled runs.
+
+### Exact DXVK version correction
+
+- `TombRaider_dxgi.log` and `TombRaider_d3d11.log` both explicitly report **DXVK v1.7.2**, D3D11 feature level 11.0. The earlier DXVK 2.7+ requirements comparison is not the right baseline for this game/container and is superseded for this benchmark.
+- DXVK v1.7.2 creates a Vulkan 1.1 instance and probes its own optional device-extension list. It enables available optional extensions including EXT_4444_formats, conditional_rendering, custom_border_color, depth_clip_enable, extended_dynamic_state, host_query_reset, memory_budget, memory_priority, robustness2, shader_demote_to_helper_invocation, shader_stencil_export, transform_feedback, vertex_attribute_divisor, KHR_create_renderpass2, KHR_depth_stencil_resolve, KHR_draw_indirect_count, KHR_driver_properties, KHR_image_format_list, KHR_sampler_mirror_clamp_to_edge, and KHR_swapchain. This is not a list of all mandatory requirements; DXVK filters its optional set by what the ICD reports.
+- DXVK logs four compiler threads, `d3d11.maxQueuedFrames=1`, `dxvk.memoryTrack=True`, `d3d11.relaxedBarriers=True`, `d3d11.ignoreGraphicsBarriers=True`, and no valid state-cache entries. The DXGI config caps device/shared memory at 1024 MiB while the PanVK-visible heap is reported as 8525 MiB. This memory cap is a separate Winlator/DXVK policy, not the actual Kbase heap size; test it only as a controlled config variable after driver/wrapper isolation.
+- Device feature output still includes `multiViewport=1`, `shaderClipDistance=1`, `shaderCullDistance=1`, `geometryStreams=1`, and BC compression, despite the underlying PanVK v12 feature table not implementing all of these natively. The new strict wrapper should correct this mismatch; BC should remain enabled only when its full wrapper emulation path is available.
+- BC6H-to-ASTC-HDR native transcode initializes; compute pipeline setup is logged at 1–2 ms. AHardwareBuffer imports and multiple Kbase DMA-BUF allocations succeed.
+
+### Driver stability and profiling observations
+
+- No `GPU_SHAREABILITY_FAULT`, CSF fatal error, `VK_ERROR_DEVICE_LOST`, or PanVK queue-submit failure appears in this archive.
+- Kbase raw coherency mode is 0; retain the current non-I/O-coherent cache maintenance behavior.
+- The log has no `kbase profile:` activation line or cumulative queue-profile snapshots. The live-profile build used for this run did not provide enough instrumentation evidence to tell whether the environment variable reached the process, whether the 256-submit checkpoint was reached, or whether the user ended the session before queue teardown. The session ends after X connection loss, followed by a Fortify destroyed-mutex report and Wine SEH error; treat these as teardown symptoms, not proof of an earlier GPU fault.
+- The newer `experiment/kbase-single-csg` branch has improved profiling: explicit enabled/disabled activation log, 32-submit snapshots, ring-job/doorbell/kick counters, native GPU-wait submit counts, and separate tiler-heap renewal interval/work-trigger and wait-time counters.
+
+### Active GameNative wrapper source — pinned fork, not upstream mirror
+
+- The active Winlator `wrapper-gamenative` source is `FristOneRR-Admin/FristOneRR-Wrapperv1`, branch `fristonerr-wrapper-v1`, pinned commit `d77762fce867ba46e16a0e9f8df626add11a56b3`.
+- Important correction: a comparison against the upstream `leegao/bionic-vulkan-wrapper` source is not authoritative for this fork. The active pinned fork's `spirv_edit.cpp` explicitly has `/* skip missing SPIRV-Tools pass */` in `lower_eliminate_clip_distance`; it does not register the intended clip/cull lowering pass. The PanVK-aware patch therefore disables this no-op path for PanVK. Do not re-enable clip/cull feature reporting on the assumption that this fallback works.
+- The active fork's physical-device code force-advertises viewport, clip/cull distance, geometry-stream and other feature bits, then selectively clamps some requested device features to the underlying feature table. This query/create mismatch is the reason for the strict PanVK-aware wrapper patch.
+- The active fork also fabricates `maxResourceSize = 562949953421312` (512 TiB) for unsupported BC image-format queries. The strict patch replaces this with a query of the actual replacement image format and limits.
+- A further concrete allocation bug was found in `wrapper_device_memory.c`'s host-visible memory emulation path: on bookkeeping allocation failure it can unlock through an uninitialized `mem`; after all allocation backends fail it frees `mem` and then dereferences `mem->device` to unlock; and the common tracking block can read an uninitialized `VkMemoryAllocateInfo` on the emulated path. This is directly relevant to memory-pressure stability, although this benchmark did not demonstrate that the bug was triggered.
+
+### Strict-wrapper branch and CI progress
+
+- Writable project branch: `experiment/wrapper-panvk-honest-features`. The upstream GameNative fork is read-only to the connected GitHub integration, so changes are maintained as a deterministic patcher in this project repository; no upstream repository files were modified.
+- Patcher: `tools/patch-wrapper-panvk.py`. Workflow: `.github/workflows/android-wrapper-panvk-strict.yml`.
+- Patch behavior: identify PanVK via `VK_DRIVER_ID_MESA_PANVK`; skip other-vendor compatibility feature overrides for PanVK; preserve PanVK's real core/extension and transform-feedback/texel alignment properties; keep BC advertised only with native support or complete wrapper emulation; disable the missing clip-distance pass; query real replacement-image limits rather than claiming 512 TiB.
+- Additional patch hardens host-visible allocation emulation: initializes `mem` and `VkMemoryAllocateInfo` before goto paths, removes the fallback-only shadow declaration, and unlocks through the live `device` object rather than a potentially freed `mem`.
+- CI fixes made: build only the valid `SPIRV-Tools-opt` CMake target (the previous multi-target invocation failed); remove unsupported `mesa-clc` and `precomp-compiler` Meson options for the pinned older source; fix newline matching in the allocation patcher.
+- Latest source commit: `d836d9bc7a5d95cc421aef28be7bc0e7eacccb86`.
+- Patch validation workflow for this commit: run **41925911986**, completed **success**. Android wrapper build run **41925911864** was still in progress at this checkpoint. Do not distribute/import a wrapper package until the full Android ARM64 compile, ELF/dependency audit, and package checksum validation pass.
+
+### Test and optimization sequence
+
+1. Finish strict-wrapper Android ARM64 CI and inspect all build/audit output.
+2. If successful, test strict wrapper with the already validated `experiment/kbase-live-profile` PanVK package first. Keep game/container settings identical. Verify DXVK now reports PanVK's real `multiViewport`, clip/cull distance and geometry-stream support as false; verify BC remains usable through emulation and check for shader/pipeline failures.
+3. Compare strict wrapper against original GameNative wrapper using the same PanVK build. Do not mix in a queue-topology change yet.
+4. Then test the already build-validated `experiment/kbase-single-csg` PanVK package with strict wrapper. It shares one Kbase CSG across three CSIs, restricts CSG-scoped WAIT64 to same-VkQueue producers, retains CPU/KCPU fallback for cross-VkQueue waits, and adds 32-submit profiling plus heap renewal counters.
+5. After capturing those profiles, make targeted changes to heap renewal cadence, queue synchronization, and DXVK memory/frame queue policy. Change one dimension at a time; never hardcode 7 GPU cores or expose unsupported Vulkan features.
+6. Keep all packages separate from the phone's stock/vendor Vulkan driver. Preserve System Driver fallback.
