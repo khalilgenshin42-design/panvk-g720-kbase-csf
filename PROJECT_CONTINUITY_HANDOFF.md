@@ -1626,3 +1626,16 @@ The 12.4 FPS result is not evidence that the PanVK compiler or shader-core dispa
 - Descriptor updates mark dirty byte ranges; `panvk_descriptor_set_flush()` queues only the dirty range. Generic `pan_kmod_queue_bo_map_sync()` coalesces overlapping/adjacent ranges for the same BO and sync type, and batches pending syncs until queue submission. Kbase then issues `KBASE_IOCTL_MEM_SYNC` for the coalesced ranges. It is therefore incorrect to assume one Kbase ioctl per descriptor update.
 - The pending-sync queue has a 4096-operation safety limit and flushes the batch when that limit is reached. A performance optimization here must be driven by measured pending-range count, merged bytes, and MEM_SYNC time; do not replace it with unconditional whole-pool flushes, which could greatly increase cache traffic for large pools.
 - No descriptor-pool code was changed in this audit. Current code has no demonstrated integer-overflow defect; allocation size/latency and deferred cache-sync costs remain candidates for instrumentation if a real descriptor-heavy workload exposes them.
+
+
+### Single-CSG PanVK package independently re-downloaded and verified
+
+- Re-downloaded workflow artifact **13351158168** from successful run **41886360574** (branch `experiment/kbase-single-csg`, commit `538e917f5ddf4efd5bd54d8ac102a1026cf70754`).
+- Outer artifact SHA-256: `fff353c367474a2f9a82ba98e535c9b641167f32c70218085d70754dbd3d64bd`.
+- Extracted importable nested `PanVK-G720-experimental.zip`; SHA-256: `c425675528e70beffecc0c7587cdd870e4044ad2ebd3212a7ae41b9dc810cf24`.
+- Nested package manifest validates:
+  - `libvulkan_panfrost.so`: `973eafd37cb4cb8651d56f501368e6836fef9d1bb752db3c1f56c2e7573b2842`
+  - `libpanvk_drm.so`: `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`
+  - `meta.json`: `79476f59232679f672385949f5f719f6921ca8e193e32141306cc522c4c2b112`
+- Metadata: `26.3.0-devel-android-kbase-538e917f5ddf`, Android API 30 minimum, ARM64 library `libvulkan_panfrost.so`. Package remains experimental and not Vulkan conformant.
+- Package is ready for controlled device testing, but do not use it for the next run until the strict GameNative wrapper is built and installed; otherwise the wrapper capability mismatch remains an uncontrolled variable.
