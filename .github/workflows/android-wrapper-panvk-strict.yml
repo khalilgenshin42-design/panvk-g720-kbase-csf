@@ -62,10 +62,11 @@ jobs:
             -DSPIRV-Headers_SOURCE_DIR="$GITHUB_WORKSPACE/SPIRV-Tools/external/spirv-headers" \
             -DSPIRV_SKIP_EXECUTABLES=ON \
             -DSPIRV_SKIP_TESTS=ON \
-            -DBUILD_SHARED_LIBS=OFF \
+            -DBUILD_SHARED_LIBS=OFF \\
+            -DSPIRV_TOOLS_BUILD_STATIC=ON \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-android-arm64 --target SPIRV-Tools-opt SPIRV-Tools --parallel 2
+          cmake --build build-android-arm64 --target SPIRV-Tools-opt SPIRV-Tools-static --parallel 2
 
           mkdir -p "$GITHUB_WORKSPACE/wrapper-src/src/vulkan/wrapper/lib"
           find build-android-arm64 -name 'libSPIRV-Tools-opt.a' -o -name 'libSPIRV-Tools.a' \
