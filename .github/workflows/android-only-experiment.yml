@@ -12,6 +12,7 @@ on:
       - experiment/kbase-profile-counters
       - experiment/kbase-live-profile
       - experiment/kbase-single-csg
+      - experiment/clip-cull-distance-v12
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
