@@ -83,6 +83,82 @@
 
 #define KBASE_GPU_WAIT_MAX 3
 
+/* Opt-in aggregate profiling. Disabled by default; no per-wait logging. */
+struct kbase_profile_stats {
+   uint64_t subqueue_wait_calls, subqueue_wait_ns;
+   uint64_t subqueue_wait_timeouts, subqueue_wait_errors;
+   uint64_t status_drain_calls, status_drain_ns, status_drain_nonempty;
+};
+static struct kbase_profile_stats kbase_profile;
+
+static bool
+kbase_profile_enabled(void)
+{
+   static int enabled = -1;
+   if (enabled < 0)
+      enabled = debug_get_bool_option("PANVK_KBASE_PROFILE", false);
+   return enabled;
+}
+
+static void
+kbase_profile_add(uint64_t *counter, uint64_t value)
+{
+   __atomic_fetch_add(counter, value, __ATOMIC_RELAXED);
+}
+
+static uint64_t
+kbase_profile_read(uint64_t *counter)
+{
+   return __atomic_load_n(counter, __ATOMIC_RELAXED);
+}
+
+static void
+kbase_profile_record_wait(int64_t start, VkResult result)
+{
+   if (!kbase_profile_enabled())
+      return;
+   kbase_profile_add(&kbase_profile.subqueue_wait_calls, 1);
+   kbase_profile_add(&kbase_profile.subqueue_wait_ns, os_time_get_nano() - start);
+   if (result == VK_TIMEOUT)
+      kbase_profile_add(&kbase_profile.subqueue_wait_timeouts, 1);
+   else if (result != VK_SUCCESS)
+      kbase_profile_add(&kbase_profile.subqueue_wait_errors, 1);
+}
+
+static void
+kbase_profile_record_status(int event_status, int64_t elapsed_ns)
+{
+   if (!kbase_profile_enabled())
+      return;
+   kbase_profile_add(&kbase_profile.status_drain_calls, 1);
+   kbase_profile_add(&kbase_profile.status_drain_ns, elapsed_ns);
+   if (event_status > 0)
+      kbase_profile_add(&kbase_profile.status_drain_nonempty, 1);
+}
+
+static void
+kbase_profile_dump(void)
+{
+   if (!kbase_profile_enabled())
+      return;
+   mesa_logi("kbase profile: subqueue waits=%" PRIu64
+             " total_ms=%.3f timeouts=%" PRIu64 " errors=%" PRIu64
+             "; status drains=%" PRIu64 " total_ms=%.3f nonempty=%" PRIu64,
+             kbase_profile_read(&kbase_profile.subqueue_wait_calls),
+             kbase_profile_read(&kbase_profile.subqueue_wait_ns) / 1000000.0,
+             kbase_profile_read(&kbase_profile.subqueue_wait_timeouts),
+             kbase_profile_read(&kbase_profile.subqueue_wait_errors),
+             kbase_profile_read(&kbase_profile.status_drain_calls),
+             kbase_profile_read(&kbase_profile.status_drain_ns) / 1000000.0,
+             kbase_profile_read(&kbase_profile.status_drain_nonempty));
+}
+
+#define KBASE_PROFILE_WAIT_RETURN(start, result) do { \
+   VkResult profile_result = (result); \
+   kbase_profile_record_wait((start), profile_result); \
+   return profile_result; \
+} while (0)
+
 struct kbase_gpu_wait {
    uint64_t addr;
    uint64_t target_minus_one;
@@ -843,17 +919,19 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
       if (cell->error) {
          mesa_loge("kbase: CS error 0x%x on subqueue %u", cell->error,
                    subqueue);
-         return vk_queue_set_lost(&queue->vk,
-                                  "kbase: CS error 0x%x on subqueue %u",
-                                  cell->error, subqueue);
+         KBASE_PROFILE_WAIT_RETURN(
+            start, vk_queue_set_lost(&queue->vk,
+                                     "kbase: CS error 0x%x on subqueue %u",
+                                     cell->error, subqueue));
       }
 
       /* Notifications are shared across every queue on this kbase context.
        * Another queue's waiter may consume a fatal notification first, so
        * consult the device-wide latch before accepting this subqueue's seqno. */
       if (kbase_kmod_csf_has_error(dev->kmod.dev))
-         return vk_queue_set_lost(&queue->vk,
-                                  "kbase: CSF queue-group error");
+         KBASE_PROFILE_WAIT_RETURN(
+            start, vk_queue_set_lost(&queue->vk,
+                                     "kbase: CSF queue-group error"));
 
       if (cell->seqno >= target_seqno ||
           (PANVK_DEBUG(KBASE_DIAG) && *ls_copy >= target_seqno) ||
@@ -874,7 +952,7 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
 
       if ((uint64_t)now >= deadline) {
          if (deadline < watchdog)
-            return VK_TIMEOUT;
+            KBASE_PROFILE_WAIT_RETURN(start, VK_TIMEOUT);
 
          const volatile uint64_t *ring = subq->kbase.ringbuf_cpu;
          uint64_t extract_line = extract & ~(uint64_t)63;
@@ -958,8 +1036,10 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
                                  phys_dev->kmod.dev->props.gpu_id);
          }
 
-         return vk_queue_set_lost(&queue->vk,
-                                  "kbase: timeout on subqueue %u", subqueue);
+         KBASE_PROFILE_WAIT_RETURN(
+            start, vk_queue_set_lost(&queue->vk,
+                                     "kbase: timeout on subqueue %u",
+                                     subqueue));
       }
 
       /* Block on a CSF notification (consuming one event when available)
@@ -981,8 +1061,9 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
       if (cqs_ret < 0) {
          int error_type = kbase_kmod_csf_wait_event(dev->kmod.dev, remaining);
          if (error_type < 0)
-            return vk_queue_set_lost(&queue->vk,
-                                     "kbase: CSF notification read failed");
+            KBASE_PROFILE_WAIT_RETURN(
+               start, vk_queue_set_lost(&queue->vk,
+                                        "kbase: CSF notification read failed"));
 
          if (dev->debug.decode_ctx && insert > extract && error_type) {
             // pandecode_user_msg(dev->debug.decode_ctx,
@@ -1017,7 +1098,7 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
 
    // print_stack_trace();
 
-   return VK_SUCCESS;
+   KBASE_PROFILE_WAIT_RETURN(start, VK_SUCCESS);
 }
 
 static VkResult
@@ -3319,8 +3400,10 @@ panvk_per_arch(destroy_gpu_queue)(struct vk_queue *vk_queue)
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
 
 #ifdef HAVE_PAN_KMOD_KBASE
-   if (gpu_queue_uses_kbase(dev))
+   if (gpu_queue_uses_kbase(dev)) {
       kbase_queue_wait_current(queue, UINT64_MAX);
+      kbase_profile_dump();
+   }
 #endif
 
    cleanup_queue(queue);
@@ -3356,7 +3439,11 @@ panvk_per_arch(gpu_queue_check_status)(struct vk_queue *vk_queue)
     * without entering the notification fallback, and avoids reading every
     * GPU-written subqueue context on each Vulkan status query. */
    if (gpu_queue_uses_kbase(dev)) {
+      int64_t profile_start = kbase_profile_enabled() ? os_time_get_nano() : 0;
       int event_status = kbase_kmod_csf_process_events(dev->kmod.dev);
+      if (kbase_profile_enabled())
+         kbase_profile_record_status(event_status,
+                                     os_time_get_nano() - profile_start);
       if (event_status < 0)
          return vk_queue_set_lost(&queue->vk,
                                   "kbase: failed to process CSF notifications");
