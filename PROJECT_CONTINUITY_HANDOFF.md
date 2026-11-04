@@ -907,3 +907,27 @@ The next device action should be a **short diagnostic-only run**, not another FP
 
 Do not change Kbase import flags, cache synchronization, CSF event scope, WAIT64 scope, or queue-notification correctness code until the diagnostic import attributes are decoded. No new source code change or package was justified by this static audit; the next required evidence must come from the target device.
 
+
+
+## 2026-11-04 continuation — AHB/dma-buf import flag diagnostic
+
+### Device capture
+
+User supplied `TombRaider_logs_2026-11-04_01-49-32.zip` after setting `PANVK_KBASE_DIAG_MEM_FLAGS=1` for a short launch/initialization run (not an FPS benchmark). The archive contains logcat, Wine, DXVK D3D11/DXGI/D3D9 logs.
+
+The diagnostic was active and captured the previously missing import route:
+
+- Raw coherency mode: `0` (the PanVK source documents this as `COHERENCY_NONE`).
+- 30 dma-buf import diagnostic records, all `route=external`, `pan=0x0`, `requested=0x4040f`, `effective=0x4540f`.
+- The returned flags are the request plus `0x5000`. Under the current Arm kbase UAPI layout, `0x400` is `BASE_MEM_COHERENT_SYSTEM`, `0x40000` is `BASE_MEM_IMPORT_SHARED`, `0x1000` is `BASE_MEM_CACHED_CPU`, and `0x4000` is output `BASE_MEM_NEED_MMAP`. Thus the returned import flags preserve the requested `BASE_MEM_COHERENT_SYSTEM` bit and add CACHED_CPU + NEED_MMAP. This is a useful observation about the Kbase ioctl response; it does not independently prove the actual page-table shareability attributes or resolve why the raw coherency property is NONE.
+- Additional BO diagnostics: 424 records `requested=0x40 effective=0x380f`; 88 records `requested=0x41 effective=0x1817`; 6 records `requested=0x100 effective=0x8340f`. Preserve these as separate allocation classes; do not conflate their Pan Kmod request flags with the raw Kbase returned flags.
+- DMA-BUF imports succeeded; log records show imported BOs of 1,024,000 and 1,847,296 bytes, with handles in the 39–70 range. AHB import messages are present.
+- Two `kbase_queue_wait_current` calls completed successfully.
+- No captured GPU_SHAREABILITY_FAULT/0x88, CSF fatal notification, QueueSubmit -4, or explicit VK_ERROR_DEVICE_LOST.
+- On close, Wine logged `FORTIFY: pthread_mutex_lock called on a destroyed mutex` and asserted in `vkWaitForFences`; DXVK logged `D3D11SwapChain: Failed to recreate swap chain`. This was a short launch/close diagnostic, so treat these as teardown observations unless reproduced before normal exit.
+
+### Interpretation / next engineering action
+
+The key new fact is that the dma-buf import ioctl's returned flags preserve `BASE_MEM_COHERENT_SYSTEM` even though the raw coherency mode reports 0. The generic Arm kbase UAPI defines the returned `NEED_MMAP` and `CACHED_CPU` bits as output flags; their appearance explains the `0x5000` delta. Do not interpret that delta as a shareability change. The preserved coherent-system bit is stronger evidence than the earlier logs, but it is still not direct proof of the GPU page-table's shareability encoding, nor does the generic upstream kernel implementation prove the behavior of Xiaomi/MediaTek's exact kernel fork.
+
+No memory flag, cache-maintenance, CSF scope, or synchronization source change is justified by this capture alone. Next, inspect the exact MTK kbase ABI/kernel behavior if a matching source tree can be found; otherwise preserve this as a diagnostic discrepancy and do not force/clear coherency flags speculatively. Keep `PANVK_KBASE_DIAG_MEM_FLAGS` disabled for all FPS benchmarks. The user should remove it from the Winlator environment before the next performance run. `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` remains unset.
