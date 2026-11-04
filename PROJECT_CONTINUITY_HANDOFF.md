@@ -1453,3 +1453,17 @@ The group unification is a **hypothesis-driven experiment**, not yet a proven op
 5. Separately audit wrapper feature interception and the teardown mutex/X11 issue. No ray-query, BC, viewport, clip-distance, or cull-distance feature should be force-enabled from the current evidence.
 
 No system/vendor Vulkan driver was modified. All work remains in isolated experiment branches and uses Winlator custom driver import only.
+
+
+### Additional benchmark interpretation — DXVK cache and memory budget
+
+- DXVK reports `No state cache file found`, then `Creating new state cache file`, and later `Read 0 valid state cache entries`. This is a cold pipeline-state-cache run. Shader/pipeline compilation can contaminate first-run FPS and frame-time stability; do not compare a cold run to a warm run. Preserve the cache between identical benchmark runs and record whether valid entries are loaded.
+- DXVK effective memory limits are `dxvk.maxDeviceMemory=1024`, `dxgi.maxDeviceMemory=1024`, `dxgi.maxSharedMemory=1024`, and `d3d9.maxAvailableMemory=1024` (MiB). DXVK therefore caps its reported budgets around 1 GiB despite the 8,525 MiB Vulkan heap report. No out-of-memory failure is shown, so do not increase these budgets speculatively.
+- The configuration has `dxvk.memoryTrack=True`; this is a candidate for a later controlled config A/B because tracking can add host overhead. The `maxQueuedFrames=1` setting can limit CPU/GPU overlap and should be separately A/B tested at 2, then 3 if stability permits.
+- Keep `ignoreGraphicsBarriers=True` and `relaxedBarriers=True` out of stability qualification. They are synchronization overrides and could mask driver defects or introduce incorrect ordering. First compare the driver with those overrides disabled, then test them individually only if desired.
+- These are DXVK/container settings, not PanVK source modifications. Do not mix them into the single-CSG A/B run.
+
+### Driver version identity note
+
+- `VK_DRIVER_VERSION` in the current PanVK source is hard-coded as `0x06802095`, which decodes to `26.2.149`. The runtime's `Driver version 26.2.149` is therefore consistent with this source's driverVersion field and does not, by itself, prove that the wrong build was loaded.
+- The source package `VERSION` string and Vulkan `driverVersion` field are distinct; use a runtime build fingerprint or package provenance to identify the exact loaded binary rather than comparing those two strings.
