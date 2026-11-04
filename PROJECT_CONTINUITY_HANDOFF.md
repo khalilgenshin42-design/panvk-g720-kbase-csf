@@ -1107,3 +1107,56 @@ Do not change Kbase memory flags, cache maintenance, coherency handling, CSF eve
 - Build/package success is not yet established. Do not import or run this experimental package until the Android ARM64 build and package audit pass.
 - After CI succeeds, use the resulting artifact only in Winlator's custom driver importer, keeping System Driver available as fallback. Runtime profiling test should use `PANVK_KBASE_PROFILE=1`, same Tomb Raider scene/settings, and collect the emitted `kbase profile:` summary plus logs. Then unset the variable and repeat a clean FPS run only if needed.
 - Compare counts and total milliseconds, not only average duration: a path can be expensive due to high call frequency even when each call is short. Do not optimize any measured path until the profile demonstrates it is material.
+
+
+
+## 2026-11-04 continuation — Kbase profiling branch build and package audit completed
+
+### CI result
+
+- Android-only workflow run: `41828985007`
+- URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/41828985007
+- Branch: `experiment/kbase-profile-counters`
+- Source/workflow head SHA: `32d6aad1ecf323d1e69917b1d2ab00b8d8130fab`
+- Job `build-android-only` completed **SUCCESS**.
+- Every stage passed: dependency install, host-tool generation, real Android ARM64 libdrm build, Android-only configure, PanVK compile/stage, driver/manifest/dependency audit, flat Winlator/Adrenotools package, and artifact upload.
+
+### Artifact and integrity
+
+- GitHub artifact ID: `13321123223`
+- Artifact name: `panvk-g720-android-only-experimental-package`
+- Artifact SHA-256: `490d7da533699047bc4481008fcf029ba8f13bfcd56465f381b2bbc1484e7ece`
+- Artifact expires: 2027-02-02.
+- Downloaded outer audit artifact: `/mnt/data/panvk-g720-android-only-experimental-package.zip`.
+- Extracted importable flat package: `/mnt/data/PanVK-G720-experimental.zip`.
+- Importable package SHA-256: `639e6b6ab68419bae3d1cdedce67506395de69785c8e5d92d93cf58e8b677f8e`.
+- Package-internal `SHA256SUMS` verified successfully for `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `meta.json`.
+
+### Static package audit
+
+- Driver ELF: 64-bit little-endian AArch64 Android shared object, minimum Android API 30, built with NDK r30; not stripped.
+- Driver SONAME: `libvulkan_panfrost.so`.
+- Driver NEEDED includes `libpanvk_drm.so` (the private bundled libdrm copy), Android platform libraries, libc, libm, libdl, and libz.
+- Driver RUNPATH is `$ORIGIN`, so the private DRM dependency resolves relative to the driver package.
+- Private DRM SONAME: `libpanvk_drm.so`; it depends only on libc.
+- The outer staging audit also reports no missing DRM symbols against the staged libdrm.
+- Flat ADPKG root contains only `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+- Metadata: `PanVK Mali G720 (experimental)`, package version `26.3.0-devel-android-kbase-32d6aad1ecf3`, minApi 30, libraryName `libvulkan_panfrost.so`. It explicitly warns that the build is experimental, not Vulkan conformant, and device/game compatibility is unverified.
+
+### Interpretation / safety
+
+- This proves the profiling source compiles for Android ARM64 and that the flat package, ELF ABI, private DRM linkage, RUNPATH, and package checksums pass static validation.
+- It does **not** prove runtime loading, Kbase ABI compatibility, correct GPU execution, Vulkan conformance, WSI stability, or improved game performance on the Xiaomi 15T.
+- No phone system/vendor driver files were modified. Keep the experimental package separate and use Winlator's custom driver importer only; preserve System Driver as fallback.
+- Do not describe this instrumentation build as a performance optimization. It only collects opt-in aggregate timing/counters.
+
+### Next device test
+
+1. Import `PanVK-G720-experimental.zip` into Winlator Mali 1.2 using its custom driver importer only.
+2. Keep the existing game/container settings and stock System Driver available as fallback.
+3. For one diagnostic Tomb Raider run, set `PANVK_KBASE_PROFILE=1` in the Winlator container/game environment. Do not set `PANVK_KBASE_DIAG_MEM_FLAGS` or `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE`; keep the heap interval at default 128 and work threshold at 65536.
+4. Capture the emitted `kbase profile:` summary and the normal logs. Report whether the game launches, reaches the benchmark, and exits normally; include min/max/average FPS if available.
+5. The profile is printed during queue destruction before the final teardown drain. It aggregates process/driver-wide wait and status-drain counters. If multiple queues are destroyed, the same aggregate summary may be printed more than once; avoid double-counting duplicate lines.
+6. After collecting the diagnostic profile, remove `PANVK_KBASE_PROFILE` completely for clean FPS benchmarks. Do not leave it enabled when comparing performance.
+
+No further source behavior change is justified until the profile demonstrates a material hotspot or runtime logs reveal a new correctness fault.
