@@ -1252,3 +1252,50 @@ A follow-up source-to-log correlation found an important limitation in the 13:39
 - Preserve the profiling branch/package. Its queue-destruction snapshots were shown to occur during early queue probing and do not characterize the live game queue.
 - Continue source lifecycle inspection on the isolated profiling branch to find a workload-spanning, low-overhead reporting point demonstrably reached by the actual game queue. Do not change queue synchronization, memory attributes, cache maintenance, or scheduler behavior without measurements.
 - No driver code, package, or system/vendor driver was changed for this benchmark.
+
+
+
+## 2026-11-04 continuation — live Kbase queue profiling instrumentation (13:53 local)
+
+### Source lifecycle audit
+
+The prior profile implementation was confirmed to report only from `destroy_gpu_queue()`. This is not a reliable workload reporting point: short-lived queues created during Vulkan probing can be destroyed before Tomb Raider creates/imports its game resources, so the counters may not include active rendering.
+
+The active queue's `panvk_per_arch(gpu_queue_submit)` callback is a reliable live-workload boundary. DXVK's active game queue reaches it for each Vulkan queue submission. The Kbase path is selected inside this callback, and all normal Kbase submission work returns through the shared `out:` cleanup label.
+
+### Isolated branch and commits
+
+Created `experiment/kbase-live-profile` from the verified instrumentation baseline `experiment/kbase-profile-counters` at `32d6aad1ecf323d1e69917b1d2ab00b8d8130fab`.
+
+Commits:
+- `9932b277073e39d5ccdce7e1728c3b18e5ccbecb` — add cumulative queue-submit counters and a live reporting point every 256 Kbase submissions.
+- `27edd0bb1ed0076857187fb44d9ba3fcac3b681c` — guard Kbase-only profiling variables so non-Kbase builds remain valid.
+- `f674d46abbac19f563999a4f2d7b03898fe3a7bc` — add this branch to the Android-only CI push filter.
+
+Only these files differ from the profile baseline:
+- `src/panfrost/vulkan/csf/panvk_vX_gpu_queue.c`
+- `.github/workflows/android-only-experiment.yml`
+
+### Instrumentation details
+
+- Runtime opt-in remains `PANVK_KBASE_PROFILE=1`; disabled by default.
+- Adds aggregate count, total CPU time, and error count for the Kbase `gpu_queue_submit` callback.
+- Emits a cumulative snapshot every 256 Kbase queue submissions. This point is reached during active rendering, rather than waiting for queue destruction.
+- Each snapshot also includes the existing subqueue-wait and CSF notification-drain counters, so we can see whether those paths are exercised during the same live interval.
+- The final queue-destruction snapshot remains in place. Snapshot values are cumulative; never add multiple snapshots together.
+- No queue submission, synchronization, memory, cache, heap, or scheduler semantics were changed. No per-frame logging was added.
+- The timer is only read when the profile option is enabled and the device uses Kbase. Profiling remains unsuitable for clean FPS comparisons.
+
+### Static review and CI status
+
+- GitHub compare confirms this branch is 3 commits ahead of the profile baseline, with 43 additions and 2 deletions in the queue source plus one workflow-filter line.
+- The Kbase-only declarations and reporting code are guarded by `HAVE_PAN_KMOD_KBASE`, preserving Panthor-only compilation.
+- Android NDK wrapper workflow runs `41833423768` and `41833446440` were in progress at the last check. These are wrapper-variant builds, not the Android-only PanVK package build.
+- No Android-only PanVK build/package artifact has yet been confirmed for this branch. Do not import or test a wrapper-only artifact, and do not treat source review as build validation.
+- Next: verify that the Android-only workflow is triggered for this branch and wait for the exact `experiment/kbase-live-profile` HEAD to compile, pass package audit, and upload its flat ADPKG. Then review the final diff/build logs before asking for one diagnostic-only Tomb Raider run with `PANVK_KBASE_PROFILE=1`.
+
+### Interpretation guardrails
+
+The next profile should determine whether active game rendering produces enough queue submissions to reach live snapshots, and whether subqueue waits or status drains are actually exercised during those intervals. If the 256-submit snapshot does not occur, inspect queue-submit frequency and adjust the interval only in a separate documented instrumentation commit. Do not optimize a path solely because it is present in source.
+
+Keep `PANVK_KBASE_DIAG_MEM_FLAGS`, `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE`, and `PANVK_KBASE_HEAP_RENEW_INTERVAL` unset; keep the compiled heap defaults (interval 128, work threshold 65536). Preserve the System Driver fallback and never modify the phone's vendor Vulkan driver.
