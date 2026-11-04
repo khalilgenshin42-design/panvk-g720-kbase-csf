@@ -179,6 +179,10 @@ replace_once(
 
 replace_once(
     physical,
+    "      pdevice->vk.wsi_device = &pdevice->wsi_device;\n"
+    "#ifdef __TERMUX__\n"
+    "      pdevice->wsi_device.wants_ahardware_buffer = true;\n"
+    "#endif\n\n"
     "      pdevice->driver_properties = (VkPhysicalDeviceDriverProperties) {\n"
     "         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,\n"
     "      };\n"
@@ -188,6 +192,10 @@ replace_once(
     "      };\n\n"
     "      WPDEVICE.GetPhysicalDeviceProperties2(\n"
     "         (VkPhysicalDevice) pdevice, &pdevice->properties2);",
+    "      pdevice->vk.wsi_device = &pdevice->wsi_device;\n"
+    "#ifdef __TERMUX__\n"
+    "      pdevice->wsi_device.wants_ahardware_buffer = true;\n"
+    "#endif\n\n"
     "      WPDEVICE.GetPhysicalDeviceProperties2(\n"
     "         (VkPhysicalDevice) pdevice, &pdevice->properties2);",
     "remove duplicate driver property initialization",
