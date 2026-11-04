@@ -1491,3 +1491,16 @@ The exact extensions listed as enabled by the Tomb Raider D3D11 DXVK 1.7.2 log w
 - `VK_KHR_swapchain` (WSI build)
 
 The log additionally reports `VK_EXT_conditional_rendering`; PanVK exposes it for PAN_ARCH >= 10, so G720 v12 qualifies. Therefore, no missing extension in the actual DXVK 1.7.2 enabled-extension list has been identified. Do not add redundant extension declarations. The separate feature-bit discrepancy (multiViewport/clip/cull/geometryStreams/BC) remains open and must be resolved at runtime; an extension being listed as enabled does not prove all of its optional features are supported.
+
+
+### Additional profiling added to the single-CSG branch
+
+Commit `538e917f5ddf4efd5bd54d8ac102a1026cf70754` extends the opt-in Kbase profile with:
+- total tiler-heap renewals;
+- renewals triggered by the submit-count interval;
+- renewals triggered by estimated tiler work;
+- accumulated tiler work at renewal;
+- CPU time spent waiting for graphics completion before renewal;
+- total CPU time spent waiting plus heap renewal.
+
+This is important because the renewal interval and work threshold are independent triggers. The previous interval-only A/B at 192 could not tell whether the 65,536-work threshold was causing more frequent renewals. The next diagnostic will report which trigger fires and how much CPU time it costs. No heap threshold/default has been changed yet.
