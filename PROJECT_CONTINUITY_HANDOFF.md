@@ -1035,3 +1035,11 @@ Do not change Kbase memory flags, cache maintenance, coherency handling, CSF eve
 - The next source experiment should add opt-in, low-overhead counters/timing around (1) queue/device status checks and notification draining, (2) Kbase CPU WAIT_ANY polling, and (3) Kbase subqueue wait/CQS completion. Counters must be disabled by default, avoid per-frame log spam, and report aggregated counts/time only when explicitly enabled or at controlled teardown.
 - Use those measurements to choose one isolated optimization. Preserve the current `a87d179...` branch as the known-good comparison and build a separate experiment branch; do not merge or package an unvalidated candidate as the recommended driver.
 - No source behavior change or new driver package is claimed in this update.
+
+### Additional low-risk tuning candidate — tiler-heap renewal cadence
+
+- Static review found an existing runtime override in `src/panfrost/vulkan/csf/panvk_vX_gpu_queue.c`: `PANVK_KBASE_HEAP_RENEW_INTERVAL`, default 128 submissions. A second independent renewal guard remains at `PANVK_KBASE_HEAP_RENEW_WORK`, default 65536 estimated tiler-work units.
+- Heap renewal waits for outstanding graphics targets, creates a new heap context, and retires the old context only after graphics jobs have advanced. This can create a synchronization/stall point, but increasing cadence blindly can also increase heap residency and approach the 200-chunk minimum max limit.
+- The safest first experiment is to change only `PANVK_KBASE_HEAP_RENEW_INTERVAL` from its default 128 to **192**, leaving `PANVK_KBASE_HEAP_RENEW_WORK` at its default 65536. The work-based guard therefore remains active. This is a reversible runtime-config A/B, not a source-code patch or guaranteed optimization.
+- Keep all other Winlator/game settings and diagnostic environment variables unchanged/absent. If there is OOM, device loss, visual corruption, or worse stutter, remove the override immediately. Compare average FPS and minimum FPS against the repeatable 13.5 baseline.
+- Do not set the interval to 0 or change the work threshold in this first test. No heap policy source change has been committed.
