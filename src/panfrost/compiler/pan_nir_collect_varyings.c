@@ -146,7 +146,13 @@ walk_varyings(UNUSED nir_builder *b, nir_instr *instr, void *data)
 
    nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
-   if (sem.no_varying)
+   /* nir_opt_varyings can mark clip-distance VS outputs no_varying even
+    * though PanVK lowers them to ordinary varyings consumed by the FS.
+    */
+   const bool clip_dist_vs_output =
+      is_store && (sem.location == VARYING_SLOT_CLIP_DIST0 ||
+                   sem.location == VARYING_SLOT_CLIP_DIST1);
+   if (sem.no_varying && !clip_dist_vs_output)
       return false;
 
    nir_alu_type base_type = nir_alu_type_get_base_type(type);
