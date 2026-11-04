@@ -3401,8 +3401,9 @@ panvk_per_arch(destroy_gpu_queue)(struct vk_queue *vk_queue)
 
 #ifdef HAVE_PAN_KMOD_KBASE
    if (gpu_queue_uses_kbase(dev)) {
-      kbase_queue_wait_current(queue, UINT64_MAX);
+      /* Exclude the teardown drain from the workload profile. */
       kbase_profile_dump();
+      kbase_queue_wait_current(queue, UINT64_MAX);
    }
 #endif
 
