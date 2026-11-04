@@ -90,6 +90,9 @@ struct kbase_profile_stats {
    uint64_t subqueue_wait_timeouts, subqueue_wait_errors;
    uint64_t status_drain_calls, status_drain_ns, status_drain_nonempty;
    uint64_t ring_jobs, queue_doorbells, queue_kicks, native_gpu_wait_submits;
+   uint64_t heap_renew_count, heap_renew_interval_triggers;
+   uint64_t heap_renew_work_triggers, heap_renew_work_total;
+   uint64_t heap_renew_wait_ns, heap_renew_total_ns;
 };
 static struct kbase_profile_stats kbase_profile;
 
@@ -174,7 +177,10 @@ kbase_profile_dump(void)
              " timeouts=%" PRIu64 " errors=%" PRIu64
              "; status drains=%" PRIu64 " total_ms=%.3f nonempty=%" PRIu64
              "; ring jobs=%" PRIu64 " doorbells=%" PRIu64
-             " kicks=%" PRIu64 " native GPU-wait submits=%" PRIu64,
+             " kicks=%" PRIu64 " native GPU-wait submits=%" PRIu64
+             "; heap renewals=%" PRIu64 " interval=%" PRIu64
+             " work=%" PRIu64 " work_total=%" PRIu64
+             " wait_ms=%.3f total_ms=%.3f",
              kbase_profile_read(&kbase_profile.queue_submit_calls),
              kbase_profile_read(&kbase_profile.queue_submit_ns) / 1000000.0,
              kbase_profile_read(&kbase_profile.queue_submit_errors),
@@ -188,7 +194,13 @@ kbase_profile_dump(void)
              kbase_profile_read(&kbase_profile.ring_jobs),
              kbase_profile_read(&kbase_profile.queue_doorbells),
              kbase_profile_read(&kbase_profile.queue_kicks),
-             kbase_profile_read(&kbase_profile.native_gpu_wait_submits));
+             kbase_profile_read(&kbase_profile.native_gpu_wait_submits),
+             kbase_profile_read(&kbase_profile.heap_renew_count),
+             kbase_profile_read(&kbase_profile.heap_renew_interval_triggers),
+             kbase_profile_read(&kbase_profile.heap_renew_work_triggers),
+             kbase_profile_read(&kbase_profile.heap_renew_work_total),
+             kbase_profile_read(&kbase_profile.heap_renew_wait_ns) / 1000000.0,
+             kbase_profile_read(&kbase_profile.heap_renew_total_ns) / 1000000.0);
 }
 
 #define KBASE_PROFILE_WAIT_RETURN(start, result) do { \
@@ -3081,15 +3093,22 @@ panvk_queue_submit_ioctl_kbase(struct panvk_queue_submit *submit,
    }
 
    uint64_t renew_work = kbase_tiler_heap_renew_work();
-   if (submit->tiler_work_estimate &&
-       (queue->kbase_tiler_submit_count >=
-           kbase_tiler_heap_renew_interval() ||
-        (renew_work && queue->kbase_tiler_work_count >= renew_work))) {
+   const bool renew_by_interval =
+      queue->kbase_tiler_submit_count >= kbase_tiler_heap_renew_interval();
+   const bool renew_by_work =
+      renew_work && queue->kbase_tiler_work_count >= renew_work;
+   if (submit->tiler_work_estimate && (renew_by_interval || renew_by_work)) {
+      const bool profile_renew = kbase_profile_enabled();
+      const int64_t renew_start =
+         profile_renew ? os_time_get_nano() : 0;
       /* Heap generations are referenced only by graphics streams.  Preserve
        * overlap with unrelated compute work instead of draining every
        * subqueue before replacing the tiler heap. */
       result = kbase_wait_graphics_targets(
          queue, submit->kbase_target_seqnos, UINT64_MAX);
+      if (profile_renew)
+         kbase_profile_add(&kbase_profile.heap_renew_wait_ns,
+                           os_time_get_nano() - renew_start);
       if (result != VK_SUCCESS)
          return result;
 
@@ -3097,6 +3116,18 @@ panvk_queue_submit_ioctl_kbase(struct panvk_queue_submit *submit,
       if (result != VK_SUCCESS)
          return vk_queue_set_lost(&queue->vk,
                                   "kbase: tiler heap renewal failed");
+
+      if (profile_renew) {
+         kbase_profile_add(&kbase_profile.heap_renew_count, 1);
+         if (renew_by_interval)
+            kbase_profile_add(&kbase_profile.heap_renew_interval_triggers, 1);
+         if (renew_by_work)
+            kbase_profile_add(&kbase_profile.heap_renew_work_triggers, 1);
+         kbase_profile_add(&kbase_profile.heap_renew_work_total,
+                           queue->kbase_tiler_work_count);
+         kbase_profile_add(&kbase_profile.heap_renew_total_ns,
+                           os_time_get_nano() - renew_start);
+      }
 
       queue->kbase_tiler_submit_count = 0;
       queue->kbase_tiler_work_count = 0;
