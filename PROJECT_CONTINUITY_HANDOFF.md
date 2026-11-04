@@ -1655,3 +1655,51 @@ The 12.4 FPS result is not evidence that the PanVK compiler or shader-core dispa
 - The first wrapper compile attempt on commit `b29e407f13e6f7bfd2a6569ee9eacb3f8c509d4a` passed SPIRV-Tools build, PanVK patch application, and cross-environment generation, then failed Meson C++ compiler sanity because `android.toml` force-includes `src/util/u_gralloc/force_aosp_abi.h`, which is present in the PanVK Mesa source but absent from the pinned GameNative wrapper source checkout.
 - Corrected workflow step `Prepare Android cross environment` to copy the exact header from this Mesa repository into `wrapper-src/src/util/u_gralloc/` before Meson setup and assert it exists.
 - Workflow commit: `107d25d386cb8f966208fdbbba68ec26c9d2fdfb`. New Android wrapper build run **41926995759** was queued at the time of this update. The earlier `d836d9b` build run remained in progress; do not treat either as successful until the final artifact audit completes.
+
+
+## 2026-11-05 — Vulkan feature implementation audit (clip/cull + multiViewport)
+
+### Our exact PanVK source state
+
+Audited `experiment/kbase-single-csg` at `538e917f5ddf4efd5bd54d8ac102a1026cf70754`:
+
+- `src/panfrost/vulkan/panvk_vX_physical_device.c` reports `multiViewport = false`, `shaderClipDistance = false`, `shaderCullDistance = false`; `maxViewports = 1`; `maxClipDistances`, `maxCullDistances`, and `maxCombinedClipAndCullDistances` are all zero.
+- `src/panfrost/vulkan/panvk_vX_shader.c` has no current clip/cull lowering pass. The v12 compiler path does have a GPU pre-raster pipeline with VS/TCS/TES/GS and generated passthrough stages, so adding support is not just a feature-bit edit: values must survive every pre-raster stage and be consumed correctly by the fragment stage.
+- Do not expose clip/cull features or non-zero limits until lowering, stage linking, generated passthrough, and device tests are all correct.
+
+### External implementation reference found
+
+Public reference project: `zenithblue-oss/panvk-kbase-android` (separate repository; not merged into our project).
+
+Relevant patch files:
+- `patches/csf-v11/023-clip-cull-distance-fs-discard.patch`
+- `patches/csf-v11/024-multi-viewport-index0.patch`
+- `patches/csf-v11/193-carry-clip-cull-distances-through-the-gs-and-viewportindex-to-the-fs.patch`
+- `patches/csf-v11/194-pass-valid-robustness-state-to-the-depth-bounds-fs-compile.patch`
+
+Patch 023's design is software lowering because Valhall has no clip/cull-distance hardware path: VS clip distances become smooth varyings; cull distances become per-vertex flags; FS discards when an interpolated clip distance is negative or when the cull flag proves all vertices are outside. It also adjusts varying linking and advertises up to eight distances. This is a useful design reference, not a safe cherry-pick: its patch base is Mesa `5a07217f034b`, and our checked-out file blob differs, so the patch must be ported/rebased against our exact source.
+
+Critical correctness warning: the reference project's later patch 193 fixes known clip/cull failures through GS/tessellation and ViewportIndex propagation. Its changelog reports 128 clipping CTS failures before that follow-up; the root causes included uninitialized unused GS clip lanes and cull distances being packed as clip distances. Patch 193 is explicitly recorded as build-only/not device-tested in that project at the time of its worklog. Therefore, do not stop at patch 023 or enable the feature bits after a basic VS-only test. Port and review the follow-up, then run the targeted CTS/device matrix.
+
+Patch 024's `multiViewport` strategy is much smaller: expose `multiViewport` and `maxViewports = 16` while keeping `shaderOutputViewportIndex = false` and `geometryShader = false`. With no shader stage able to write ViewportIndex, every primitive selects viewport 0 by default; the current viewport[0]/scissor[0] emission is therefore correct. This is a compatibility capability, not true per-primitive multi-viewport rendering. It must be revisited if a stage that writes ViewportIndex is later exposed. This can be evaluated as a separate, narrowly scoped change after source/CTS validation.
+
+Reference validation notes:
+- The reference project reports G720 MC12 (v12) PanProbe 37/37 on its later RC1/RC3 code, and RC3 reports `gs_viewport_depth` 20/20 on an Immortalis-G720 MC12. This is encouraging for the v12 path but does not establish clip/cull CTS coverage on our Dimensity G720 MC7.
+- The reference's v11 clip/cull tests initially had 180 pass / 128 fail; the failures involved GS/tessellation paths. Treat the later fix as a porting lead, not proof for our target.
+- Public references: https://github.com/zenithblue-oss/panvk-kbase-android/blob/main/CHANGELOG.md ; https://github.com/zenithblue-oss/panvk-kbase-android/blob/main/worklogs/g615-dxvk/PROGRESS.md ; https://github.com/zenithblue-oss/panvk-kbase-android/blob/main/patches/csf-v11/023-clip-cull-distance-fs-discard.patch ; https://github.com/zenithblue-oss/panvk-kbase-android/blob/main/patches/csf-v11/024-multi-viewport-index0.patch ; https://github.com/zenithblue-oss/panvk-kbase-android/blob/main/patches/csf-v11/193-carry-clip-cull-distances-through-the-gs-and-viewportindex-to-the-fs.patch
+
+### Strict wrapper Android build status correction
+
+- Latest strict-wrapper Android ARM64 run `41926995759` (commit `107d25d386cb8f966208fdbbba68ec26c9d2fdfb`) has now completed **failure**, not success.
+- SPIRV-Tools ARM64 static build and PanVK-specific patch application both passed. Meson configuration failed at `meson.build:2143` because required `xcb-dri2 >= 1.8` is missing from the cross pkg-config shim set. `xcb-keysyms` is optional and absent; it was not the fatal error.
+- The earlier run `41925911864` failed at the same missing `xcb-dri2` dependency. The separate patch-validation workflow `41925911986` passed.
+- No strict-wrapper Android package exists yet. Next fix should address the actual X11 cross-build dependency deliberately (supply correct ARM64 headers/library/pkg-config metadata or adjust the platform configuration only if the Winlator surface path is still fully supported), then rebuild and audit ELF/dependencies/checksums. Do not distribute/import a wrapper yet.
+
+### Next implementation sequence
+
+1. Keep strict wrapper as the truthful feature-reporting baseline; first repair its X11 cross-build dependency.
+2. Create an isolated PanVK feature branch from the exact single-CSG source. Port/rebase clip/cull lowering and its GS/TES/TCS passthrough corrections as a cohesive change; do not cherry-pick patch 023 alone.
+3. Independently evaluate patch 024's index-0 multiViewport compatibility path. Keep `shaderOutputViewportIndex` false and geometry shader feature exposure unchanged.
+4. Add focused shader tests for clip-only, cull-only, combined arrays, sparse/unused lanes, clip/cull through GS and tessellation, FS reads of gl_CullDistance, and multiple viewport state with default index 0. Run NIR validation and host builds first, then targeted VK-GL-CTS/PanProbe on the actual G720 MC7.
+5. Only after all relevant tests pass should the physical-device feature bits and limits be enabled. Keep feature enablement separate from FPS optimization; these features are primarily compatibility/correctness work and are not expected to improve Tomb Raider FPS by themselves.
+6. Continue keeping all experimental packages separate from the phone's stock/vendor Vulkan driver.
