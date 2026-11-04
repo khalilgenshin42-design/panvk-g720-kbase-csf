@@ -1043,3 +1043,35 @@ Do not change Kbase memory flags, cache maintenance, coherency handling, CSF eve
 - The safest first experiment is to change only `PANVK_KBASE_HEAP_RENEW_INTERVAL` from its default 128 to **192**, leaving `PANVK_KBASE_HEAP_RENEW_WORK` at its default 65536. The work-based guard therefore remains active. This is a reversible runtime-config A/B, not a source-code patch or guaranteed optimization.
 - Keep all other Winlator/game settings and diagnostic environment variables unchanged/absent. If there is OOM, device loss, visual corruption, or worse stutter, remove the override immediately. Compare average FPS and minimum FPS against the repeatable 13.5 baseline.
 - Do not set the interval to 0 or change the work threshold in this first test. No heap policy source change has been committed.
+
+
+## 2026-11-04 continuation — tiler-heap renewal interval A/B (13:18:28 capture)
+
+### User-reported result
+
+- User tested the proposed PANVK_KBASE_HEAP_RENEW_INTERVAL=192 setting.
+- Min FPS: **8.7**
+- Max FPS: **19.7**
+- Average FPS: **13.3**
+- Uploaded archive: TombRaider_logs_2026-11-04_13-18-28.zip.
+- Compared with the clean default-interval reference (Min 8.7 / Max 18.0 / Avg 13.5), the 192 run had unchanged minimum, +1.7 peak FPS, and -0.2 average FPS. This is not an average-performance improvement; the higher peak alone is insufficient to justify the setting.
+- The archive does not print the value of PANVK_KBASE_HEAP_RENEW_INTERVAL; therefore the environment override being applied cannot be independently verified from these logs. Record the result as the user's intended 192 A/B, with this verification limitation.
+
+### Log inspection
+
+- Archive contents: wine_debug.log, TombRaider_d3d11.log, TombRaider_dxgi.log, and TombRaider_d3d9.log.
+- DXVK identifies Wrapper(Mali-G720 MC7), driver version 26.2.149, Vulkan 1.3.354; DXVK reports four compiler threads.
+- Device creation and D3D11 feature-level 11_0 initialization succeeded. Vulkan queue family 0 is reported for graphics and transfer.
+- Wine log reports raw Kbase coherency mode 0, PanVK initialization, Android hardware-buffer imports, and successful allocation/import operations.
+- Two kbase_queue_wait_current calls completed successfully.
+- No occurrence found in the supplied logs for 0x88, GPU_SHAREABILITY_FAULT, VK_ERROR_DEVICE_LOST, CSF fatal/error marker, or QueueSubmit -4.
+- No memory-flag diagnostic variable/value is printed, and the archive does not provide a reliable way to confirm whether the heap interval environment override was actually inherited by the process.
+- At session shutdown the log again shows X connection loss / VK_ERROR_SURFACE_LOST_KHR, FORTIFY: pthread_mutex_lock called on a destroyed mutex, and repeated invalid SEH frame messages. These follow window/server teardown in the log and are tracked as shutdown symptoms, not confirmed active-gameplay GPU faults.
+
+### Decision
+
+- **Revert/remove PANVK_KBASE_HEAP_RENEW_INTERVAL=192 and return to the compiled default of 128.** Leave PANVK_KBASE_HEAP_RENEW_WORK unchanged at 65536.
+- Reason: no average-FPS gain (13.3 vs repeatable 13.5 baseline), no minimum-FPS gain, and a small average regression. Do not retain 192 based only on the maximum FPS.
+- No source-code change or new package was made for this A/B. Keep the tested source branch and known-good reference unchanged.
+- Do not alter Kbase memory flags, coherency/cache handling, CSF scope, WAIT64 synchronization, or queue notification behavior based on this run; the log shows no active GPU-fault signature and no profiling evidence for those changes.
+- Next engineering step: return to the default heap cadence and pursue opt-in aggregate profiling of queue status/notification draining, CPU WAIT_ANY polling, and subqueue/CQS waits as previously specified. Keep profiling disabled during clean FPS benchmarks. Continue treating the recurring shutdown mutex/fence/SEH symptoms as a separate teardown investigation.
