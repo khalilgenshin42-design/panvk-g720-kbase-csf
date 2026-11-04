@@ -118,8 +118,6 @@ jobs:
             -Dgallium-drivers= \
             -Dshared-glapi=disabled \
             -Dzstd=disabled \
-            -Dmesa-clc=disabled \
-            -Dprecomp-compiler=disabled \
             -Dvulkan-drivers=wrapper \
             -Dllvm=disabled
 
