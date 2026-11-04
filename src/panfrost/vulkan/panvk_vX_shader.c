@@ -1741,6 +1741,18 @@ panvk_nir_lower_cull_vs(nir_shader *nir, unsigned clip_count)
 }
 
 static bool
+panvk_nir_fs_reads_clip_cull(nir_shader *nir)
+{
+   nir_foreach_shader_in_variable(var, nir) {
+      if (var->data.location == VARYING_SLOT_CLIP_DIST0 ||
+          var->data.location == VARYING_SLOT_CLIP_DIST1)
+         return true;
+   }
+
+   return false;
+}
+
+static bool
 panvk_nir_lower_clip_cull_fs(nir_shader *nir, unsigned clip_count,
                              unsigned cull_count)
 {
@@ -2665,14 +2677,24 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
    int direct_vs_clip_count = 0;
    int direct_vs_cull_count = 0;
    bool direct_vs_fs = false;
+   bool direct_fs_reads_clip_cull = false;
    for (uint32_t j = 0; j < shader_count; j++) {
       if (infos[j].stage == MESA_SHADER_VERTEX &&
           infos[j].next_stage_mask == VK_SHADER_STAGE_FRAGMENT_BIT) {
          direct_vs_clip_count = infos[j].nir->info.clip_distance_array_size;
          direct_vs_cull_count = infos[j].nir->info.cull_distance_array_size;
          direct_vs_fs = true;
+      } else if (infos[j].stage == MESA_SHADER_FRAGMENT) {
+         direct_fs_reads_clip_cull =
+            panvk_nir_fs_reads_clip_cull(infos[j].nir);
       }
    }
+
+   /* Do not rewrite cull values if the FS explicitly consumes the original
+    * distance arrays. That path needs a separate lowering preserving the
+    * user-visible values.
+    */
+   direct_vs_fs &= !direct_fs_reads_clip_cull;
 
    /* Vulkan runtime passes us shaders in stage order */
    for (i = 0; i < shader_count; i++) {
