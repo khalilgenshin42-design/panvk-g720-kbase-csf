@@ -1803,3 +1803,25 @@ Our current PanVK source is materially different:
 7. GeometryStreams remains a separate candidate: external libpoly is a reference for stream routing, but our current implementation and feature bit stay unchanged until tests prove stream-specific output, XFB, and rasterization behavior.
 
 No PanVK driver code or feature flags were changed in this continuation. The external project is now a high-value reference, but our driver still needs a source-version-aware port and validation. Continue to keep all test artifacts separate from the stock/vendor Vulkan driver.
+
+### Additional exact integration blockers found in our current Mesa revision
+
+Compared the external varying/linker implementation with our active branch, including `src/panfrost/compiler/pan_nir_collect_varyings.c` and `panvk_vX_shader.c`.
+
+- External Mesa 27's `pan_nir_collect_varyings.c` explicitly keeps clip-distance VS output stores even when `sem.no_varying` is set, because NIR's varying optimization can mark them `no_varying` although the fragment clip-lowering pass still consumes them. Our active source lacks this exception.
+- External PanVK adds `varying_is_generic(loc)`, classifying `VARYING_SLOT_CLIP_DIST0/1` (and its internal GS viewport-index slot) as generic varying slots. Our active `emit_varying_attrs()` instead uses `bool is_hw = loc < VARYING_SLOT_VAR0`, which classifies clip-distance slots as special/hardware slots.
+- Our active `link_shaders()` skips all FS varying locations below `VARYING_SLOT_VAR0`. This also drops clip-distance FS inputs. External source instead skips only slots for which `varying_is_generic()` is false and includes clip-distance slots in VS-to-FS offset/size matching.
+- These are mandatory transport/linker changes in addition to adding the NIR lowering functions. Porting only `panvk_nir_lower_clip_cull_fs()` would leave the distance data absent or incorrectly bound.
+- Our `src/poly/nir/poly_nir.h` has clip/cull count fields in `poly_passthrough_gs_key`, but current PanVK shader compilation does not populate/use those counts in its active libpoly GS path. The existence of the key fields is not evidence of stage propagation.
+- The current libpoly TCS output mask/stride includes per-vertex outputs from `nir->info.outputs_written`; this is a possible transport foundation, but must be checked for compact clip/cull array packing and the TES/GS transitions. Do not assume it works just because the generic output mask is 64-bit.
+
+### Safer port boundary
+
+The first code milestone should be a compile-only, feature-disabled VS->FS implementation:
+- Add clip/cull output collection and generic varying classification/linking.
+- Add the vertex cull-indicator transform and fragment discard transform, with explicit array-count handoff.
+- Keep `shaderClipDistance`, `shaderCullDistance`, and `multiViewport` false.
+- Test only a direct VS->FS pipeline first; add explicit tests for FS shader reads, partial vec4 lanes, combined arrays, and default values before calling it correct.
+- Then separately carry counts and values through software TCS/TES and libpoly GS buffers. The feature bits stay false until every supported last-pre-raster stage path is correct.
+
+This audit found a concrete reason why a naive port would fail: the current PanVK varying collector and linker do not yet route clip-distance slots as ordinary varyings. No driver source was changed in this step.
