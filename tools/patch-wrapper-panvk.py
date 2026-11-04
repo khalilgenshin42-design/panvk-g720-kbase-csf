@@ -43,6 +43,7 @@ def replace_braced_block(path: Path, marker: str, replacement: str, label: str) 
 objects = ROOT / "src/vulkan/wrapper/wrapper_objects.h"
 physical = ROOT / "src/vulkan/wrapper/wrapper_physical_device.c"
 device = ROOT / "src/vulkan/wrapper/wrapper_device.c"
+memory = ROOT / "src/vulkan/wrapper/wrapper_device_memory.c"
 
 replace_once(
     objects,
@@ -348,6 +349,34 @@ replace_once(
     "      !wdev->physical->base_supported_features.shaderClipDistance &&\n"
     "      !CHECK_FLAG(\"DISABLE_CLIP_DISTANCE\");",
     "disable no-op clip emulation on PanVK",
+)
+
+
+# Harden host-visible allocation emulation: initialize the bookkeeping pointer
+# and allocation info before any goto, and unlock through the still-live device
+# object (the bookkeeping object may not have been allocated or may be freed).
+replace_once(
+    memory,
+    "    struct wrapper_device_memory *mem;\\n    VkResult result;\\n",
+    "    struct wrapper_device_memory *mem = NULL;\\n"
+    "    VkResult result;\\n"
+    "    VkMemoryAllocateInfo allocate_info = *pAllocateInfo;\\n",
+    "initialize wrapper memory allocation state",
+)
+
+replace_once(
+    memory,
+    "    VkMemoryAllocateInfo allocate_info = *pAllocateInfo;\\n"
+    "    result = CHECK(AllocateMemory(_device, &allocate_info, pAllocator, pMemory));",
+    "    result = CHECK(AllocateMemory(_device, &allocate_info, pAllocator, pMemory));",
+    "avoid shadowing allocation info on fallback",
+)
+
+replace_once(
+    memory,
+    "    simple_mtx_unlock(&mem->device->resource_mutex);\\n",
+    "    simple_mtx_unlock(&device->resource_mutex);\\n",
+    "avoid use-after-free while unlocking allocation mutex",
 )
 
 print("Applied PanVK-specific wrapper capability and BC allocation fixes.")
