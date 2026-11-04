@@ -1703,3 +1703,46 @@ Reference validation notes:
 4. Add focused shader tests for clip-only, cull-only, combined arrays, sparse/unused lanes, clip/cull through GS and tessellation, FS reads of gl_CullDistance, and multiple viewport state with default index 0. Run NIR validation and host builds first, then targeted VK-GL-CTS/PanProbe on the actual G720 MC7.
 5. Only after all relevant tests pass should the physical-device feature bits and limits be enabled. Keep feature enablement separate from FPS optimization; these features are primarily compatibility/correctness work and are not expected to improve Tomb Raider FPS by themselves.
 6. Continue keeping all experimental packages separate from the phone's stock/vendor Vulkan driver.
+
+## 2026-11-05 continuation — wrapper proof, clip/cull patch rebase, and build blocker
+
+### Direct verification of the original GameNative feature claims
+
+Re-fetched the pinned active fork at `FristOneRR-Admin/FristOneRR-Wrapperv1`, commit `d77762fce867ba46e16a0e9f8df626add11a56b3`:
+
+- `src/vulkan/wrapper/wrapper_physical_device.c` unconditionally sets `shaderClipDistance`, `shaderCullDistance`, `multiViewport`, and `geometryStreams` to true in the wrapper's synthetic feature block. This happens after the base feature query and has no PanVK identity/capability test in the original source.
+- `src/vulkan/wrapper/spirv_edit.cpp::lower_eliminate_clip_distance` constructs an SPIRV-Tools optimizer but the intended pass is replaced by `/* skip missing SPIRV-Tools pass */`. Unless optional aggressive DCE is enabled, the optimizer runs no lowering pass. This is not a clip-distance implementation.
+- Therefore the original feature bits are compatibility overrides, not proof that this fork emulates the corresponding behavior. The PanVK-aware wrapper patch must remain the truthful baseline until real ICD or wrapper emulation exists.
+
+### PanVK v12 source path confirmation
+
+Re-checked the single-CSG source branch:
+
+- `panvk_vX_physical_device.c`: `multiViewport=false`, `shaderClipDistance=false`, `shaderCullDistance=false`; limits are `maxViewports=1` and all three clip/cull distance limits are zero.
+- `panvk_vX_shader.c::panvk_preprocess_nir` currently does generic IO/system-value preprocessing and `pan_preprocess_nir`; it does not lower clip/cull distance outputs or inputs.
+- `nir_intrinsic_load_rasterization_stream` currently returns stream 0, consistent with `geometryStreams=false`.
+- No driver source or feature bit was changed in this continuation.
+
+### External clip/cull implementation research and patch-application result
+
+Reference: `zenithblue-oss/panvk-kbase-android`, patches 023 and 193. This is a separate experimental fork, not upstream Mesa.
+
+- Patch 023 proposes software clip/cull using smooth clip-distance varyings, per-vertex cull flags, and fragment discard. Its header claims 13/13 on Mali-G615 MC6 (v11), IDVS and `PANVK_DEBUG=gpu_prerast`; it is not evidence for G720 MC7.
+- Patch 193 addresses known GS/TCS/TES and ViewportIndex propagation defects in the first implementation. Its own header explicitly says **build-only; not device-tested**. The associated worklog describes 128 clipping CTS failures before those fixes, including stale unused GS lanes, cull values confused with clip values, and fragment-stage cull-distance reads returning zero.
+- I created scratch branch `experiment/clip-cull-distance-v12` from single-CSG commit `538e917f5ddf4efd5bd54d8ac102a1026cf70754`. It currently has no code commits.
+- A local/in-memory exact-context application of patch 023 succeeded against the current PanVK physical-device and shader files. Applying patch 193 immediately afterward failed at the `panvk_lower_clip_cull_fs` hunk: patch 193 expects an `extra_scissor` / `scissor_loc` implementation context that is not present in the current patch-023 result. No GitHub source file was modified by this failed application.
+- Do not force-apply patch 193, cherry-pick patch 023 alone, or expose the feature bits. The next step is a manual rebase of patch 193's semantics onto our exact shader/compiler source, followed by compile and targeted tests. The FS-discard approach must also preserve clip/cull values through every enabled pre-raster stage and generated passthrough; VS-only success is insufficient.
+
+### Strict wrapper build blocker confirmed from CI log
+
+- Android wrapper build run `41926995759`, job `126913863517`, failed during Meson configuration at `meson.build:2143`: required `xcb-dri2 >= 1.8` was not found.
+- The existing Android cross-shim directory contains `xcb-dri3`, `xcb-present`, `xcb-sync`, `xcb-randr`, `xcb-shm`, `xcb-xfixes`, and `xcb` metadata/libraries, but no `xcb-dri2.pc` or ARM64 `libxcb-dri2.so`. `xcb-keysyms` is optional and is not the fatal dependency.
+- The pinned wrapper's Meson logic requests xcb-dri2 when `with_any_vk` is enabled. Do not satisfy this by adding a fake pkg-config file or a dummy library. Either build/package a real Android ARM64 xcb-dri2 dependency against the existing xcb shim ABI, or make a narrowly reviewed Meson change only if the DRI2 code path is genuinely optional and the X11 Vulkan WSI path remains intact.
+- No strict-wrapper Android artifact exists. Do not import the wrapper or claim the build succeeded.
+
+### Immediate next steps
+
+1. Manually rebase the patch-193 GS/TCS/TES and FS-input fixes onto `experiment/clip-cull-distance-v12`; keep all physical-device feature bits disabled during development.
+2. Add focused tests for VS-only and GS/TCS/TES clip/cull outputs, unused lanes, combined and separate arrays, FS reads of cull distance, and IDVS plus GPU-prerast paths. Compile first; device CTS on the actual MC7 remains mandatory before enabling.
+3. Separately resolve the strict wrapper's xcb-dri2 dependency with a real ARM64 build or a source-reviewed optional-path change, then rerun full wrapper build and ELF/dependency/package audits.
+4. Keep the experimental driver and wrapper separate from the phone's stock/vendor Vulkan driver; preserve System Driver fallback.
