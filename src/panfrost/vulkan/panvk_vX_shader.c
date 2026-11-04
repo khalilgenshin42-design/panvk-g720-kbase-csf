@@ -3352,6 +3352,7 @@ static VkResult
 emit_varying_attrs(struct panvk_pool *desc_pool,
                    const struct pan_varying_layout *varyings,
                    const unsigned *bit_sizes, const unsigned *buf_offsets,
+                   const unsigned *ncomps_limit,
                    struct panvk_priv_mem *mem)
 {
    const unsigned varying_count = varyings->count;
@@ -3384,8 +3385,15 @@ emit_varying_attrs(struct panvk_pool *desc_pool,
             if (is_present && !is_hw) {
                nir_alu_type base_type =
                   nir_alu_type_get_base_type(slot->alu_type);
-               pfmt =
-                  pan_varying_format(base_type | bit_sizes[loc], slot->ncomps);
+               /* A clip-distance slot may carry fewer components than the
+                * vec4 input used by the fragment discard lowering. Do not
+                * read into the following varying's bytes.
+                */
+               const unsigned ncomps =
+                  ncomps_limit && ncomps_limit[loc]
+                     ? MIN2(slot->ncomps, ncomps_limit[loc])
+                     : slot->ncomps;
+               pfmt = pan_varying_format(base_type | bit_sizes[loc], ncomps);
             }
 
             if (!is_present) {
@@ -3417,6 +3425,7 @@ panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
    unsigned buf_strides[PANVK_VARY_BUF_MAX] = {0};
    unsigned buf_offsets[VARYING_SLOT_MAX] = {0};
    unsigned buf_sizes[VARYING_SLOT_MAX] = {0};
+   unsigned vs_ncomps[VARYING_SLOT_MAX] = {0};
 
    assert(vs && vs->info.stage == MESA_SHADER_VERTEX);
    assert(!fs || fs->info.stage == MESA_SHADER_FRAGMENT);
@@ -3468,19 +3477,21 @@ panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
       if (vs_slot) {
          buf_offsets[pos] = vs_slot->offset;
          buf_sizes[pos] = nir_alu_type_get_type_size(vs_slot->alu_type);
+         vs_ncomps[pos] = vs_slot->ncomps;
       }
    }
 
    panvk_shader_link_cleanup(link);
    VkResult result = emit_varying_attrs(desc_pool, vs_layout, buf_sizes,
-                                        buf_offsets, &link->vs.attribs);
+                                        buf_offsets, NULL, &link->vs.attribs);
    if (result != VK_SUCCESS)
       return result;
 
    if (fs) {
       pan_varying_layout_require_format(&fs->info.varyings.formats);
       result = emit_varying_attrs(desc_pool, &fs->info.varyings.formats,
-                                  buf_sizes, buf_offsets, &link->fs.attribs);
+                                  buf_sizes, buf_offsets, vs_ncomps,
+                                  &link->fs.attribs);
       if (result != VK_SUCCESS)
          return result;
    }
