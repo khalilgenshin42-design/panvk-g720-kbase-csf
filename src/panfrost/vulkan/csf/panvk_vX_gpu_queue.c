@@ -1279,11 +1279,10 @@ kbase_create_group(struct panvk_gpu_queue *queue)
 
       subq->kbase.insert = 0;
       subq->kbase.emitted_jobs = 0;
-      mesa_logd("kbase: bound subqueue %u to group %u CSI0, ring CPU %p, "
+      mesa_logd("kbase: bound subqueue %u to group %u CSI %u, ring CPU %p, "
                 "ring VA 0x%" PRIx64 ", user_io %p",
-                i, subq->kbase.group_handle, subq->kbase.ringbuf_cpu,
-                subq->kbase.ringbuf_dev,
-                subq->kbase.user_io);
+                i, subq->kbase.group_handle, i, subq->kbase.ringbuf_cpu,
+                subq->kbase.ringbuf_dev, subq->kbase.user_io);
    }
 
    return VK_SUCCESS;
