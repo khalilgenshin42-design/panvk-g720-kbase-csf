@@ -1367,3 +1367,89 @@ The exact DXVK build string used in the previously captured Tomb Raider session 
 - The live-profile source branch is now build- and package-validated. Runtime validation on the actual Xiaomi 15T / MT6899 / Mali-G720 MC7 remains pending.
 - The DXVK 2.7+ required extension set appears covered in source. The most plausible optional feature gap from this audit is descriptor-buffer support, but it is not justified to implement or expose it before collecting the live profiling result and identifying a measured CPU/descriptor bottleneck.
 - No phone system/vendor driver files were modified.
+
+
+---
+
+## 2026-11-04 continuation — Tomb Raider run 19:07 and single-CSG performance experiment
+
+### Latest device run
+
+User supplied `TombRaider_logs_2026-11-04_19-09-48.zip` with reported benchmark:
+- Minimum FPS: **3.5**
+- Maximum FPS: **18.5**
+- Average FPS: **12.4**
+
+Archive contents: `wine_debug.log`, `TombRaider_d3d11.log`, `TombRaider_dxgi.log`, and `TombRaider_d3d9.log`.
+
+Runtime identity from the Wine log:
+- Winlator Mali 1.2.1 Bionic (23), Xiaomi 25069PTEBG / MT6899, Android 16.
+- Graphics driver selection: `wrapper-gamenative`.
+- DXVK is **v1.7.2**, not 2.7.2 or later. The D3D11 path is active; the D3D9 log is an additional probe/initialization log.
+- DXVK uses four compiler threads.
+- Effective DXVK config includes `d3d11.maxQueuedFrames=1`, `dxvk.memoryTrack=True`, `d3d11.relaxedBarriers=True`, `d3d11.ignoreGraphicsBarriers=True`, `dxvk.useEarlyDiscard=True`, and `dxvk.numCompilerThreads=4`.
+- The previous DXVK 2.7+ mandatory-extension comparison is not a useful explanation for this specific benchmark. DXVK 1.7.2's enabled extension list does not include maintenance5/6, GPL, or descriptor buffer.
+
+### Runtime stability evidence
+
+Positive observations:
+- PanVK Kbase backend initializes; raw coherency mode is 0.
+- Android gralloc fallback initializes.
+- Native BC6H-to-ASTC-HDR transcode compute pipelines are created successfully (reported build times 1–2 ms).
+- Multiple AHardwareBuffer / DMA-BUF imports succeed. The log shows repeated imports around 1.85 MB and a 1.024 MB allocation; format 44 / fourcc AR24, linear modifier 0, one 900x506 plane.
+- No `GPU_SHAREABILITY_FAULT` / exception 0x88, no CSF fatal-error notification, no `VK_ERROR_DEVICE_LOST`, and no queue-submit failure appear in this capture.
+
+Teardown:
+- X connection `:0` breaks first (five repeated messages).
+- Then Android FORTIFY reports `pthread_mutex_lock called on a destroyed mutex`, followed by Wine invalid SEH frame and session end.
+- Treat this as a teardown/lifecycle fault after X11 disconnect, not proof of a GPU execution fault. It still deserves separate investigation if it recurs when the game is exited normally rather than the session being force-closed.
+
+Profiling:
+- No `kbase profile (cumulative)` snapshot appears anywhere in the archive.
+- The existing live-profile code emits a final snapshot at queue destruction when `PANVK_KBASE_PROFILE=1`; its absence means either the env option did not reach the driver process or the loaded binary was not the live-profile build. This run cannot be used to infer queue-submit timing.
+- The archive also does not include an explicit process environment dump, so the root cause cannot be distinguished from these logs alone.
+- The new experiment adds a one-time enabled/disabled marker and shortens the live snapshot interval from 256 to 32 queue submissions. It also counts emitted ring jobs, doorbells, scheduler kicks, and native internal GPU-wait submits, making the next profile unambiguous.
+
+### Feature-reporting discrepancy to investigate
+
+- DXVK reports `multiViewport=1`, `shaderClipDistance=1`, `shaderCullDistance=1`, `textureCompressionBC=1`, and `VK_EXT_transform_feedback.geometryStreams=1`.
+- The checked PanVK v12 source reports `multiViewport=false`, `shaderClipDistance=false`, `shaderCullDistance=false`, `geometryStreams=false`, and gates BC compression on the GPU format mask.
+- DXVK also reports the device name `Wrapper(Mali-G720 MC7)` and driver version `26.2.149`. The PanVK source's `driverVersion = 0x06802095` decodes to 26.2.149, so that version string alone does not prove the wrong package was loaded.
+- This is a real discrepancy between DXVK's reported feature struct and the source-level v12 feature table. Likely explanations include wrapper feature patching/interposition or a source/runtime mismatch. Do not force-enable these features in PanVK. The next device test should capture `vulkaninfo --summary` / an independent VkPhysicalDeviceFeatures2 report from the same Winlator container if available, and identify the exact wrapper/driver ZIP currently selected.
+
+### DXVK configuration implications
+
+- `d3d11.maxQueuedFrames=1` restricts CPU/GPU frame overlap; `dxvk.memoryTrack=True` adds tracking overhead. These are configuration-level suspects worth controlled A/B testing after a driver baseline is secured.
+- `ignoreGraphicsBarriers=True` and `relaxedBarriers=True` alter synchronization behavior and should not be combined with driver correctness experiments. Preserve a safe default config for stability tests; test barrier overrides separately, one at a time, and never attribute their results to PanVK source changes.
+- Four compiler threads are CPU shader-compilation workers, not a setting for the seven Mali shader cores. Do not change them to seven based on MC7 branding.
+
+### New isolated experiment branch
+
+Created `experiment/kbase-single-csg` from the live-profile baseline `f674d46abbac19f563999a4f2d7b03898fe3a7bc`.
+
+Source changes in `src/panfrost/vulkan/csf/panvk_vX_gpu_queue.c`:
+1. Replace three independent one-CSI Kbase groups (one for vertex/tiler, one for fragment, one for compute) with one Kbase CSG group created with `cs_queue_count = PANVK_SUBQUEUE_COUNT`; bind each PanVK subqueue to CSI index 0, 1, and 2 respectively. Panthor already models the same Vulkan queue as one group with multiple CS queues.
+2. Terminate all bound CSIs first and destroy the shared CSG exactly once, including partial-initialization cleanup.
+3. Restrict native GPU WAIT64 collection to producer queue pointers equal to the consumer `submit->queue`. Cross-VkQueue waits fall back to the existing CPU/KCPU bridge. With all subqueues of one VkQueue in one CSG, eligible internal WAIT64 uses CSG scope; this does not change the system-scope SYNC_ADD64 producer, which remains untouched by default.
+4. Add an explicit profile enabled/disabled marker, report every 32 submits rather than 256, and count ring jobs, doorbell publications, scheduler-kick fallbacks, and native GPU-wait submits.
+5. Correct the CSI index in the queue-bind debug message.
+
+The group unification is a **hypothesis-driven experiment**, not yet a proven optimization. It could reduce CSG scheduling overhead and make same-VkQueue internal waits genuinely intra-CSG, but it changes scheduling topology and must not be promoted without build success and actual device stability/FPS tests. Do not merge it into a stable branch or import an older artifact in its place.
+
+### Build status at checkpoint
+
+- Latest code commit at the time of this entry: `53ae1c0af47b13dce9bd6dc7f25fe2dddc853482`.
+- Android-only workflow run `41885675286` is building the branch.
+- Wrapper-variant workflow run `41885675212` is also building, but its artifact is not a PanVK driver package.
+- Earlier Android-only run `41885630273` started on the prior branch commit `309f077af33b879ba267cb2ebcd93dded43fd74d`; prefer the latest run/artifact that contains commit `53ae1c0af47b13dce9bd6dc7f25fe2dddc853482`.
+- Do not ask the user to import any artifact until the exact latest Android-only run passes and its package checksum/ELF/dependency audit has been checked.
+
+### Immediate next steps
+
+1. Wait for run `41885675286`; inspect all steps and artifact.
+2. Review the full source diff for shared CSG lifetime, queue bind indices, partial-failure cleanup, and same-queue WAIT64 scope.
+3. If build passes, ask for one controlled diagnostic run with `PANVK_KBASE_PROFILE=1`; require the new enabled marker and at least one 32-submit snapshot. Capture logs and FPS.
+4. For a clean A/B, compare the shared-CSG branch against the unchanged live-profile build using identical container, resolution, game settings, and warm-up. Do not change DXVK barrier config between these runs.
+5. Separately audit wrapper feature interception and the teardown mutex/X11 issue. No ray-query, BC, viewport, clip-distance, or cull-distance feature should be force-enabled from the current evidence.
+
+No system/vendor Vulkan driver was modified. All work remains in isolated experiment branches and uses Winlator custom driver import only.
