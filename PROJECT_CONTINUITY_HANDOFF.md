@@ -1329,9 +1329,9 @@ The exact DXVK build string used in the previously captured Tomb Raider session 
 | `VK_KHR_maintenance6` | `.KHR_maintenance6 = true` | Advertised |
 | `VK_EXT_robustness2` | `.EXT_robustness2 = PAN_ARCH >= 10`; G720 v12 qualifies | Advertised |
 | robustness2 features | `.robustBufferAccess2 = PAN_ARCH >= 11`; `.nullDescriptor = PAN_ARCH >= 10` | Both true for v12 |
-| `VK_EXT_transform_feedback` | `.EXT_transform_feedback = PAN_ARCH >= 10` | Advertised |
+| `VK_EXT_transform_feedback` | `.EXT_transform_feedback = PAN_ARCH >= 10`; core `.transformFeedback = PAN_ARCH >= 10` | Extension and base feature advertised; optional query/stream/draw subfeatures remain false |
 | Push constants >= 256 bytes | `.maxPushConstantsSize = 256` | Meets minimum |
-| Descriptor indexing | `.EXT_descriptor_indexing = PAN_ARCH >= 9`; `.KHR_maintenance*` and feature table expose descriptor-indexing support | Advertised |
+| Descriptor indexing | `.EXT_descriptor_indexing = PAN_ARCH >= 9`; core `.descriptorIndexing = PAN_ARCH >= 9` | Extension and core feature advertised |
 
 - Conclusion: the source does **not** show a missing mandatory DXVK 2.7+ extension/feature gate for v12. Do not add or force-enable duplicate extension names as a speculative fix. This source-level audit is not a runtime proof that each implementation path is bug-free on this kernel/firmware.
 - The exact Winlator DXVK version remains to be recorded from a future runtime log; if it is older than 2.7, its required set may be smaller. If newer than 2.7, re-check its release-specific requirements before changing anything.
