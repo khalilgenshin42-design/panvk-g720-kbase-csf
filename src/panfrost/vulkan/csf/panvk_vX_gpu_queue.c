@@ -89,6 +89,7 @@ struct kbase_profile_stats {
    uint64_t subqueue_wait_calls, subqueue_wait_ns;
    uint64_t subqueue_wait_timeouts, subqueue_wait_errors;
    uint64_t status_drain_calls, status_drain_ns, status_drain_nonempty;
+   uint64_t ring_jobs, queue_doorbells, queue_kicks, native_gpu_wait_submits;
 };
 static struct kbase_profile_stats kbase_profile;
 
@@ -96,8 +97,11 @@ static bool
 kbase_profile_enabled(void)
 {
    static int enabled = -1;
-   if (enabled < 0)
+   if (enabled < 0) {
       enabled = debug_get_bool_option("PANVK_KBASE_PROFILE", false);
+      mesa_logi("kbase profile: %s (live snapshots every 32 submits)",
+                enabled ? "enabled" : "disabled");
+   }
    return enabled;
 }
 
@@ -116,7 +120,7 @@ kbase_profile_read(uint64_t *counter)
 /* Emit a cumulative snapshot every 256 Kbase queue submissions. This
  * reporting point is reached by the live rendering queue, unlike queue
  * destruction, which can happen during temporary device/queue probing. */
-#define KBASE_PROFILE_SUBMIT_SNAPSHOT_INTERVAL 256
+#define KBASE_PROFILE_SUBMIT_SNAPSHOT_INTERVAL 32
 
 static bool
 kbase_profile_record_submit(int64_t start, VkResult result)
@@ -168,7 +172,9 @@ kbase_profile_dump(void)
              " total_ms=%.3f errors=%" PRIu64
              "; subqueue waits=%" PRIu64 " total_ms=%.3f"
              " timeouts=%" PRIu64 " errors=%" PRIu64
-             "; status drains=%" PRIu64 " total_ms=%.3f nonempty=%" PRIu64,
+             "; status drains=%" PRIu64 " total_ms=%.3f nonempty=%" PRIu64
+             "; ring jobs=%" PRIu64 " doorbells=%" PRIu64
+             " kicks=%" PRIu64 " native GPU-wait submits=%" PRIu64,
              kbase_profile_read(&kbase_profile.queue_submit_calls),
              kbase_profile_read(&kbase_profile.queue_submit_ns) / 1000000.0,
              kbase_profile_read(&kbase_profile.queue_submit_errors),
@@ -178,7 +184,11 @@ kbase_profile_dump(void)
              kbase_profile_read(&kbase_profile.subqueue_wait_errors),
              kbase_profile_read(&kbase_profile.status_drain_calls),
              kbase_profile_read(&kbase_profile.status_drain_ns) / 1000000.0,
-             kbase_profile_read(&kbase_profile.status_drain_nonempty));
+             kbase_profile_read(&kbase_profile.status_drain_nonempty),
+             kbase_profile_read(&kbase_profile.ring_jobs),
+             kbase_profile_read(&kbase_profile.queue_doorbells),
+             kbase_profile_read(&kbase_profile.queue_kicks),
+             kbase_profile_read(&kbase_profile.native_gpu_wait_submits));
 }
 
 #define KBASE_PROFILE_WAIT_RETURN(start, result) do { \
@@ -658,10 +668,9 @@ kbase_subqueue_emit_job(struct panvk_gpu_queue *queue, uint32_t subqueue,
       for (uint32_t i = 0; i < gpu_wait_count; i++) {
          cs_move64_to(&b, wait_addr64, gpu_waits[i].addr);
          cs_move64_to(&b, wait_ref64, gpu_waits[i].target_minus_one);
-         /* These waits may target completion cells produced by a
-          * different Kbase CSG. Keep SYSTEM scope to match the system-scope
-          * producer and preserve cross-CSG visibility. */
-         cs_sync64_wait(&b, false, MALI_CS_SYNC_SCOPE_SYSTEM,
+         /* The producer and consumer are subqueues in the same Kbase CSG.
+          * Cross-VkQueue waits never enter this path. */
+         cs_sync64_wait(&b, false, MALI_CS_SYNC_SCOPE_CSG,
                         MALI_CS_CONDITION_GREATER, wait_ref64, wait_addr64);
       }
    }
@@ -824,6 +833,8 @@ kbase_subqueue_emit_job(struct panvk_gpu_queue *queue, uint32_t subqueue,
 
    subq->kbase.insert += padded_size;
    subq->kbase.emitted_jobs++;
+   if (kbase_profile_enabled())
+      kbase_profile_add(&kbase_profile.ring_jobs, 1);
 
    mesa_logd("kbase: emitted subqueue %u job %" PRIu64
              ": ring offset %u, entry %u/%u bytes, stream 0x%" PRIx64
@@ -874,10 +885,15 @@ kbase_subqueue_publish(struct panvk_gpu_queue *queue, uint32_t subqueue)
    if (*active) {
       *(volatile uint32_t *)subq->kbase.user_io = 1;
       kbase_gpu_wmb();
-      if (*active)
+      if (*active) {
+         if (kbase_profile_enabled())
+            kbase_profile_add(&kbase_profile.queue_doorbells, 1);
          return;
+      }
    }
 
+   if (kbase_profile_enabled())
+      kbase_profile_add(&kbase_profile.queue_kicks, 1);
    kbase_kmod_csf_queue_kick(dev->kmod.dev, subq->kbase.ringbuf_dev);
 }
 
@@ -1160,6 +1176,8 @@ kbase_destroy_group(struct panvk_gpu_queue *queue)
 {
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
 
+   /* All three PanVK subqueues share one Kbase CSG on this experiment.
+    * Terminate every bound CSI before destroying the group exactly once. */
    for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++) {
       struct panvk_subqueue *subq = &queue->subqueues[i];
 
@@ -1170,12 +1188,12 @@ kbase_destroy_group(struct panvk_gpu_queue *queue)
       pan_kmod_bo_put(subq->kbase.ringbuf_bo);
       subq->kbase.ringbuf_bo = NULL;
       subq->kbase.user_io = NULL;
+      subq->kbase.group_handle = UINT32_MAX;
+   }
 
-      if (subq->kbase.group_handle != UINT32_MAX) {
-         kbase_kmod_csf_group_destroy(dev->kmod.dev,
-                                      subq->kbase.group_handle);
-         subq->kbase.group_handle = UINT32_MAX;
-      }
+   if (queue->group_handle != UINT32_MAX) {
+      kbase_kmod_csf_group_destroy(dev->kmod.dev, queue->group_handle);
+      queue->group_handle = UINT32_MAX;
    }
 }
 
@@ -1190,15 +1208,21 @@ kbase_create_group(struct panvk_gpu_queue *queue)
    for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++)
       queue->subqueues[i].kbase.group_handle = UINT32_MAX;
 
+   /* Mirror Panthor: one CSG group with a dedicated CSI for each PanVK
+    * subqueue (vertex/tiler, fragment, compute). This removes needless
+    * cross-CSG boundaries between stages of one Vulkan queue. */
+   if (kbase_kmod_csf_group_create(dev->kmod.dev, PANVK_SUBQUEUE_COUNT,
+                                   &queue->group_handle)) {
+      result = panvk_errorf(dev, VK_ERROR_INITIALIZATION_FAILED,
+                            "Failed to create a shared kbase queue group");
+      goto err_destroy_group;
+   }
+
+   for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++)
+      queue->subqueues[i].kbase.group_handle = queue->group_handle;
+
    for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++) {
       struct panvk_subqueue *subq = &queue->subqueues[i];
-
-      if (kbase_kmod_csf_group_create(dev->kmod.dev, 1,
-                                      &subq->kbase.group_handle)) {
-         result = panvk_errorf(dev, VK_ERROR_INITIALIZATION_FAILED,
-                               "Failed to create a kbase queue group");
-         goto err_destroy_group;
-      }
 
       subq->kbase.ringbuf_bo =
          pan_kmod_bo_alloc(dev->kmod.dev, dev->kmod.vm, KBASE_RINGBUF_SIZE,
@@ -1244,7 +1268,7 @@ kbase_create_group(struct panvk_gpu_queue *queue)
       }
 
       subq->kbase.user_io = kbase_kmod_csf_queue_bind(
-         dev->kmod.dev, subq->kbase.group_handle, 0,
+         dev->kmod.dev, queue->group_handle, i,
          subq->kbase.ringbuf_dev,
          KBASE_RINGBUF_SIZE);
       if (!subq->kbase.user_io) {
@@ -2919,6 +2943,12 @@ kbase_collect_internal_gpu_waits(
          return false;
 
       struct panvk_gpu_queue *producer = payload.data;
+      /* CSG-scoped WAIT64 is valid only when producer and consumer are
+       * subqueues of this same Vulkan queue (one Kbase CSG on this branch).
+       * Cross-VkQueue waits retain the conservative CPU/KCPU bridge. */
+      if (producer != submit->queue)
+         return false;
+
       for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++) {
          if (!payload.targets[i])
             continue;
@@ -2982,9 +3012,12 @@ panvk_queue_submit_ioctl_kbase(struct panvk_queue_submit *submit,
          return result;
    }
 
-   if (native_gpu_waits)
+   if (native_gpu_waits) {
+      if (kbase_profile_enabled())
+         kbase_profile_add(&kbase_profile.native_gpu_wait_submits, 1);
       mesa_logd("kbase: SYNC-A3 native GPU internal wait path active (%u cells)",
                 gpu_wait_count);
+   }
 
    /* Flush pending synchronization requests before submitting the job, to
     * make sure things are GPU-visible. */
