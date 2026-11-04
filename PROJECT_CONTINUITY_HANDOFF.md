@@ -1746,3 +1746,60 @@ Reference: `zenithblue-oss/panvk-kbase-android`, patches 023 and 193. This is a 
 2. Add focused tests for VS-only and GS/TCS/TES clip/cull outputs, unused lanes, combined and separate arrays, FS reads of cull distance, and IDVS plus GPU-prerast paths. Compile first; device CTS on the actual MC7 remains mandatory before enabling.
 3. Separately resolve the strict wrapper's xcb-dri2 dependency with a real ARM64 build or a source-reviewed optional-path change, then rerun full wrapper build and ELF/dependency/package audits.
 4. Keep the experimental driver and wrapper separate from the phone's stock/vendor Vulkan driver; preserve System Driver fallback.
+
+## 2026-11-05 continuation — JimVulkan/mali-panvk reference audit
+
+User suggested `https://github.com/JimVulkan/mali-panvk`; audited its latest `main` at commit `58f2c55854bd48b18df756edb11f187af9cd2fde` (2026-11-04 12:19 UTC).
+
+### Project relevance and hardware qualification
+
+- This is a separate Android/kbase port of PanVK, based on Mesa `27.0.0-devel`; our active experiment is based on an older Mesa source with different shader/pipeline integration.
+- README claims CSF support for Mali-G720 and says it was tested on G720, G925 and G1-Ultra. The specifically named G720 test device is Galaxy Tab S10+/Ultra with **Immortalis-G720 on Dimensity 9300+**. This is same broad v12 generation but not proof on our exact Mali-G720 MC7 / Dimensity 8400 Ultra. The README does not identify the exact MC count for that test.
+- README says geometry shaders, tessellation and transform feedback are software-emulated; geometry streams are supported; DXVK D3D9/10/11 works. This is a valuable reference but not a drop-in binary or proof of exact device compatibility.
+- External repo contains an Android build/package path and app-launcher-compatible package metadata; do not substitute its binary into our benchmark without a separate controlled test and matching ABI/kernel validation.
+
+### Confirmed real feature implementations in the external source
+
+Files audited:
+- `src/panfrost/vulkan/panvk_vX_shader.c`
+- `src/panfrost/vulkan/panvk_vX_physical_device.c`
+- `src/poly/nir/poly_nir_lower_gs.c`
+- `src/poly/nir/poly_nir_lower_tess.c`
+- `src/poly/nir/poly_nir_passthrough_gs.c`
+
+Findings:
+
+1. **Clip/cull for a direct VS -> FS path:** external PanVK implements `panvk_nir_lower_cull_vs()` and `panvk_nir_lower_clip_cull_fs()`. It uses generic varying slots for distances and per-fragment discard. Cull distances are converted at the vertex stage into 0/1 indicators (1 iff that vertex's cull distance is negative); interpolated value reaches 1 only when every primitive vertex is culled. This is a real NIR implementation, unlike the original GameNative wrapper's no-op SPIR-V pass.
+2. **Important limitation in that implementation:** its shader-link code explicitly sets `prev_clip_count = prev_cull_count = 0` when the preceding stage is geometry or tessellation-evaluation. Its nearby comment says the geometry-shader emulation does not carry those distances yet. Therefore the external feature bits being true do not prove complete clip/cull coverage for pipelines whose final pre-raster stage is GS/TES. The FS lowering also early-returns if the fragment shader itself declares a CLIP_DIST input. These are audit targets, not behavior to blindly copy.
+3. **Multi-viewport:** external source enables `multiViewport` and has `panvk_nir_lower_viewport_scissor_fs()`. For GS-written ViewportIndex, the emulation transforms clip-space position using the selected viewport's transform and uses per-viewport rectangles plus FS discard because Mali's tiler has one scissor. This is a substantive software emulation, not a feature-bit-only override. Its precise supported stage/path coverage must still be checked.
+4. **Geometry streams:** external source enables `geometryStreams`; libpoly GS emulation has stream selection, per-stream counters, and rasterization-stream filtering. This is also an actual software-emulation path.
+5. External feature table reports `shaderClipDistance=true`, `shaderCullDistance=true`, `multiViewport=true`, and `geometryStreams=true`, with comments pointing to these implementations.
+
+### Comparison with our active Mesa source / integration map
+
+Our isolated branch `experiment/clip-cull-distance-v12` is still based on `538e917f5ddf4efd5bd54d8ac102a1026cf70754` and has no code commits from this audit.
+
+Our current PanVK source is materially different:
+- `src/panfrost/vulkan/panvk_vX_shader.c` is ~3536 lines vs ~4258 lines in JimVulkan's Mesa 27 source.
+- Our shader compiler already has custom `libpoly` paths: software VS before GS, software TCS, TES, GS main/count/pre/raster variants, and generated rasterization shaders.
+- Our software TCS uses `poly_tcs_per_vertex_outputs()` and `poly_tcs_output_stride()`; TES and GS communicate through the libpoly intermediate vertex buffer.
+- Our `src/poly/nir/poly_nir.h` already defines clip/cull array sizes in `poly_passthrough_gs_key`, and `poly_nir_passthrough_gs.c` copies combined compact clip/cull arrays. However, the current PanVK compiler path does not use the relevant clip/cull sizes when preparing/linking its stages; merely having those fields in the libpoly key is not proof that our active pipelines preserve them.
+- Our `panvk_vX_physical_device.c` still correctly reports `multiViewport=false`, `shaderClipDistance=false`, `shaderCullDistance=false`.
+- Do not import JimVulkan's whole 27.0 shader file or cherry-pick its implementation mechanically: compiler APIs, GS variant model, shader-link interface, and libpoly state have diverged.
+
+### Revised implementation plan
+
+1. Use JimVulkan's VS->FS clip/cull algorithm as the reference for the first isolated implementation, but adapt it to our Mesa revision and our compile/link function signatures.
+2. Before enabling either feature globally, extend the data flow across our actual stages:
+   - VS outputs -> software VS/libpoly vertex record;
+   - TCS per-vertex output memory -> TES per-vertex input;
+   - TES -> GS input when GS follows;
+   - GS output records -> generated rasterization VS -> FS varyings;
+   - generated passthrough/transform-feedback variants.
+3. Preserve array packing rules after `nir_merge_clip_cull_distance_vars`: clip count determines the split between clip and cull elements. Reuse the existing poly key fields only after proving the caller fills them and all relevant buffer strides/offset masks include the compact combined slots.
+4. Handle fragment shaders that explicitly read ClipDistance/CullDistance; the external early-return must not silently bypass required clipping. Handle partial arrays/default lanes, clip/cull counts that cross vec4 slots, GS/TCS/TES and generated passthrough paths.
+5. Add NIR unit tests / shader compile tests and targeted Vulkan CTS for VS-only, TCS/TES, GS, TES+GS, XFB, and shader-side ClipDistance/CullDistance reads. Feature bits remain false until all applicable stage paths pass.
+6. Audit multiViewport separately. External design is promising for GS ViewportIndex but does not justify advertising arbitrary viewport counts without checking limits, viewport transforms, clipping/scissor semantics, and supported shader stages.
+7. GeometryStreams remains a separate candidate: external libpoly is a reference for stream routing, but our current implementation and feature bit stay unchanged until tests prove stream-specific output, XFB, and rasterization behavior.
+
+No PanVK driver code or feature flags were changed in this continuation. The external project is now a high-value reference, but our driver still needs a source-version-aware port and validation. Continue to keep all test artifacts separate from the stock/vendor Vulkan driver.
