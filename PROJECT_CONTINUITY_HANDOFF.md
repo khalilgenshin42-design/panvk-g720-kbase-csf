@@ -1075,3 +1075,35 @@ Do not change Kbase memory flags, cache maintenance, coherency handling, CSF eve
 - No source-code change or new package was made for this A/B. Keep the tested source branch and known-good reference unchanged.
 - Do not alter Kbase memory flags, coherency/cache handling, CSF scope, WAIT64 synchronization, or queue notification behavior based on this run; the log shows no active GPU-fault signature and no profiling evidence for those changes.
 - Next engineering step: return to the default heap cadence and pursue opt-in aggregate profiling of queue status/notification draining, CPU WAIT_ANY polling, and subqueue/CQS waits as previously specified. Keep profiling disabled during clean FPS benchmarks. Continue treating the recurring shutdown mutex/fence/SEH symptoms as a separate teardown investigation.
+
+
+## 2026-11-04 continuation — opt-in Kbase queue profiling experiment
+
+### Branch and commits
+
+- Created isolated branch `experiment/kbase-profile-counters` from the known-good `experiment/kbase-diag-opt-in` baseline at `a87d179f3cdb77946df0c2858cd4370794645e27`.
+- `9e87fab519ece73b16eb0e7a9a65d54a9d303a04` — adds opt-in aggregate timing/counters to the Kbase-backed PanVK queue path.
+- `de3276cdc0da75f5fd9f42a9c5608bbfce9669b7` — prints the profile before the final teardown drain, so teardown waiting is not mixed into workload totals.
+- `32d6aad1ecf323d1e69917b1d2ab00b8d8130fab` — adds this branch to the Android-only experiment CI push trigger.
+- No changes to the known-good branch, stock/vendor driver, Kbase memory flags, coherency/cache maintenance, queue submission semantics, or GPU synchronization behavior.
+
+### Instrumentation behavior
+
+- Runtime opt-in: set `PANVK_KBASE_PROFILE=1`. Default is disabled. No per-frame/per-wait log spam is added.
+- Aggregates subqueue wait call count, total elapsed time, timeout count, and error count around `kbase_subqueue_wait_seqno()`.
+- Aggregates `gpu_queue_check_status()` CSF notification-drain call count, total drain time, and number of nonempty drains.
+- The summary is emitted once during Kbase queue destruction, before the final queue drain. Profiling is process/driver-global within this translation unit, so totals aggregate across queues in the process.
+- Counters use relaxed atomic increments/loads to avoid races between queue threads. The profile option is cached on first access.
+- Disable the variable completely for clean FPS measurements; use it only for diagnostic profiling captures. This experiment is instrumentation-only and is not a recommended driver/package.
+
+### Source audit correction — CPU WAIT_ANY
+
+- Re-audit of this branch found no `kbase_cpu_sync_wait_many()` implementation in the checked source. The generic Mesa `src/vulkan/runtime/vk_sync.c` handles `VK_SYNC_WAIT_ANY`; when a set cannot use a common sync-type `wait_many` implementation with WAIT_ANY support, it loops over individual zero-timeout waits until one succeeds or the deadline expires (lines 412–427 in the checked snapshot).
+- That fallback is generic Vulkan runtime code, not a Kbase-specific helper. It is deliberately not modified in this first PanVK-specific instrumentation patch to avoid broad cross-driver changes without evidence that Tomb Raider exercises that fallback. If runtime evidence points to it, instrument it in a separate narrowly scoped follow-up.
+
+### CI and runtime status
+
+- Android-only workflow run `41828985007` was triggered by the workflow-branch update and was `in_progress` at the time of this handoff entry. Run URL: `https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/41828985007`.
+- Build/package success is not yet established. Do not import or run this experimental package until the Android ARM64 build and package audit pass.
+- After CI succeeds, use the resulting artifact only in Winlator's custom driver importer, keeping System Driver available as fallback. Runtime profiling test should use `PANVK_KBASE_PROFILE=1`, same Tomb Raider scene/settings, and collect the emitted `kbase profile:` summary plus logs. Then unset the variable and repeat a clean FPS run only if needed.
+- Compare counts and total milliseconds, not only average duration: a path can be expensive due to high call frequency even when each call is short. Do not optimize any measured path until the profile demonstrates it is material.
