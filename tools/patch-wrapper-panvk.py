@@ -357,16 +357,16 @@ replace_once(
 # object (the bookkeeping object may not have been allocated or may be freed).
 replace_once(
     memory,
-    "    struct wrapper_device_memory *mem;\\n    VkResult result;\\n",
-    "    struct wrapper_device_memory *mem = NULL;\\n"
-    "    VkResult result;\\n"
-    "    VkMemoryAllocateInfo allocate_info = *pAllocateInfo;\\n",
+    "    struct wrapper_device_memory *mem;\n    VkResult result;\n",
+    "    struct wrapper_device_memory *mem = NULL;\n"
+    "    VkResult result;\n"
+    "    VkMemoryAllocateInfo allocate_info = *pAllocateInfo;\n",
     "initialize wrapper memory allocation state",
 )
 
 replace_once(
     memory,
-    "    VkMemoryAllocateInfo allocate_info = *pAllocateInfo;\\n"
+    "    VkMemoryAllocateInfo allocate_info = *pAllocateInfo;\n"
     "    result = CHECK(AllocateMemory(_device, &allocate_info, pAllocator, pMemory));",
     "    result = CHECK(AllocateMemory(_device, &allocate_info, pAllocator, pMemory));",
     "avoid shadowing allocation info on fallback",
@@ -374,8 +374,8 @@ replace_once(
 
 replace_once(
     memory,
-    "    simple_mtx_unlock(&mem->device->resource_mutex);\\n",
-    "    simple_mtx_unlock(&device->resource_mutex);\\n",
+    "    simple_mtx_unlock(&mem->device->resource_mutex);\n",
+    "    simple_mtx_unlock(&device->resource_mutex);\n",
     "avoid use-after-free while unlocking allocation mutex",
 )
 
