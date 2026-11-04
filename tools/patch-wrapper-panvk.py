@@ -204,7 +204,7 @@ replace_once(
 replace_once(
     physical,
     "WRAPPER_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,\n"
-    "                                   VkPhysicalDeviceFeatures2* pFeatures) {                                                              \n"
+    "                                   VkPhysicalDeviceFeatures2* pFeatures) {"
     "   vk_common_GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);\n"
     "   // Fake select dxvk 1.10.3 mandatory features\n",
     "WRAPPER_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,\n"
