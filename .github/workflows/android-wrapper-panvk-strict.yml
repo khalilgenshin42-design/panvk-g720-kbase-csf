@@ -141,7 +141,7 @@ jobs:
           grep -E 'NEEDED|SONAME|RPATH|RUNPATH' audit/dynamic-section.txt || true
           grep -E 'adrenotools_open_libvulkan|vk_icdGetInstanceProcAddr|vkCreateInstance' audit/dynamic-symbols.txt || true
 
-          cat > package/meta.json <<'EOF'
+          cat > package/meta.json <<EOF
           {
             "schemaVersion": 1,
             "name": "PanVK-safe GameNative wrapper",
@@ -155,7 +155,7 @@ jobs:
           }
           EOF
 
-          (cd package && sha256sum * > SHA256SUMS)
+          (cd package && sha256sum libvulkan_wrapper.so meta.json wrapper_icd*.json > SHA256SUMS)
           (cd package && zip -9 -r ../PanVK-safe-Wrapper-Android-arm64.zip .)
           sha256sum PanVK-safe-Wrapper-Android-arm64.zip | tee audit/package-sha256.txt
           find package -maxdepth 1 -type f -print | sort | tee audit/package-contents.txt
