@@ -1639,3 +1639,12 @@ The 12.4 FPS result is not evidence that the PanVK compiler or shader-core dispa
   - `meta.json`: `79476f59232679f672385949f5f719f6921ca8e193e32141306cc522c4c2b112`
 - Metadata: `26.3.0-devel-android-kbase-538e917f5ddf`, Android API 30 minimum, ARM64 library `libvulkan_panfrost.so`. Package remains experimental and not Vulkan conformant.
 - Package is ready for controlled device testing, but do not use it for the next run until the strict GameNative wrapper is built and installed; otherwise the wrapper capability mismatch remains an uncontrolled variable.
+
+
+### DXVK 1.7.2 feature-log reconciliation
+
+- The log's reported features must be compared against the actual PanVK v12 source, not treated as one undifferentiated spoof list.
+- PanVK source does implement/advertise several of the logged features: geometryShader, transformFeedback (but not geometryStreams), conditional rendering, custom border colors, host query reset, depth clip enable, shader demote, shader stencil export, vertex attribute divisor, and robustness2. These should remain available through the strict wrapper when the underlying source reports them.
+- PanVK source does not currently expose native `multiViewport`, `shaderClipDistance`, `shaderCullDistance`, `geometryStreams`, or `vertexPipelineStoresAndAtomics` on this v12 path. The wrapper log's `1` values for the first four are not backed by the active ICD implementation; strict wrapper must stop synthesizing them.
+- `textureCompressionBC=1` is intentionally supplied by the wrapper's BC1–BC7 emulation path, not native PanVK BC sampling. Keep it only when both emulation families and the replacement-format path are built and validated.
+- `VK_EXT_memory_priority` appears as a queried feature struct with `memoryPriority=0`, but it is absent from the DXVK enabled-extension list; do not treat that line alone as an enabled extension.
