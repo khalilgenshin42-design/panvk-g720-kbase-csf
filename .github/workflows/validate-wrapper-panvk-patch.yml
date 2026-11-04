@@ -1,0 +1,32 @@
+name: Validate PanVK-safe wrapper patch
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/wrapper-panvk-honest-features
+
+permissions:
+  contents: read
+
+jobs:
+  validate-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: FristOneRR-Admin/FristOneRR-Wrapperv1
+          ref: d77762fce867ba46e16a0e9f8df626add11a56b3
+          path: wrapper-src
+      - name: Validate patcher syntax
+        run: python3 -m py_compile tools/patch-wrapper-panvk.py
+      - name: Apply and validate PanVK-specific changes
+        run: |
+          python3 tools/patch-wrapper-panvk.py "$GITHUB_WORKSPACE/wrapper-src"
+          grep -q 'bool is_panvk;' wrapper-src/src/vulkan/wrapper/wrapper_objects.h
+          grep -q 'VK_DRIVER_ID_MESA_PANVK' wrapper-src/src/vulkan/wrapper/wrapper_physical_device.c
+          grep -q 'emulated_format' wrapper-src/src/vulkan/wrapper/wrapper_physical_device.c
+          grep -q '!wdev->physical->is_panvk' wrapper-src/src/vulkan/wrapper/wrapper_device.c
+          ! grep -q 'maxResourceSize = 562949953421312' wrapper-src/src/vulkan/wrapper/wrapper_physical_device.c
+          echo "PanVK wrapper patch applied and validated."
