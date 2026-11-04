@@ -86,6 +86,9 @@ jobs:
         run: |
           cp -a shims wrapper-src/shims
           cp android.toml wrapper-src/android.toml
+          mkdir -p wrapper-src/src/util/u_gralloc
+          cp src/util/u_gralloc/force_aosp_abi.h wrapper-src/src/util/u_gralloc/
+          test -s wrapper-src/src/util/u_gralloc/force_aosp_abi.h
           cd wrapper-src
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$PWD"
