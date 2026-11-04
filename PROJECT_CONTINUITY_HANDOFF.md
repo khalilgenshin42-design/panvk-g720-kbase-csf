@@ -1160,3 +1160,50 @@ Do not change Kbase memory flags, cache maintenance, coherency handling, CSF eve
 6. After collecting the diagnostic profile, remove `PANVK_KBASE_PROFILE` completely for clean FPS benchmarks. Do not leave it enabled when comparing performance.
 
 No further source behavior change is justified until the profile demonstrates a material hotspot or runtime logs reveal a new correctness fault.
+
+
+
+## 2026-11-04 continuation — Kbase profiling runtime capture (13:39:56)
+
+### User-reported benchmark
+
+- Min FPS: **5.7**
+- Max FPS: **19.4**
+- Average FPS: **12.6**
+- Uploaded archive: `TombRaider_logs_2026-11-04_13-39-56.zip`.
+- This was the opt-in profiling build with `PANVK_KBASE_PROFILE=1`. Treat FPS as diagnostic-run performance, not a clean A/B against the 13.5 FPS baseline; instrumentation may perturb timing and run-to-run variance is not controlled.
+
+### Profile output (verified from wine_debug.log)
+
+The log contains two profile summaries:
+```
+kbase profile: subqueue waits=18 total_ms=3.651 timeouts=0 errors=0; status drains=10 total_ms=0.029 nonempty=0
+kbase profile: subqueue waits=39 total_ms=9.580 timeouts=0 errors=0; status drains=20 total_ms=0.045 nonempty=0
+```
+
+- The second line is cumulative and includes the first; do **not** add both summaries together.
+- Latest cumulative totals: 39 subqueue waits, 9.580 ms total wait time, zero timeouts, zero errors; 20 status drains, 0.045 ms total drain time, zero nonempty drains.
+- Average measured subqueue wait duration is approximately 0.246 ms/call (9.580 / 39).
+- Average measured status-drain duration is approximately 0.00225 ms/call (0.045 / 20).
+- No measured wait timeout/error and no CSF event was drained.
+- This capture does not indicate that subqueue waiting or CSF notification draining is a meaningful frame-time hotspot. The drain path is especially unlikely to matter at only 45 microseconds total across 20 calls.
+- The current instrumentation does not measure generic Vulkan `VK_SYNC_WAIT_ANY` polling or other CPU-side synchronization paths. Do not infer those paths are hot merely because they remain unmeasured.
+
+### Runtime/log observations
+
+- Log confirms device Xiaomi 25069PTEBG (MT6899), Android 16, Winlator Mali 1.2.1, selected graphics driver `wrapper-gamenative`, Tomb Raider Definitive Edition.
+- PanVK initializes; DXVK reports Wrapper(Mali-G720 MC7), Vulkan 1.3.354, four compiler threads, and creates/recreates the 900x506 swapchain (IMMEDIATE then FIFO).
+- Kbase raw coherency mode remains 0.
+- AHB/dma-buf imports and BO allocations continue to succeed (handles 39 through 70 in this capture).
+- No `GPU_SHAREABILITY_FAULT`, `0x88`, `VK_ERROR_DEVICE_LOST`, CSF fatal marker, or `QueueSubmit failed: -4` was found.
+- At process/window shutdown, X11 reports the X connection reset/broken, followed by Wine's `vkQueueSubmit` assertion. This ordering is consistent with the display/server being torn down externally, but does not conclusively prove the assertion is harmless. Do not classify it as an in-game GPU fault without a capture showing it before teardown.
+- The two profile summaries occur early in the Wine log around pipeline initialization and queue teardown; they are aggregate counters, not frame-by-frame samples.
+
+### Decision and next engineering step
+
+- The first profile experiment has served its purpose: measured subqueue waits and notification drains do not justify changing synchronization behavior.
+- Do not optimize or remove `kbase_subqueue_wait_seqno()`, notification processing, cache invalidation, barriers, or queue status checks based on this result.
+- A potential next measurement target is CPU-side sync waiting, particularly Mesa's generic `VK_SYNC_WAIT_ANY` fallback loop. Before touching shared runtime code, inspect the exact implementation and establish whether PanVK's Tomb Raider workload reaches it. If adding instrumentation, keep it opt-in, aggregate-only, and isolated to the PanVK test branch; record call counts, loop iterations, and elapsed time, with no changes to wait semantics.
+- If source tracing does not establish that the generic fallback is reachable/used, do not instrument or alter it speculatively. Another option is to add narrowly scoped counters to PanVK's actual fence/semaphore wait call sites after tracing the call graph.
+- For the next clean performance run, remove `PANVK_KBASE_PROFILE` entirely and return to the known-good clean benchmark package/configuration; do not compare the 12.6 FPS diagnostic run as a performance regression.
+- Preserve the current profile branch and artifact for reproducibility. No performance optimization has been validated by this experiment.
