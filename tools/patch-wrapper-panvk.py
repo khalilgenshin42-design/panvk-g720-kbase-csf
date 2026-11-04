@@ -6,8 +6,9 @@ vendor drivers. PanVK already reports its real capabilities; these compatibility
 overrides must not be applied to it.
 """
 from pathlib import Path
+import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
 
 
 def replace_once(path: Path, old: str, new: str, label: str) -> None:
