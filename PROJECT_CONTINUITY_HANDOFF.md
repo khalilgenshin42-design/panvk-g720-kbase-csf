@@ -1648,3 +1648,10 @@ The 12.4 FPS result is not evidence that the PanVK compiler or shader-core dispa
 - PanVK source does not currently expose native `multiViewport`, `shaderClipDistance`, `shaderCullDistance`, `geometryStreams`, or `vertexPipelineStoresAndAtomics` on this v12 path. The wrapper log's `1` values for the first four are not backed by the active ICD implementation; strict wrapper must stop synthesizing them.
 - `textureCompressionBC=1` is intentionally supplied by the wrapper's BC1–BC7 emulation path, not native PanVK BC sampling. Keep it only when both emulation families and the replacement-format path are built and validated.
 - `VK_EXT_memory_priority` appears as a queried feature struct with `memoryPriority=0`, but it is absent from the DXVK enabled-extension list; do not treat that line alone as an enabled extension.
+
+
+### Strict-wrapper CI follow-up: cross-build header dependency
+
+- The first wrapper compile attempt on commit `b29e407f13e6f7bfd2a6569ee9eacb3f8c509d4a` passed SPIRV-Tools build, PanVK patch application, and cross-environment generation, then failed Meson C++ compiler sanity because `android.toml` force-includes `src/util/u_gralloc/force_aosp_abi.h`, which is present in the PanVK Mesa source but absent from the pinned GameNative wrapper source checkout.
+- Corrected workflow step `Prepare Android cross environment` to copy the exact header from this Mesa repository into `wrapper-src/src/util/u_gralloc/` before Meson setup and assert it exists.
+- Workflow commit: `107d25d386cb8f966208fdbbba68ec26c9d2fdfb`. New Android wrapper build run **41926995759** was queued at the time of this update. The earlier `d836d9b` build run remained in progress; do not treat either as successful until the final artifact audit completes.
