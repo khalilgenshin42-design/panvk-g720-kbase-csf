@@ -931,3 +931,44 @@ The diagnostic was active and captured the previously missing import route:
 The key new fact is that the dma-buf import ioctl's returned flags preserve `BASE_MEM_COHERENT_SYSTEM` even though the raw coherency mode reports 0. The generic Arm kbase UAPI defines the returned `NEED_MMAP` and `CACHED_CPU` bits as output flags; their appearance explains the `0x5000` delta. Do not interpret that delta as a shareability change. The preserved coherent-system bit is stronger evidence than the earlier logs, but it is still not direct proof of the GPU page-table's shareability encoding, nor does the generic upstream kernel implementation prove the behavior of Xiaomi/MediaTek's exact kernel fork.
 
 No memory flag, cache-maintenance, CSF scope, or synchronization source change is justified by this capture alone. Next, inspect the exact MTK kbase ABI/kernel behavior if a matching source tree can be found; otherwise preserve this as a diagnostic discrepancy and do not force/clear coherency flags speculatively. Keep `PANVK_KBASE_DIAG_MEM_FLAGS` disabled for all FPS benchmarks. The user should remove it from the Winlator environment before the next performance run. `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` remains unset.
+
+
+## 2026-11-04 continuation — Tomb Raider benchmark capture (01:57:54)
+
+### User-reported benchmark result
+
+- Min FPS: **3.3**
+- Max FPS: **18.5**
+- Average FPS: **12.9**
+
+Uploaded archive: `TombRaider_logs_2026-11-04_01-57-54.zip`. Extracted and inspected `logcat.log`, `wine_debug.log`, `TombRaider_d3d11.log`, `TombRaider_dxgi.log`, and `TombRaider_d3d9.log`.
+
+### Critical qualification: diagnostic logging was still enabled
+
+The capture contains:
+- 30 dma-buf import diagnostics (`route=external pan=0x0 requested=0x4040f effective=0x4540f)).
+- **730** BO memory-flag diagnostic records (`requested=0x40 effective=0x380f)).
+- Raw coherency mode 0.
+
+Therefore `PANVK_KBASE_DIAG_MEM_FLAGS=1` was still active for this benchmark process (or an equivalent diagnostic-enabled build/config was used). The 12.9 FPS average is a valid user-reported run, but it is **not a clean baseline** and must not be compared directly with quiet runs. Repeated logcat output during allocation can perturb performance. Do not attribute the 12.9 result to a driver improvement/regression.
+
+### Runtime / Vulkan observations
+
+- DXVK identifies the device as `Wrapper(Mali-G720 MC7)`, driver version `26.2.149`.
+- Device creation succeeded; DXVK reports feature level D3D_FEATURE_LEVEL_11_0 and reads 706 valid state-cache entries.
+- Swapchain initially created at 900x506 (3 images, IMMEDIATE), then recreated at 900x506 (4 images, FIFO); final log reports `D3D11SwapChain: Failed to recreate swap chain`.
+- End of Wine log includes X11 `get_client_rect failed`, `FORTIFY: pthread_mutex_lock called on a destroyed mutex`, invalid SEH frame, `vkWaitForFences` assertion, and RpcSs startup failure. These appear at session teardown/process termination in this capture; preserve as shutdown symptoms, not confirmed in-game GPU faults.
+- No occurrences found in the combined logcat/Wine logs for `0x88`, `GPU_SHAREABILITY_FAULT`, `VK_ERROR_DEVICE_LOST`, CSF error, or `QueueSubmit -4`.
+- Two `kbase_queue_wait_current` waits completed successfully.
+
+### Next action
+
+Before the next benchmark, remove `PANVK_KBASE_DIAG_MEM_FLAGS` completely from the Winlator container/game environment (do not set it to 0; leave it absent), keep `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` absent, and rerun the same game/driver/wrapper/settings/resolution. Send the next FPS result and logs. The clean run will tell us whether the 12.9 FPS result persists without diagnostic log overhead.
+
+Maintain the historical results separately:
+- 14.0 FPS average — earlier candidate `6634282...`, no current diagnostic overhead known.
+- 10.2 FPS average — `7e5d7a...` functional synchronization/notification candidate.
+- 10.6 FPS average — `a87d179...` diagnostics opt-in/default-off package, short-run log capture.
+- 12.9 FPS average — 2026-11-04 01:57:54 capture; **diagnostic logging demonstrably active**, so not a clean benchmark.
+
+No source-code changes are justified by this benchmark alone. Continue to avoid speculative changes to Kbase import flags, coherency, cache maintenance, CSF event scope, or queue synchronization.
