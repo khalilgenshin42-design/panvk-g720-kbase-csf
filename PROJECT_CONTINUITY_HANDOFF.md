@@ -1504,3 +1504,61 @@ Commit `538e917f5ddf4efd5bd54d8ac102a1026cf70754` extends the opt-in Kbase profi
 - total CPU time spent waiting plus heap renewal.
 
 This is important because the renewal interval and work threshold are independent triggers. The previous interval-only A/B at 192 could not tell whether the 65,536-work threshold was causing more frequent renewals. The next diagnostic will report which trigger fires and how much CPU time it costs. No heap threshold/default has been changed yet.
+
+
+---
+
+## 2026-11-04 continuation — shared-CSG PanVK build passed; wrapper capability spoofing fix under build
+
+### Shared-CSG experiment package build
+
+- Branch: `experiment/kbase-single-csg`
+- Source commit built: `538e917f5ddf4efd5bd54d8ac102a1026cf70754`
+- Android-only workflow run: **41886360574**, conclusion **success**.
+- All 12 steps passed: host tools, Android ARM64 libdrm, Android-only Meson configuration, compile/stage, ELF/dependency audit, flat ADPKG package, checksum audit and upload.
+- Artifact ID: `13351158168`, name `panvk-g720-android-only-experimental-package`.
+- Outer artifact SHA-256: `fff353c367474a2f9a82ba98e535c9b641167f32c70218085d70754dbd3d64bd`.
+- Nested Winlator package SHA-256: `c425675528e70beffecc0c7587cdd870e4044ad2ebd3212a7ae41b9dc810cf24`.
+- Inner manifest checksums verified for `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `meta.json`.
+- ELF audit: AArch64 ELF64 shared object, RUNPATH `$ORIGIN`, bundled private `libpanvk_drm.so`; that library depends only on libc.
+- Metadata package version: `26.3.0-devel-android-kbase-538e917f5ddf`.
+- The package is a **diagnostic experiment**, not a promoted/stable driver. It contains one CSG with three bound CSIs, CSG-scoped same-VkQueue WAIT64 eligibility, and expanded opt-in profiling including heap-renewal timing. No device test has yet validated the new topology.
+
+### Critical wrapper source audit
+
+The active Winlator selection `wrapper-gamenative` is based on `FristOneRR-Admin/FristOneRR-Wrapperv1`, branch `fristonerr-wrapper-v1`, source commit `d77762fce867ba46e16a0e9f8df626add11a56b3`.
+
+Findings in its source:
+- `wrapper_physical_device.c` unconditionally forces `multiViewport`, `shaderClipDistance`, `shaderCullDistance`, `geometryStreams`, `vertexPipelineStoresAndAtomics`, and other feature bits true, regardless of the underlying ICD.
+- `GetPhysicalDeviceFeatures2` separately forces transform-feedback `geometryStreams`, `transformFeedback`, host-query-reset, and custom-border-color feature structs true.
+- `GetPhysicalDeviceProperties2` fabricates transform-feedback limits/properties.
+- The wrapper's `CreateDevice` later clamps requested features against `base_supported_features`, so applications can observe a feature as supported but have it disabled before forwarding device creation. This mismatch is unsafe.
+- The wrapper has a `lower_eliminate_clip_distance` path, but `spirv_edit.cpp` currently registers no lowering pass; it runs an optimizer and returns effectively unchanged SPIR-V. Do not count this as clip-distance emulation.
+- The wrapper's BC fallback reports `maxResourceSize = 562949953421312` (512 TiB) when BC format queries fail, without querying the actual RGBA/FP16 replacement image. This can overstate image allocation limits and is a concrete memory-stability risk.
+
+### PanVK-aware wrapper patch branch
+
+Created `experiment/wrapper-panvk-honest-features` in the writable PanVK project repository because the connected GitHub integration has read-only access to `FristOneRR-Admin/FristOneRR-Wrapperv1` (attempt to create a branch there returned HTTP 403). No upstream wrapper repository files were modified.
+
+Added `tools/patch-wrapper-panvk.py` and workflow `.github/workflows/android-wrapper-panvk-strict.yml`. The workflow:
+- checks out the exact wrapper source commit above;
+- builds Android ARM64 SPIRV-Tools static libraries;
+- applies a PanVK-specific feature-reporting patch;
+- preserves PanVK's actual core/extension features instead of spoofing viewport, clip/cull distance, geometry streams, and vertex-pipeline atomics;
+- keeps BC compression advertised only when native support or both wrapper BC emulation families are available;
+- disables the no-op clip-distance optimizer path for PanVK;
+- preserves PanVK's real texel-buffer alignment and transform-feedback properties;
+- replaces the 512-TiB BC fallback with a query of the actual replacement format and its true resource limits;
+- builds and packages a separate wrapper ICD, independent of the PanVK driver package.
+
+Latest workflow run: **41888494088**, currently in progress at SPIRV-Tools checkout. Latest workflow source commit: `d62267cb658f53eeccacf646bb164ffd7616c8ca`. The workflow is not yet build-validated and no wrapper artifact should be imported until it passes audit.
+
+### Test sequencing
+
+1. Do not mix the new wrapper with the single-CSG PanVK experiment in the first device test. First build and validate the wrapper package.
+2. Test the strict wrapper with the already validated live-profile PanVK package, preserving all other container settings. Confirm DXVK's feature log now reports PanVK's actual `multiViewport=false`, `shaderClipDistance=false`, `shaderCullDistance=false`, and `geometryStreams=false`; BC remains available only through complete emulation.
+3. If stable, compare against the original GameNative wrapper using the same PanVK driver and benchmark. Capture visual correctness and any game launch/pipeline errors.
+4. Then test the shared-CSG PanVK package with the strict wrapper, one variable at a time.
+5. Keep the System Driver fallback. Never install either experimental package over Android's system/vendor Vulkan driver.
+
+The 12.4 FPS result is not evidence that the PanVK compiler or shader-core dispatch is wrong. The current logs show no GPU fault/device loss; the more concrete current risks are wrapper feature spoofing, overreported BC replacement image limits, cold DXVK state cache, and unknown queue/heap renewal costs. Optimize these measured issues before changing shader compiler scheduling or enabling additional Vulkan extensions.
