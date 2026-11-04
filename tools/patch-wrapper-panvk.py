@@ -181,6 +181,7 @@ replace_once(
 replace_once(
     physical,
     "      pdevice->vk.wsi_device = &pdevice->wsi_device;\n"
+    "      pdevice->wsi_device.force_bgra8_unorm_first = true;\n"
     "#ifdef __TERMUX__\n"
     "      pdevice->wsi_device.wants_ahardware_buffer = true;\n"
     "#endif\n\n"
