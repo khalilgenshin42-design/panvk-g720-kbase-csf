@@ -205,17 +205,11 @@ replace_once(
 
 replace_once(
     physical,
-    "WRAPPER_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,\n"
-    "                                   VkPhysicalDeviceFeatures2* pFeatures) {"
-    "   vk_common_GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);\n"
-    "   // Fake select dxvk 1.10.3 mandatory features\n",
-    "WRAPPER_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,\n"
-    "                                   VkPhysicalDeviceFeatures2* pFeatures) {\n"
-    "   VK_FROM_HANDLE(wrapper_physical_device, pdevice, physicalDevice);\n"
-    "   vk_common_GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);\n"
-    "   if (pdevice->is_panvk)\n"
-    "      return;\n"
-    "   // Fake select dxvk 1.10.3 mandatory features\n",
+    "   vk_common_GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);\\n",
+    "   VK_FROM_HANDLE(wrapper_physical_device, pdevice, physicalDevice);\\n"
+    "   vk_common_GetPhysicalDeviceFeatures2(physicalDevice, pFeatures);\\n"
+    "   if (pdevice->is_panvk)\\n"
+    "      return;\\n",
     "stop feature2 spoofing for PanVK",
 )
 
