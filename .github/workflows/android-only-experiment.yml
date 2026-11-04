@@ -11,6 +11,7 @@ on:
       - experiment/kbase-diag-opt-in
       - experiment/kbase-profile-counters
       - experiment/kbase-live-profile
+      - experiment/kbase-single-csg
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
