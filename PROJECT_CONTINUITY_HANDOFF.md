@@ -1207,3 +1207,17 @@ kbase profile: subqueue waits=39 total_ms=9.580 timeouts=0 errors=0; status drai
 - If source tracing does not establish that the generic fallback is reachable/used, do not instrument or alter it speculatively. Another option is to add narrowly scoped counters to PanVK's actual fence/semaphore wait call sites after tracing the call graph.
 - For the next clean performance run, remove `PANVK_KBASE_PROFILE` entirely and return to the known-good clean benchmark package/configuration; do not compare the 12.6 FPS diagnostic run as a performance regression.
 - Preserve the current profile branch and artifact for reproducibility. No performance optimization has been validated by this experiment.
+
+
+
+### Profiling interpretation correction — summaries are emitted at queue destruction
+
+A follow-up source-to-log correlation found an important limitation in the 13:39:56 profile capture:
+
+- In `panvk_vX_gpu_queue.c`, `kbase_profile_dump()` is called from Kbase queue destruction immediately before the final teardown drain (around the queue-destroy implementation).
+- The two summaries appear at wine_debug.log lines 73 and 81, before the later AHB import/allocation sequence (first AHB import is around line 92) and well before the end-of-session X11 teardown (around line 206).
+- Therefore these lines are snapshots from queue(s) destroyed during early initialization/probing, not a demonstrated end-of-benchmark total for the long-lived game queue. The second line is cumulative within the process/translation unit and includes the first, but neither can be assumed to cover the full Tomb Raider gameplay workload.
+- The low totals (39 waits / 9.580 ms; 20 drains / 0.045 ms) are valid for the observed queue-destruction snapshots only. They cannot rule out synchronization overhead during the actual benchmark.
+- Do not draw a definitive hotspot conclusion from these totals. The earlier statement that these paths are not a meaningful frame-time hotspot is too strong and must be treated as unproven.
+- The current profile design needs a workload-spanning reporting point before it can answer the performance question. A follow-up instrumentation revision should emit periodic aggregate snapshots during the live queue workload (for example, rate-limited from a frequently reached queue-status/submit path) and retain a final summary. It must avoid per-frame log spam and must be designed so counters from unrelated temporary devices/queues can be distinguished or interpreted safely.
+- Before changing the instrumentation, inspect queue/device lifecycle and identify a reliable point reached by the actual game queue during active rendering. Do not assume the early queue-destroy snapshots represent the game queue.
