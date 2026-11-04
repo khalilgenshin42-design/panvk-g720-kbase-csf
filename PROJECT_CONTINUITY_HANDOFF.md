@@ -972,3 +972,43 @@ Maintain the historical results separately:
 - 12.9 FPS average — 2026-11-04 01:57:54 capture; **diagnostic logging demonstrably active**, so not a clean benchmark.
 
 No source-code changes are justified by this benchmark alone. Continue to avoid speculative changes to Kbase import flags, coherency, cache maintenance, CSF event scope, or queue synchronization.
+
+
+
+## 2026-11-04 continuation — clean Tomb Raider benchmark (02:06:38)
+
+### User-reported result
+
+- Min FPS: **8.7**
+- Max FPS: **18.0**
+- Average FPS: **13.5**
+- Uploaded archive: `TombRaider_logs_2026-11-04_02-06-38.zip`.
+- Inspected `logcat.log` (530,258 chars), `wine_debug.log` (16,814 chars), `TombRaider_d3d11.log` (12,676 chars), `TombRaider_dxgi.log` (2,552 chars), and `TombRaider_d3d9.log` (1,356 chars).
+
+### Diagnostic-off verification
+
+- No `PANVK_KBASE_DIAG_MEM_FLAGS` text found in the capture.
+- No `dma-buf import flags` records and no `BO flags requested` records found. This confirms the high-volume memory-flag diagnostic output was absent for this run.
+- Raw coherency mode continued to report `0`.
+- PanVK custom driver was selected and loaded from the Winlator custom-driver directory. A separate transient extraction attempt logged `libui.so not found` for a temporary driver copy, but subsequent logs show the selected custom PanVK driver loading and device initialization; this did not prevent the benchmark session from running.
+- Two `kbase_queue_wait_current` calls completed successfully.
+- No captured `0x88`, `GPU_SHAREABILITY_FAULT`, `VK_ERROR_DEVICE_LOST`, CSF fatal/error marker, or `QueueSubmit -4`.
+
+### Shutdown observations
+
+At session end, the capture again contains `FORTIFY: pthread_mutex_lock called on a destroyed mutex`, an invalid SEH frame, and Wine's `!status && "vkWaitForFences"` assertion. DXVK also reports `D3D11SwapChain: Failed to recreate swap chain`. The available timestamps place these around window destruction/session shutdown; there is no evidence in this archive that they occurred during active gameplay. Keep them tracked as teardown defects to investigate separately if reproducible during gameplay or if they prevent clean exits.
+
+### Interpretation
+
+This is the first recent benchmark capture in which the memory-flag diagnostic output is demonstrably absent. Record **13.5 FPS average** as the clean 2026-11-04 02:06:38 datapoint. It is 0.6 FPS above the prior diagnostic-enabled 12.9 FPS run, but that is not a controlled A/B comparison: the earlier run had 730 BO flag log records and 30 dma-buf import diagnostic records. Do not claim the 0.6 FPS difference as a measured performance gain caused by disabling diagnostics.
+
+Keep historical results distinct:
+- 14.0 FPS average — earlier `6634282...` candidate; capture conditions not established here as a matched control.
+- 10.2 FPS average — `7e5d7a...` candidate.
+- 10.6 FPS average — `a87d179...` candidate, prior quiet/diagnostic-off run.
+- 12.9 FPS average — 01:57:54 capture, diagnostic logging demonstrably active; not a clean baseline.
+- **13.5 FPS average — 02:06:38 capture, diagnostic output absent; cleanest recent measurement.**
+
+### Next action / engineering decision
+
+Do not change Kbase memory flags, cache maintenance, coherency handling, CSF event scope, WAIT64 scope, or queue-notification synchronization based on this capture. No in-game GPU fault or device-lost signature was observed. Keep `PANVK_KBASE_DIAG_MEM_FLAGS` absent and `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` unset for further performance runs. The next useful step is a repeat of the same benchmark with unchanged settings to establish run-to-run variance; separately investigate the recurring shutdown mutex/fence assertion without conflating it with the in-game FPS result.
