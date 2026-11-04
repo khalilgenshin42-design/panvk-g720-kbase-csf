@@ -85,6 +85,7 @@
 
 /* Opt-in aggregate profiling. Disabled by default; no per-wait logging. */
 struct kbase_profile_stats {
+   uint64_t queue_submit_calls, queue_submit_ns, queue_submit_errors;
    uint64_t subqueue_wait_calls, subqueue_wait_ns;
    uint64_t subqueue_wait_timeouts, subqueue_wait_errors;
    uint64_t status_drain_calls, status_drain_ns, status_drain_nonempty;
@@ -110,6 +111,28 @@ static uint64_t
 kbase_profile_read(uint64_t *counter)
 {
    return __atomic_load_n(counter, __ATOMIC_RELAXED);
+}
+
+/* Emit a cumulative snapshot every 256 Kbase queue submissions. This
+ * reporting point is reached by the live rendering queue, unlike queue
+ * destruction, which can happen during temporary device/queue probing. */
+#define KBASE_PROFILE_SUBMIT_SNAPSHOT_INTERVAL 256
+
+static bool
+kbase_profile_record_submit(int64_t start, VkResult result)
+{
+   if (!kbase_profile_enabled())
+      return false;
+
+   kbase_profile_add(&kbase_profile.queue_submit_ns,
+                     os_time_get_nano() - start);
+   if (result != VK_SUCCESS)
+      kbase_profile_add(&kbase_profile.queue_submit_errors, 1);
+
+   uint64_t calls =
+      __atomic_add_fetch(&kbase_profile.queue_submit_calls, 1,
+                         __ATOMIC_RELAXED);
+   return calls % KBASE_PROFILE_SUBMIT_SNAPSHOT_INTERVAL == 0;
 }
 
 static void
@@ -141,9 +164,14 @@ kbase_profile_dump(void)
 {
    if (!kbase_profile_enabled())
       return;
-   mesa_logi("kbase profile: subqueue waits=%" PRIu64
-             " total_ms=%.3f timeouts=%" PRIu64 " errors=%" PRIu64
+   mesa_logi("kbase profile (cumulative): queue submits=%" PRIu64
+             " total_ms=%.3f errors=%" PRIu64
+             "; subqueue waits=%" PRIu64 " total_ms=%.3f"
+             " timeouts=%" PRIu64 " errors=%" PRIu64
              "; status drains=%" PRIu64 " total_ms=%.3f nonempty=%" PRIu64,
+             kbase_profile_read(&kbase_profile.queue_submit_calls),
+             kbase_profile_read(&kbase_profile.queue_submit_ns) / 1000000.0,
+             kbase_profile_read(&kbase_profile.queue_submit_errors),
              kbase_profile_read(&kbase_profile.subqueue_wait_calls),
              kbase_profile_read(&kbase_profile.subqueue_wait_ns) / 1000000.0,
              kbase_profile_read(&kbase_profile.subqueue_wait_timeouts),
@@ -3236,6 +3264,12 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
       return panvk_queue_vm_bind(vk_queue, vk_submit, queue->syncobj_handle);
    }
 
+   const bool profile_kbase =
+      gpu_queue_uses_kbase(to_panvk_device(vk_queue->base.device)) &&
+      kbase_profile_enabled();
+   const int64_t profile_start =
+      profile_kbase ? os_time_get_nano() : 0;
+
    panvk_queue_submit_init(&submit, vk_queue);
    panvk_queue_submit_init_storage(&submit, vk_submit, &stack_storage);
    panvk_queue_submit_init_utrace(&submit, vk_submit);
@@ -3265,6 +3299,11 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
 
 out:
    panvk_queue_submit_cleanup_storage(&submit, &stack_storage);
+#ifdef HAVE_PAN_KMOD_KBASE
+   if (profile_kbase &&
+       kbase_profile_record_submit(profile_start, result))
+      kbase_profile_dump();
+#endif
    return result;
 }
 
