@@ -1299,3 +1299,71 @@ Only these files differ from the profile baseline:
 The next profile should determine whether active game rendering produces enough queue submissions to reach live snapshots, and whether subqueue waits or status drains are actually exercised during those intervals. If the 256-submit snapshot does not occur, inspect queue-submit frequency and adjust the interval only in a separate documented instrumentation commit. Do not optimize a path solely because it is present in source.
 
 Keep `PANVK_KBASE_DIAG_MEM_FLAGS`, `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE`, and `PANVK_KBASE_HEAP_RENEW_INTERVAL` unset; keep the compiled heap defaults (interval 128, work threshold 65536). Preserve the System Driver fallback and never modify the phone's vendor Vulkan driver.
+
+
+---
+
+## 2026-11-04 continuation — live-profile Android package verified and DXVK feature audit
+
+### Android-only build and package result
+
+- Verified GitHub Actions workflow **Android-only PanVK G720 Experiment**, run **41833466869**, branch `experiment/kbase-live-profile`, source SHA `f674d46abbac19f563999a4f2d7b03898fe3a7bc`.
+- Run conclusion: **success**. Its single `build-android-only` job completed all 12 steps successfully, including host-tool generation, Android ARM64 libdrm build, Android-only Meson configuration, PanVK compilation/staging, ELF/dependency audit, flat ADPKG packaging, and artifact upload.
+- Artifact ID: `13325001132`, name `panvk-g720-android-only-experimental-package`, outer artifact SHA-256 `e9e83b0e33fd145ba9d8cdee369bdcf03da0551535fa1b5473b279ff8b7afb7d`.
+- The artifact was downloaded and inspected. It contains the full staged install/audit plus the nested importable `PanVK-G720-experimental.zip`.
+- Nested Winlator/Adrenotools package SHA-256: `79c4275efd9d03287502af85345014fed143a26f166c90a5a55fd24f13955f92`.
+- Nested package checksum manifest verifies all three payload files (`libvulkan_panfrost.so`, `libpanvk_drm.so`, `meta.json`) successfully.
+- Packaged driver is a 64-bit little-endian AArch64 Android shared object, built with NDK r30 for Android API 30. Package root is flat and contains only `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+- The driver uses RUNPATH `$ORIGIN` and depends on the bundled private `libpanvk_drm.so`, not an externally supplied libdrm ABI. The private DRM library depends only on libc. This avoids accidentally binding to a platform libdrm with a different ABI.
+- Package metadata identifies `26.3.0-devel-android-kbase-f674d46abbac` and explicitly warns that the driver is experimental, not Vulkan conformant, and device/game compatibility is unverified.
+
+### DXVK required-feature audit (G720 / PAN_ARCH 12)
+
+The exact DXVK build string used in the previously captured Tomb Raider session was not preserved in the handoff logs. To avoid guessing its version, this audit uses the published DXVK 2.7-and-later driver-support requirements as a conservative compatibility baseline. DXVK's current requirements page lists Vulkan 1.3, the five required extensions below, at least 256 bytes of push constants, and descriptor indexing.
+
+| DXVK 2.7+ requirement | PanVK source state for G720 v12 | Assessment |
+|---|---|---|
+| Vulkan 1.3 | ICD manifest advertises API 1.4.354 | Advertised |
+| `VK_EXT_depth_clip_enable` | `.EXT_depth_clip_enable = true` | Advertised |
+| `VK_KHR_maintenance5` | `.KHR_maintenance5 = true` | Advertised |
+| `VK_KHR_maintenance6` | `.KHR_maintenance6 = true` | Advertised |
+| `VK_EXT_robustness2` | `.EXT_robustness2 = PAN_ARCH >= 10`; G720 v12 qualifies | Advertised |
+| robustness2 features | `.robustBufferAccess2 = PAN_ARCH >= 11`; `.nullDescriptor = PAN_ARCH >= 10` | Both true for v12 |
+| `VK_EXT_transform_feedback` | `.EXT_transform_feedback = PAN_ARCH >= 10` | Advertised |
+| Push constants >= 256 bytes | `.maxPushConstantsSize = 256` | Meets minimum |
+| Descriptor indexing | `.EXT_descriptor_indexing = PAN_ARCH >= 9`; `.KHR_maintenance*` and feature table expose descriptor-indexing support | Advertised |
+
+- Conclusion: the source does **not** show a missing mandatory DXVK 2.7+ extension/feature gate for v12. Do not add or force-enable duplicate extension names as a speculative fix. This source-level audit is not a runtime proof that each implementation path is bug-free on this kernel/firmware.
+- The exact Winlator DXVK version remains to be recorded from a future runtime log; if it is older than 2.7, its required set may be smaller. If newer than 2.7, re-check its release-specific requirements before changing anything.
+
+### Optional DXVK features and likely performance opportunity
+
+- Source advertises `VK_EXT_graphics_pipeline_library`, and the physical-device property `graphicsPipelineLibraryIndependentInterpolationDecoration` is true. DXVK can use GPL to reduce pipeline compilation stutter.
+- Source advertises `VK_EXT_memory_budget`, `VK_EXT_shader_module_identifier`, `VK_EXT_extended_dynamic_state3`, and `VK_EXT_attachment_feedback_loop_layout`.
+- `VK_KHR_present_wait` and `VK_EXT_swapchain_maintenance1` are compiled conditionally under `PANVK_USE_WSI_PLATFORM`; present-wait additionally depends on timestamp-query capability. Confirm actual runtime enumeration rather than assuming these are enabled in every package/WSI configuration.
+- `VK_EXT_descriptor_buffer` is **not** in the current PanVK extension table. DXVK documents it as optional and potentially useful for a more efficient resource-binding model. It is a substantive descriptor-layout/pool/buffer implementation task, not something to expose by toggling one boolean. Treat it as a future optimization candidate only after implementation and CTS/runtime validation.
+- The extension table does not advertise `VK_KHR_ray_query`, `VK_KHR_acceleration_structure`, or the associated ray-tracing functionality. Keep them disabled. Vulkan ray query requires acceleration structures and shader traversal support; a GPU's ability to execute a software traversal algorithm does not itself provide the Vulkan API implementation.
+- The Vulkan core features `multiViewport`, `shaderClipDistance`, and `shaderCullDistance` are currently false. Do not flip them on without compiler/backend support and conformance testing. They are not listed as mandatory DXVK 2.7+ requirements.
+- `textureCompressionBC` is dynamically gated by the queried Mali compressed-format mask. Historical G720 diagnostics in this project found the BC mask intersection to be zero. This may affect some games or texture paths, but it is not a missing DXVK mandatory extension and must not be force-advertised.
+
+### Kbase memory/cache audit result
+
+- Current source intentionally reports `props->is_io_coherent = false`, even when raw coherency mode is logged. The comment explains that cached CPU mappings still require `KBASE_IOCTL_MEM_SYNC` before GPU reads and after GPU writes. Preserve this; do not infer that raw coherency mode 0 permits bypassing cache maintenance.
+- Ordinary cached BO allocations use `BASE_MEM_CACHED_CPU`; deferred sync records are flushed through `KBASE_IOCTL_MEM_SYNC` with MSYNC/CSYNC operations.
+- DMA-BUF import currently requests `BASE_MEM_COHERENT_SYSTEM`; this is a distinct import path and should not be changed without a reproducer and kernel ABI evidence.
+- Kbase's SAME_VA mapping path deliberately avoids `MAP_FIXED` and address hints because kbase rejects them. Preserve kernel-selected mappings. The generic PanVK address-space `MAP_FIXED` use is a separate reservation path and must not be confused with kbase BO mapping.
+- No cache, mapping, allocation, descriptor-pool, queue, or scheduler behavior was changed during this audit. There is not yet evidence that any of those paths caused the current FPS ceiling or the earlier 0x88 fault.
+
+### Device test required next
+
+1. Use the nested `PanVK-G720-experimental.zip` from artifact 13325001132 in Winlator Mali 1.2's custom driver importer only. Do not install it over Android's system/vendor Vulkan driver.
+2. Preserve the System Driver as fallback and keep the current Tomb Raider container/settings unchanged.
+3. Set `PANVK_KBASE_PROFILE=1` for one diagnostic run. Keep `PANVK_KBASE_DIAG_MEM_FLAGS`, `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE`, and `PANVK_KBASE_HEAP_RENEW_INTERVAL` unset; keep compiled heap defaults (renew interval 128, work threshold 65536).
+4. Capture the full logs and report Min/Max/Avg FPS, whether the game reaches the benchmark, and whether periodic `kbase profile:` snapshots appear after live queue submissions.
+5. Remove `PANVK_KBASE_PROFILE` for any clean performance comparison. Profiling adds timing overhead and this build is instrumentation, not a speed optimization.
+
+### Interpretation
+
+- The live-profile source branch is now build- and package-validated. Runtime validation on the actual Xiaomi 15T / MT6899 / Mali-G720 MC7 remains pending.
+- The DXVK 2.7+ required extension set appears covered in source. The most plausible optional feature gap from this audit is descriptor-buffer support, but it is not justified to implement or expose it before collecting the live profiling result and identifying a measured CPU/descriptor bottleneck.
+- No phone system/vendor driver files were modified.
