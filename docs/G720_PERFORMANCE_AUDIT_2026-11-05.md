@@ -784,3 +784,49 @@ Initial source audit of
    subset. Retain the application log as a record of what DXVK actually uses.
 
 No feature exposure or runtime source change was made in this audit step.
+
+
+## 2026-11-05 — detailed G720 capability audit and benchmark correction
+
+The user corrected the 262,144-work-threshold Tomb Raider result to **min
+7.8 / max 18.9 / average 13.9 FPS**. The prior 65,536 baseline is 9.0 /
+17.6 / 13.5 FPS. Candidate average delta is +0.4 FPS with lower minimum;
+single-run evidence is inconclusive and does not justify promotion.
+
+Added
+[`docs/G720_CAPABILITY_MATRIX_2026-11-05.md`](G720_CAPABILITY_MATRIX_2026-11-05.md)
+to this branch. It inventories current v12 advertised capabilities and
+separates implemented features from partially implemented, compiler-limited,
+and Kbase-backend-limited functionality.
+
+Key source-level findings:
+- `multiViewport` is false and `maxViewports=1`; later JimVulkan PanVK
+  implements it in software via geometry shader viewport remapping and
+  fragment scissor discard.
+- `shaderClipDistance` and `shaderCullDistance` are false with zero reported
+  limits. Current PanVK has partial direct VS->FS NIR lowering, but explicitly
+  does not cover fragment shaders reading their own distance arrays or
+  geometry/tessellation propagation.
+- `pipelineStatisticsQuery` is false; query-pool support has no pipeline
+  statistics case and compiler stats-address lowering returns the safe OOB
+  sink. JimVulkan implements CPU-side parameter accounting with stated
+  approximation for geometry/tessellation.
+- `geometryStreams` is false; current NIR lowering maps rasterization stream
+  to zero.
+- Kbase sparse binding remains disabled because its sparse bind queue is absent.
+- v12 vertex-pipeline stores/atomics remain disabled because of the documented
+  speculative invalid-index issue. Later JimVulkan code preserves this gate
+  until v13.
+- `VK_EXT_descriptor_heap` is a potentially relevant D3D12 compatibility
+  port, distinct from descriptor indexing which is already exposed. It needs
+  generated registry/API support plus driver and compiler paths.
+- BCn support is queried from hardware format bits; JimVulkan includes BCn
+  emulation for Mali formats without native decode. Query the actual G720
+  format properties before considering that port.
+- Ray query is not implemented in this branch. The experimental G925 v13
+  path is not evidence of a safe G720 v12 port.
+
+The next source task is a dedicated clip/cull completion comparison against
+JimVulkan's later implementation. Do not flip feature bits before completing
+stage propagation, explicit fragment-input semantics, properties, and tests.
+No runtime source change was made in this audit step.
