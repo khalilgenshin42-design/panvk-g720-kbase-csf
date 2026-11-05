@@ -859,3 +859,14 @@ Also, do not assume the order of NIR's clip/cull merge and vec4-normalization
 helpers. Merge rewrites cull locations, while vec4 normalization discovers
 sizes from variable locations. A dedicated NIR test matrix must establish the
 correct ordering and mixed-array behavior before runtime integration.
+
+
+### NIR pass-order refinement
+
+RADV in this Mesa tree confirms the standard interface-linking sequence:
+`nir_gather_clip_cull_distance_sizes_from_vars()` followed by
+`nir_merge_clip_cull_distance_vars()` (`src/amd/vulkan/radv_shader.c`, blob
+`c6b392bb638c7755356950130e1521f9106343d7`). Treat
+`nir_lower_clip_cull_distance_to_vec4s()` as a distinct representation
+lowering pass, not an assumed next step after merge. The PanVK test should
+validate which representation is required by its varying ABI.
