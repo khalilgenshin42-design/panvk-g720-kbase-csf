@@ -3910,3 +3910,10 @@ The same named project files were fetched on `experiment/g720-clip-cull-capabili
 6. Build all PAN_ARCH variants used by the build and run Vulkan CTS descriptor-heap tests plus VKD3D-Proton D3D12.
 
 No descriptor-heap feature has been exposed or code changed yet. The extension remains deliberately disabled until this sequence is completed.
+
+
+## Addendum: Vulkan registry/header provenance check (2026-11-05)
+
+The Meson source confirms `vk_api_xml = files('registry/vk.xml')` in `src/vulkan/meson.build`, and PanVK generates its entrypoint source/header from `vk_api_xml` via `src/panfrost/vulkan/meson.build`. GitHub Contents API returns zero-byte blobs for `src/vulkan/registry/vk.xml` and `include/vulkan/vulkan_core.h` on this branch, while `src/vulkan/meson.build` and `src/panfrost/vulkan/meson.build` are readable. Treat these as unavailable/submodule or pointer-backed inputs through this connector, not as proof that the Vulkan registry or headers are empty or missing. Do not attempt a registry edit until the exact checkout inputs and generated Vulkan headers are inspected in the build workspace.
+
+The descriptor heap port remains at source-audit stage; no PanVK code or feature exposure has been changed. Latest docs commits before this note: handoff `4ed87bd0b3e96fc0706b1db2fa7e81487625abca`; capability matrix `0b6888d10f5c0d373a62a5c47e537cbbf6e698d5`.
