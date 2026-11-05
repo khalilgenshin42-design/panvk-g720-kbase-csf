@@ -1894,3 +1894,10 @@ An important architecture correction was made during the port:
 - Android-only run `41938752951` failed at the workflow's checkout assertion only: the source guard had been strengthened, but the grep assertion still expected the old expression. No compilation was attempted in that run.
 - Updated the assertion in workflow commit `f843a225f9b4f1821e69bb52ed0718c86628b8d3` to match the stronger source guard.
 - Fresh Android-only run `41938787852` was queued on source commit `027589f...`; wrapper-variant run `41938787810` was in progress. Await the post-assertion run for the latest source before declaring compile validation.
+
+### Additional future candidate from the local libpoly audit — geometry streams
+
+- Our own `src/poly/nir/poly_nir_lower_gs.c` already routes `emit_vertex` / `end_primitive` by NIR stream ID, maintains per-stream vertex and XFB primitive counters, encodes stream ID into generated vertex IDs, and filters the rasterization variant to the selected rasterization stream.
+- The PanVK GS compile path calls `poly_nir_lower_gs()` and serializes `shader->gs.poly.multistream`; this is substantive implementation work, not just a feature bit.
+- Nevertheless `panvk_vX_physical_device.c` currently exposes `geometryStreams=false`, `maxTransformFeedbackStreams=1`, and `transformFeedbackRasterizationStreamSelect=false`. The extension feature/property combination must be validated as a whole before changing any of these.
+- This makes geometry streams a plausible later capability-audit target, but it is not part of the current clip/cull prototype. Do not raise the stream limits or set `geometryStreams=true` until GS/XFB stream routing, stream-0 rasterization, nonzero streams, and the advertised property interactions pass Vulkan CTS.
