@@ -30,6 +30,7 @@ jobs:
             pkg-config \
             libdrm-dev \
             libelf-dev \
+            llvm-22-dev \
             libzstd-dev \
             libexpat1-dev \
             clang
@@ -42,7 +43,7 @@ jobs:
             -Dvulkan-drivers=swrast \
             -Dtools=[] \
             -Dbuild-tests=true \
-            -Dllvm=disabled \
+            -Dllvm=enabled \
             -Dglx=disabled \
             -Degl=disabled \
             -Dgbm=disabled \
