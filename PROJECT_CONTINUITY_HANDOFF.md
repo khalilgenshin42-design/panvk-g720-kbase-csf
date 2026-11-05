@@ -4003,7 +4003,7 @@ The reference implementation is a later Mesa 27 snapshot while this branch is Me
 
 ## 2026-11-05 — Descriptor heap backend port started (Mesa 26.3 / Valhall)
 
-Repository-wide branch reconciliation was performed before continuing. The repository currently has 23 branches. The canonical handoff exists on `docs/project-continuity-handoff-2026-11-03`; the other branches do not contain divergent copies. The latest handoff blob was fetched before this update.
+Repository-wide branch reconciliation was performed before continuing. The repository had 23 branches during the initial sweep; creating `experiment/g720-descriptor-heaps` brings the current total to 24. The canonical handoff exists on `docs/project-continuity-handoff-2026-11-03`; the other branches do not contain divergent copies. The latest handoff blob was fetched before this update.
 
 ### New isolated implementation branch
 
