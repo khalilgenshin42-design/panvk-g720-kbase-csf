@@ -1825,3 +1825,47 @@ The first code milestone should be a compile-only, feature-disabled VS->FS imple
 - Then separately carry counts and values through software TCS/TES and libpoly GS buffers. The feature bits stay false until every supported last-pre-raster stage path is correct.
 
 This audit found a concrete reason why a naive port would fail: the current PanVK varying collector and linker do not yet route clip-distance slots as ordinary varyings. No driver source was changed in this step.
+
+## 2026-11-05 continuation — first feature-disabled VS->FS clip/cull prototype
+
+### Code work on `experiment/clip-cull-distance-v12`
+
+The JimVulkan reference justified starting a narrow, isolated prototype. Current branch head: `1b44b86b9cbce2768fd7f0bb0806fc513532ff70`.
+
+Changes:
+- `src/panfrost/compiler/pan_nir_collect_varyings.c`: retain VS clip-distance output stores when `sem.no_varying` is set. NIR varying optimization can mark these outputs `no_varying`, but the PanVK FS discard lowering still consumes them.
+- `src/panfrost/vulkan/panvk_vX_shader.c`:
+  - Add a VS lowering pass that changes merged compact cull-distance values to 0/1 per vertex (`1.0` iff that vertex's cull distance is negative), preserving clip-distance values.
+  - Add an FS lowering pass that reads the clip/cull varying values and discards when any clip distance is negative or any interpolated cull indicator reaches `0.9999`.
+  - Pass clip/cull array sizes from the direct VS->FS link before the VS NIR is freed.
+  - Guard the prototype against FS shaders that explicitly read ClipDistance/CullDistance, because that path needs a lowering that preserves user-visible original values.
+  - Guard against combined clip+cull counts above 8.
+  - Restrict cull indicator conversion to the hardware VS variant, leaving the transform-feedback VS variant's original values unchanged.
+- The implementation is deliberately limited to **direct VS -> FS pipelines**. It does not claim support when TCS, TES or GS is the last pre-raster stage.
+- Physical-device feature/property reporting remains unchanged: `shaderClipDistance=false`, `shaderCullDistance=false`, `multiViewport=false`. No Vulkan extension/feature was enabled or advertised.
+- No code was cherry-picked from JimVulkan's newer Mesa 27 source; this is an adapted small prototype in our existing source tree.
+
+### Correct v12 varying transport path
+
+An important architecture correction was made during the port:
+
+- The old `emit_varying_attrs()/link_shaders()` code in `panvk_vX_shader.c` is inside `#if PAN_ARCH < 9`; it is not the G720 path. A temporary modification to that legacy path was reverted.
+- For our CSF/v12 target, FS varying descriptors are built in `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c::emit_varying_descs()`. It includes slots whose `pan_varying_slot.section == PAN_VARYING_SECTION_GENERIC`, matches them by location against the VS layout, and uses the producer's component count. This avoids the partial-vec4 over-read issue without a legacy emitter modification.
+- `PAN_HARDWARE_VARYING_BITS` in `src/panfrost/compiler/pan_compiler.h` excludes CLIP_DIST0/1, so these slots already land in the generic varying section. The only collector change required for this direct path is the `sem.no_varying` exception above.
+- Verified the common Vulkan NIR path in our own `src/vulkan/runtime/vk_nir.c`: after dead-variable removal it calls `nir_gather_clip_cull_distance_sizes_from_vars()` followed by `nir_merge_clip_cull_distance_vars()`. Therefore the prototype's compact merged CLIP_DIST0 array assumption is grounded in our current Mesa revision, not just the external project.
+
+### Build validation status
+
+- Added `experiment/clip-cull-distance-v12` to `.github/workflows/android-only-experiment.yml` and added checkout assertions that the prototype exists while clip/cull feature bits remain disabled.
+- Android-only build run `41937769803` (commit `a28b5e3dac1ae433ea483f9f2ecd04bcdce5f153`) passed checkout verification, host-tool generation, Android ARM64 libdrm build, and Meson Android-only configuration. At last check, `Compile and stage Android install` was still in progress.
+- Android wrapper-variant build run `41937769837` for the same commit was also in progress; it is secondary to the Android-only PanVK build.
+- The final branch head `1b44b86...` adds only the combined-distance-count guard after the Android-only run started. The run still exercises the substantive NIR and varying transport code.
+- Do not treat this as build-validated until the compile step and artifact audit complete. No package has been offered for import and no runtime/CTS validation has happened.
+
+### Next steps
+
+1. Wait for Android-only run `41937769803`; fix any compiler errors on the isolated branch. Re-run on the final head after fixes.
+2. Audit the produced ELF, dependencies, package manifest and checksums. Keep the artifact experimental and separate.
+3. Add shader-level tests for clip-only, cull-only, mixed arrays, arrays crossing the vec4 boundary, partial final slot, and explicit FS distance reads. Then run Vulkan CTS direct VS->FS clip/cull cases on the actual G720 MC7.
+4. Extend distance transport through our libpoly VS/TCS/TES/GS paths, generated GS rasterization VS, and transform-feedback variants. The feature bits remain false until all relevant final-pre-raster-stage paths and explicit FS reads pass.
+5. Do not mix this prototype into the Tomb Raider FPS benchmark until it is independently runtime-qualified; it is a correctness/compatibility feature experiment, not an expected performance optimization for the current DXVK 1.7.2 game.
