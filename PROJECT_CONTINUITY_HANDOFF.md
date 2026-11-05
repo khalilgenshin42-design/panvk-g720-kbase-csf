@@ -4009,7 +4009,7 @@ Repository-wide branch reconciliation was performed before continuing. The repos
 
 - Branch: `experiment/g720-descriptor-heaps`
 - Base: latest source branch `experiment/g720-clip-cull-capabilities` at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`
-- Current branch HEAD after initial port: `4edd96ec9bb936dc29b86e7f2b1f814f9f9922c3`
+- Current branch HEAD after initial port and binary-reader hardening: `0bfd34d0392efb0c98e31ad0400d991141f671ff`
 - The existing source and audit branches remain unchanged.
 
 ### Implemented in the experimental branch (not yet build-validated)
@@ -4054,3 +4054,6 @@ Next steps:
 6. Do not ask the user to test until that package is ready.
 
 No new device benchmark was run. The last user-reported Tomb Raider Definitive Edition baseline remains Min 9.4 / Max 19.4 / Avg 14.0 FPS; no performance claim is made for this unbuilt branch.
+
+
+Follow-up hardening on `experiment/g720-descriptor-heaps`: shader-binary deserialization now rejects non-boolean heap-use flag bytes and checks blob overrun immediately before accepting the embedded-sampler count. This is included in source HEAD `0bfd34d0392efb0c98e31ad0400d991141f671ff`; a fresh final-head Android build is required because the earlier build run targets `4edd96ec9bb936dc29b86e7f2b1f814f9f9922c3`.
