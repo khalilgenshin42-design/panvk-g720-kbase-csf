@@ -3253,3 +3253,20 @@ Corrected the NIR workflow to select the software Vulkan driver `swrast` instead
 Commit: `2102a0a2109c54438243dacd03934c7815a8e009` (`ci: enable full NIR sources in test build`). New runs triggered: NIR `42025422711`, Android-only `42025422741`, wrapper `42025422738`; all were queued at last poll. Need verify Meson summary includes NIR tests and job logs show actual test counts; a green job alone is insufficient.
 
 This correction changes only the CI configuration. No runtime PanVK code, clip/cull feature flags, or device package contents were changed by this commit. Existing Android package run `42023056179` remains a confirmed successful build/package, but current SHA `2102a0a...` Android validation is pending.
+
+
+
+### NIR CI source gating diagnosis and Lavapipe dependency repair (2026-11-05 12:15 UTC)
+
+The first attempt to force full NIR source registration changed `-Dvulkan-drivers=[]` to `-Dvulkan-drivers=swrast` while leaving LLVM disabled. Run `42025422711` therefore failed at Meson setup with the explicit error: `Feature llvm cannot be disabled: Lavapipe Vulkan driver requires LLVM`. This was expected from the software Vulkan driver's dependency, not a PanVK or NIR source error.
+
+Updated the NIR workflow to install `llvm-22-dev` and set `-Dllvm=enabled`, while retaining `-Dvulkan-drivers=swrast`. The purpose of selecting swrast is to make `with_any_vk` and `with_gfx_compute` true, which makes `with_nir_headers_only` false and registers the full NIR test executable. LLVM is now enabled for Lavapipe, but we have not re-enabled Panfrost or Mesa CLC, so the earlier LLVM-SPIRV/Clang/libclc dependency chain should remain unnecessary.
+
+Commit: `171a78a8ff5fc1793b9e77a6cbdccf800e0e054d` (`ci: enable LLVM for software Vulkan NIR test build`). New NIR run expected from this commit; no run ID returned yet at last poll.
+
+Additional build status:
+- Android-only run `42025063812` on `9f8faa1...`: host tools, Android ARM64 libdrm, and Meson configure all passed; Android compile/stage in progress.
+- Wrapper run `42025063844` on `9f8faa1...`: host tools passed; Release Meson configure in progress; Debugoptimized compile in progress.
+- Newer runs from `2102a0a...` are queued/in progress and are superseded by the current source workflow commit for CI config only.
+
+Important CI interpretation: run `42025063854` was technically green but logged `No suitable tests defined`, so it must be recorded as a false-green/no-test run, not test success. Run `42025422711` failed at Meson setup due Lavapipe's LLVM requirement; it did not compile or run tests. The next acceptable result requires a Meson summary showing `nir_tests` and actual gtest/meson test counts, not just exit code zero.
