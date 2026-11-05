@@ -211,3 +211,10 @@ stage links. No feature bits or property limits have been changed.
   merge pass rewrites cull locations and the vec4 pass gathers sizes by
   location; add NIR tests for clip-only, cull-only, mixed/non-vec4-aligned
   arrays, and arrayed GS/TCS/TES IO before wiring either pass into PanVK.
+
+
+RADV's pipeline source confirms the interface-linking sequence
+`nir_gather_clip_cull_distance_sizes_from_vars()` then
+`nir_merge_clip_cull_distance_vars()`. The separate
+`nir_lower_clip_cull_distance_to_vec4s()` helper must not be assumed to follow
+that sequence; it changes the representation and needs its own test.
