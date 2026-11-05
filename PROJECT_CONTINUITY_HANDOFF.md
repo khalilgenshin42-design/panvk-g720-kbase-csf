@@ -2469,3 +2469,16 @@ The inner package was copied to the current work area as
 A/B still requires profiling variables unset, the effective threshold log
 checked, and the same Tomb Raider scene/settings. No FPS improvement is
 claimed from the build or artifact audit.
+
+
+### Latest CI refresh after baseline artifact audit
+
+- Android-only run `41947103034` on source SHA `a2e5ac142b4f0df71cb28204ece4337bace046de`: completed successfully, including package audit and upload. Artifact `13378853545` was independently downloaded and validated as recorded above.
+- Wrapper run `41947306616` on source/doc checkpoint `e226f2068e3374b63481099390871d390510fece`: Release job `126982590161` completed successfully; Debugoptimized job `126982589829` was compiling at the latest check.
+- Older wrapper run `41947103085`: Debugoptimized job `126981927609` completed successfully; Release job `126981927876` remained in host-tool generation. The newer Release pass validates the same driver source because the intervening e226 commits changed only documentation.
+- Baseline Android-only run `41947306451` at e226 had also completed successfully, including compile, package audit, and artifact upload.
+- 262,144 candidate run `41947695997`: Android-only target compile in progress after host tools, libdrm and configure passed.
+- 262,144 candidate wrapper run `41947696048`: Debugoptimized was generating host tools; Release was installing build dependencies. No candidate compile/package success yet.
+- Candidate-vs-baseline compare `e226...8d6ec93` confirms only one runtime source change: `KBASE_TILER_HEAP_RENEW_WORK` 65,536 -> 262,144; the other changed file only adds the experiment branch to the Android-only CI filter.
+
+No device performance result has been produced for the candidate. The baseline package is available for a clean, uninstrumented 65,536 run while candidate CI completes.
