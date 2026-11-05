@@ -3874,3 +3874,39 @@ Verified on `experiment/g720-clip-cull-capabilities`:
 5. Add extension/feature exposure only after all call paths are implemented and compile; test shader module creation, descriptor heap creation/update/bind, push data, descriptor indexing, and VKD3D-Proton D3D12.
 
 This is a meaningful narrowing of the port: generic runtime + SPIR-V capability parsing are already present, so the primary missing work is PanVK-specific integration and version adaptation, not reimplementing the 1,100-line runtime lowerer from scratch.
+
+
+## Addendum: PanVK-side descriptor heap integration map (2026-11-05)
+
+Reference implementation inspected at `JimVulkan/mali-panvk` commit `58f2c55854bd48b18df756edb11f187af9cd2fde` (Mesa 27.0.0-devel). The current project is Mesa `26.3.0-devel`; do not assume source/API compatibility.
+
+### Exact PanVK integration points confirmed in reference
+
+- `panvk_descriptor_set_layout.h`: reserves resource-table slots after driver set and normal descriptor sets: `PANVK_HEAP_RESOURCE_TABLE`, `PANVK_HEAP_SAMPLER_TABLE`, `PANVK_HEAP_EMBEDDED_TABLE`, `PANVK_HEAP_TABLE_END`; architecture-gated for PAN_ARCH >= 9.
+- `panvk_shader.h`: descriptor metadata adds `uses_heaps` and embedded sampler private-memory/count state.
+- `panvk_vX_cmd_desc_state.c`: resource-table allocation grows to `PANVK_HEAP_TABLE_END` when shader uses heaps; fills resource/sampler heap table entries; implements `CmdBindSamplerHeapEXT`, `CmdBindResourceHeapEXT`, and secondary-command-buffer heap inheritance.
+- `panvk_vX_cmd_push_constant.c`: implements `CmdPushDataEXT` on PAN_ARCH >= 9; push data occupies push-constant space and is visible to all stages.
+- `panvk_vX_nir_lower_descriptors.c`: lowers texture/image/buffer heap offsets to Mali resource handles and resource-table UBO loads. This file is 1,630 lines in the reference versus 1,432 lines in the project branch, so it contains other Mesa 27 changes too; isolate descriptor-heap hunks rather than replacing wholesale.
+- `panvk_vX_shader.c`: detects `VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT`, packs embedded sampler descriptors, sets `desc_info.uses_heaps`, and uploads embedded sampler data.
+- `panvk_vX_physical_device.c`: extension `.EXT_descriptor_heap = PAN_ARCH >= 9`; feature `.descriptorHeap = PAN_ARCH >= 9`, capture/replay false; properties include 64-byte heap alignment, heap size derived from 32-byte descriptor stride and 24-bit handles, 256-byte push data, 2,048 embedded samplers, and sparse/protected heaps false. It also sets `minStorageBufferOffsetAlignment = 4` on PAN_ARCH >= 9 with a comment explaining the measured vkd3d-proton offset requirement (G68, G720, G925, G1 Ultra).
+
+### Current branch missing-path verification
+
+The same named project files were fetched on `experiment/g720-clip-cull-capabilities`; none contains `descriptor_heap`, `DescriptorHeapEXT`, `uses_heaps`, or `CmdPushDataEXT` markers. The project branch's descriptor-state file is 450 lines vs 542 in reference; push-constant file 124 vs 151; descriptor layout 212 vs 220; shader compiler 3,716 vs 4,258; descriptor NIR lowering 1,432 vs 1,630; physical device 1,433 vs 1,535. These size differences are not all attributable to descriptor heaps; use targeted hunks and API adaptation.
+
+### Confirmed generic support already in project tree
+
+- Runtime `vk_nir_lower_descriptor_heaps.c` exists and is built (1,107 lines in project vs 1,146 in reference).
+- Its header is byte-identical to the reference header.
+- SPIR-V parser recognizes `DescriptorHeapEXT`.
+
+### Next implementation order
+
+1. Verify registry/header generation source and `vk_device_extension_table` member availability in the 26.3 tree. Current `include/vulkan/vulkan_core.h` GitHub contents fetch returned a zero-byte blob, so don't infer absence/presence from that fetch; inspect the actual local generated header or generator input.
+2. Fetch both versions of each PanVK file and isolate reference additions by semantic marker, then adapt the descriptor-state ABI and resource table indices.
+3. Add shader heap offset lowering and resource-handle conversion in the existing PanVK NIR pass.
+4. Add heap binding/inheritance and push-data entrypoints, then shader metadata and embedded samplers.
+5. Add feature/property query only after implementation and generated extension/entrypoint wiring are confirmed.
+6. Build all PAN_ARCH variants used by the build and run Vulkan CTS descriptor-heap tests plus VKD3D-Proton D3D12.
+
+No descriptor-heap feature has been exposed or code changed yet. The extension remains deliberately disabled until this sequence is completed.
