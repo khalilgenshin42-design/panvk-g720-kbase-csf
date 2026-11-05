@@ -15,6 +15,7 @@ on:
       - experiment/clip-cull-distance-v12
       - experiment/g720-performance-audit
       - experiment/g720-clip-cull-capabilities
+      - experiment/g720-descriptor-heaps
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
@@ -42,6 +43,12 @@ jobs:
           grep -q "nir_merge_clip_cull_distance_vars(fs_nir)" src/panfrost/vulkan/panvk_vX_shader.c
           grep -q ".shaderClipDistance = false" src/panfrost/vulkan/panvk_vX_physical_device.c
           grep -q ".shaderCullDistance = false" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -q "nir_tex_src_texture_heap_offset" src/panfrost/vulkan/panvk_vX_nir_lower_descriptors.c
+          grep -q "CmdBindSamplerHeapEXT" src/panfrost/vulkan/panvk_vX_cmd_desc_state.c
+          grep -q "CmdBindResourceHeapEXT" src/panfrost/vulkan/panvk_vX_cmd_desc_state.c
+          grep -q "CmdPushDataEXT" src/panfrost/vulkan/panvk_vX_cmd_push_constant.c
+          grep -q ".EXT_descriptor_heap = PAN_ARCH >= 9" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -q ".descriptorHeap = PAN_ARCH >= 9" src/panfrost/vulkan/panvk_vX_physical_device.c
 
       - name: Set up Python
         uses: actions/setup-python@v5
