@@ -3630,3 +3630,41 @@ Next steps:
 3. Once run `42033527656` completes, inspect the package artifact and checksum. Do not present it as a fix until the inner ZIP is independently audited.
 4. Consider changing workflow artifact publishing to make the nested driver ZIP unmistakable (e.g. a dedicated artifact containing only the inner ZIP, and/or a clearly named GitHub Release asset), while preserving the flat ADPKG inner ZIP format.
 5. Do not start performance benchmarking until Winlator imports the inner ZIP and runtime driver identity is confirmed. Never touch the phone's stock/vendor Vulkan driver.
+
+
+### Winlator Mali import success + Tomb Raider benchmark/log review — 2026-11-05
+
+User confirmed the correct inner file `PanVK-G720-experimental.zip` imports successfully into Winlator Mali. The screenshot shows the extracted GitHub Actions artifact directory with:
+- `PanVK-G720-experimental.zip` (3.94 MB): the actual driver package to import.
+- `audit/`: CI-generated diagnostic evidence only (ELF headers/dynamic dependencies/symbol checks, staged-file listing, ICD manifest, hashes, ADPKG ZIP listing/checksum). Not needed by Winlator; safe to keep for debugging or delete after retaining the build evidence.
+- `stage/`: Meson install tree used by CI to audit the installed Android ARM64 driver layout and dependencies. Not a separate driver package and not needed by Winlator; safe to keep for debugging or delete.
+Do not import `audit/`, `stage/`, or the outer GitHub Actions artifact ZIP. Only import the inner `PanVK-G720-experimental.zip`.
+
+User-reported Tomb Raider benchmark:
+- Min 9.4 FPS
+- Max 19.4 FPS
+- Average 14.0 FPS
+Previous comparable Tomb Raider result in the recent project thread was corrected by the user to 13.9 average (reported min 7.8, max 18.9). New average is +0.1 FPS (~0.7%); min/max improved modestly. Treat as essentially flat pending repeat runs with identical scene, resolution, settings, wrapper, thermal state and benchmark duration. No causal performance claim from this single run.
+
+Uploaded logs reviewed:
+- `logcat.log`, `wine_debug.log`, `TombRaider_d3d11.log`, `TombRaider_dxgi.log`, `TombRaider_d3d9.log`.
+- Confirmed the selected custom ICD really loads: Adrenotools reports driver ID `PanVK Mali G720 (experimental)`; hook loads `.../contents/adrenotools/PanVK Mali G720 (experimental)/libvulkan_panfrost.so`; PanVK emits Kbase raw coherency and tiler heap renewal logs. This is not a system-driver fallback.
+- Kbase queue wait completed successfully; no `GPU_SHAREABILITY_FAULT`, GPU fault, OOM, Vulkan error, SIGSEGV, or assertion was found in the supplied capture.
+- DXVK identifies `Wrapper(Mali-G720 MC7)`, driver version `26.2.149`, Vulkan 1.3.354, D3D feature level 11_0. DXVK uses 4 compiler threads; game config shows maxQueuedFrames=1, relaxedBarriers=true, ignoreGraphicsBarriers=true, useEarlyDiscard=true, memoryTrack=true, max device/shared memory 1024 MiB.
+- DXVK's enabled device extensions include `VK_EXT_4444_formats`, `VK_EXT_custom_border_color`, `VK_EXT_depth_clip_enable`, `VK_EXT_extended_dynamic_state`, `VK_EXT_host_query_reset`, `VK_EXT_robustness2`, `VK_EXT_shader_demote_to_helper_invocation`, `VK_EXT_shader_stencil_export`, `VK_EXT_transform_feedback`, `VK_EXT_vertex_attribute_divisor`, `VK_KHR_create_renderpass2`, `VK_KHR_depth_stencil_resolve`, `VK_KHR_draw_indirect_count`, `VK_KHR_driver_properties`, `VK_KHR_image_format_list`, `VK_KHR_sampler_mirror_clamp_to_edge`, `VK_KHR_swapchain`, and `VK_EXT_conditional_rendering`.
+- DXVK feature log reports `multiViewport=1`, `shaderClipDistance=1`, `shaderCullDistance=1`, `geometryStreams=1`, and `geometryShader=1`, despite the project's PanVK source audit documenting limitations/disabled native support for some of these. Treat these as a potentially important wrapper/feature-emulation reporting path that needs source-level verification; do not blindly enable additional PanVK feature bits based on DXVK's log.
+- One notable game-side issue: `D3D11SwapChain: Failed to recreate swap chain`; logcat also records X11 Present `BadImplementation` and a Wine X11 Vulkan `get_client_rect failed`. This points to a WSI/presentation path issue worth investigating separately from shader throughput. Benchmark result was nevertheless reported by user.
+- No direct evidence in this capture that adding ray-query/RT extensions would improve this DX11 game; `VK_KHR_ray_query` is not enabled in DXVK's list and remains unsupported/incomplete in PanVK.
+
+Latest package-contract CI:
+- Workflow run `42033527656` succeeded on source SHA `9188e7bf92a032431ca16ac02d54d81be5a5e12e`.
+- Artifact ID `13418635422`, name `panvk-g720-android-only-experimental-package`, 16,753,599 bytes, artifact digest `sha256:87604a0f16b1ca289ab0310a8695821fd6f66dc9b57e6d04863c1d126b3b4f1d`, expires 2027-02-03.
+- This run adds package metadata contract validation; it does not change driver behavior compared with the prior clip/cull source.
+- The downloaded artifact still contains the outer GitHub artifact archive plus the inner ADPKG ZIP, so retain clear instructions to extract the outer archive and import only the inner ZIP. Future packaging UX improvement: publish the inner ZIP as a clearly named GitHub Release asset or otherwise clearly document the nested archive.
+
+Next development focus:
+1. Import/load path is now confirmed. Stop spending cycles on importer diagnosis.
+2. Audit why DXVK sees some capabilities as enabled that the source matrix previously marked disabled/limited. Trace wrapper's advertised VkPhysicalDeviceFeatures/extensions versus PanVK's queried features; ensure no unsupported feature is being fabricated unsafely.
+3. Investigate WSI swapchain recreation and X11 Present failure. Keep this separate from GPU shader performance and avoid claiming it explains the FPS.
+4. Benchmark repeatability: capture at least 3 same-scene runs before attributing a small 0.1 FPS change to code.
+5. Continue to preserve separate experimental driver packaging; never replace the Android vendor Vulkan driver.
