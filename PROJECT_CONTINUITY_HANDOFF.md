@@ -3508,3 +3508,14 @@ Audit finding: SPIR-V maps `BuiltInClipDistance` to `VARYING_SLOT_CLIP_DIST0` an
 Fix: when a direct VS -> FS link is present, explicitly call `nir_gather_clip_cull_distance_sizes_from_vars()` followed by `nir_merge_clip_cull_distance_vars()` on both VS outputs and FS inputs before capturing counts and checking explicit FS reads. This aligns cull stores and the synthetic FS varying layout with the same packed clip-distance location scheme. Non-direct VS -> GS/TES paths remain untouched. Vulkan feature bits remain disabled.
 
 This is the first PanVK runtime compiler-path change in this clip/cull workstream. It is intentionally scoped to the already-limited direct VS -> FS path. Required next validation: compile Android PanVK and wrapper variants, inspect NIR dumps for cull-only and mixed clip+cull VS/FS pairs, then add/execute targeted shader tests before considering feature exposure. No device runtime or performance claim.
+
+
+### CI guard updated for clip/cull merge integration (2026-11-05 12:55 UTC)
+
+Android-only run `42031120657` on runtime source commit `197a5303131d1759e88df534fa1cd17331ba6988` failed at the pre-build checkout verification step, not during compilation. Its hard-coded grep still required the old source condition `direct_vs_fs &= has_fragment_stage && !direct_fs_reads_clip_cull`, which was intentionally removed by the two-pass direct-link detection and explicit NIR merge integration.
+
+Updated `.github/workflows/android-only-experiment.yml` to verify the new invariants instead:
+- `nir_gather_clip_cull_distance_sizes_from_vars(vs_nir)`
+- `nir_merge_clip_cull_distance_vars(fs_nir)`
+
+CI-only correction commit: `4f4d02e01723d61f1ff19713951be6bcbfa8d08d`. This does not change runtime code. Fresh CI is required; prior run `42031120657` provides no compile evidence because all build steps were skipped after the stale grep failed.
