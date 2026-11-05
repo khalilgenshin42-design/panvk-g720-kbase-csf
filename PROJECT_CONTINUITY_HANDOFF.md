@@ -3347,3 +3347,27 @@ Follow-up run IDs after the source correction commit `4a9c4159780ad27cc64b8ad043
 - Android wrapper: run `42026345779`, Release job `127241398933`, Debugoptimized job `127241399443`.
 
 All four jobs were confirmed queued immediately after the commit; none had started, so there are no new test/build results yet. These are the current candidate runs and supersede earlier pending candidates for validation of the corrected workflow/source SHA. Canonical handoff update commit: this entry is appended after the previous 12:22 UTC correction record.
+
+
+### Dereference-level NIR test added (2026-11-05 12:25 UTC)
+
+Source branch `experiment/g720-clip-cull-capabilities` now includes commit `b4b073d3b3ec1dd8153df888364f09bb2ac6d026` (`nir: test constant and dynamic clip distance derefs`).
+
+Added a NIR test that constructs actual clip-distance output dereferences and exercises:
+- Constant-index scalar load.
+- Dynamic-index scalar load.
+- Constant-index scalar store.
+- Dynamic-index scalar store.
+
+After `nir_lower_clip_cull_distance_to_vec4s()`, the test counts load/store derefs rooted at the generated `gl_ClipDistanceMESA` packed vec4 variable and expects two of each. In debug builds it also runs `nir_validate_shader()`. This checks real dereference retargeting rather than only declaration metadata/layout.
+
+The test is registered through the already-added `clip_cull_distance_tests.cpp` entry in `src/compiler/nir/meson.build`; no test manifest change was required.
+
+CI triggered on the test commit:
+- NIR: run `42026950603`, job `127243424246`.
+- Android-only build/package: run `42026950488`, job `127243424163`.
+- Android wrapper: run `42026950637`, Release job `127243424646`, Debugoptimized job `127243424290`.
+
+At the latest poll, the new NIR job had started checkout but had not yet reached build/test execution; Android-only and wrapper jobs were queued. The prior NIR run `42026345910` had completed Meson setup and the test-registration guard, and was still compiling/running the suite at poll time. Earlier Android-only and wrapper jobs from `4a9c415...` were still running at their host-tool/dependency stages. No test or package success is claimed yet.
+
+Remaining NIR coverage targets: partial component writes with non-zero clip/cull packing offsets; dynamic index bounds/negative index semantics; arrayed GS/TCS/TES derefs. Do not expand into runtime clip/cull exposure until those tests and full stage interface transport are proven.
