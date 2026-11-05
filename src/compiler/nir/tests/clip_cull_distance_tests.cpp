@@ -197,3 +197,70 @@ TEST_F(nir_clip_cull_fragment_test, fragment_mixed_input_arrays_share_location)
    EXPECT_EQ(cull->data.location_frac, 2);
    EXPECT_EQ(clip->data.location, VARYING_SLOT_CLIP_DIST0);
 }
+
+
+static void
+count_packed_distance_accesses(nir_shader *shader, nir_variable *packed,
+                               unsigned *loads, unsigned *stores)
+{
+   *loads = 0;
+   *stores = 0;
+
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            if (intr->intrinsic != nir_intrinsic_load_deref &&
+                intr->intrinsic != nir_intrinsic_store_deref)
+               continue;
+
+            nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+            if (nir_deref_instr_get_variable(deref) != packed)
+               continue;
+
+            if (intr->intrinsic == nir_intrinsic_load_deref)
+               (*loads)++;
+            else
+               (*stores)++;
+         }
+      }
+   }
+}
+
+TEST_F(nir_clip_cull_distance_test,
+       vertex_constant_and_dynamic_scalar_accesses_retarget_vec4)
+{
+   nir_variable *clip =
+      create_distance_var(nir_var_shader_out, "gl_ClipDistance",
+                          VARYING_SLOT_CLIP_DIST0, 8);
+
+   nir_deref_instr *clip_deref = nir_build_deref_var(b, clip);
+   nir_deref_instr *constant_deref =
+      nir_build_deref_array_imm(b, clip_deref, 5);
+   nir_load_deref(b, constant_deref);
+
+   nir_def *dynamic_index = nir_imm_int(b, 6);
+   nir_deref_instr *dynamic_deref =
+      nir_build_deref_array(b, clip_deref, dynamic_index);
+   nir_load_deref(b, dynamic_deref);
+
+   nir_store_deref(b, constant_deref, nir_imm_float(b, 1.0), 1);
+   nir_store_deref(b, dynamic_deref, nir_imm_float(b, 2.0), 1);
+
+   EXPECT_TRUE(nir_lower_clip_cull_distance_to_vec4s(b->shader));
+
+   nir_variable *packed = find_output_var("gl_ClipDistanceMESA");
+   ASSERT_NE(packed, nullptr);
+
+   unsigned loads, stores;
+   count_packed_distance_accesses(b->shader, packed, &loads, &stores);
+   EXPECT_EQ(loads, 2);
+   EXPECT_EQ(stores, 2);
+
+#ifndef NDEBUG
+   nir_validate_shader(b->shader, "clip/cull constant and dynamic access test");
+#endif
+}
