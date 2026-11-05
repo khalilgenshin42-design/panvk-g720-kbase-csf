@@ -3594,3 +3594,39 @@ Added an explicit metadata contract guard to `.github/scripts/package-panvk-adpk
 - CI run `42033527656` (Android-only PanVK package) is building commit `9188e7bf92a032431ca16ac02d54d81be5a5e12e`; do not treat it as passed until completion.
 
 The earlier artifact remains import-format compatible by inspection, but the new build adds a regression guard against future metadata/package drift. Next gate after CI: obtain the newly built ZIP, then user imports it in Winlator Mali and confirms the installed driver entry and runtime device identity. No system Vulkan driver replacement.
+
+
+
+### User-reported Winlator Mali import rejection — 2026-11-05 (14:16 local)
+
+The user reports that the PanVK package they downloaded does not import into Winlator Mali. This supersedes the prior assumption that matching the inspected importer contract was enough to proceed. The package has **not** been proven importable on-device.
+
+Branch inventory was refreshed from the GitHub API: 24 branches exist. `PROJECT_CONTINUITY_HANDOFF.md` exists only on `docs/project-continuity-handoff-2026-11-03`; the other 23 branches return 404 for this path. The canonical document on the docs branch is 3,597 lines / 324,793 characters at the time of this update. The full heading index and latest sections were inspected.
+
+Exact importer source audit from the preceding addendum remains:
+- Winlator Mali 1.2 importer extracts ZIP entries to a temporary directory and checks for root-level `meta.json`.
+- It reads `name`, `driverVersion`, and `libraryName` from that JSON.
+- It uses `libraryName` as the Vulkan ICD library filename.
+- The package script creates a flat inner driver ZIP with root entries `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+
+New important packaging clarification:
+- The GitHub Actions workflow uses `actions/upload-artifact@v4` with a multi-path artifact containing `stage/`, `audit/`, and the actual `PanVK-G720-experimental.zip`.
+- Downloading a GitHub Actions artifact produces an outer artifact ZIP. The actual importer input is the inner `PanVK-G720-experimental.zip` extracted from that outer ZIP, not the outer artifact ZIP itself.
+- The package script does create the inner ZIP with flat root entries. The workflow artifact therefore has a nested ZIP structure at download time.
+- This is a plausible explanation for the user's import rejection if the outer artifact ZIP was selected, but it is not confirmed until the user identifies the exact selected filename or reports the import error.
+- Do not tell the user to keep retrying. Ask one concise diagnostic question: did they select the extracted inner `PanVK-G720-experimental.zip`, or the GitHub-downloaded outer artifact ZIP? Also request the exact Winlator error text/screenshot if the inner ZIP was selected.
+
+Current package-contract guard build:
+- Source branch: `experiment/g720-clip-cull-capabilities`
+- Source SHA: `9188e7bf92a032431ca16ac02d54d81be5a5e12e`
+- Android-only workflow run: `42033527656`
+- Job: `127265677145`
+- At this update, Android ARM64 libdrm, Android configure and host tools had passed; Android PanVK compile was still in progress. No artifact had yet been uploaded.
+- The added guard validates metadata fields, schemaVersion, safe package name, expected ICD libraryName, and presence of the ICD plus private libdrm dependency. It does not test the Winlator importer itself.
+
+Next steps:
+1. Obtain the user's exact selected filename and error. If they selected the outer artifact ZIP, explain extraction and identify the inner ZIP; do not rebuild solely for this.
+2. If the inner ZIP was selected, reproduce the importer parser contract against the exact artifact, inspect its ZIP entry list and meta.json, and inspect the Winlator import exception path/logcat. Check for duplicate metadata naming, extraction exceptions, unsupported JSON parsing, and library file validation.
+3. Once run `42033527656` completes, inspect the package artifact and checksum. Do not present it as a fix until the inner ZIP is independently audited.
+4. Consider changing workflow artifact publishing to make the nested driver ZIP unmistakable (e.g. a dedicated artifact containing only the inner ZIP, and/or a clearly named GitHub Release asset), while preserving the flat ADPKG inner ZIP format.
+5. Do not start performance benchmarking until Winlator imports the inner ZIP and runtime driver identity is confirmed. Never touch the phone's stock/vendor Vulkan driver.
