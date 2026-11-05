@@ -272,3 +272,139 @@ TEST_F(nir_clip_cull_distance_test,
    nir_validate_shader(b->shader, "clip/cull constant and dynamic access test");
 #endif
 }
+
+
+static nir_variable *
+create_arrayed_distance_var(nir_shader *shader, nir_variable_mode mode,
+                            const char *name, unsigned vertices,
+                            unsigned distances)
+{
+   const struct glsl_type *distance_array =
+      glsl_array_type(glsl_float_type(), distances, 0);
+   nir_variable *var =
+      nir_variable_create(shader, mode,
+                          glsl_array_type(distance_array, vertices, 0),
+                          name);
+   var->data.location = VARYING_SLOT_CLIP_DIST0;
+   var->data.assigned = true;
+   return var;
+}
+
+static nir_variable *
+find_packed_distance_var(nir_shader *shader, nir_variable_mode mode)
+{
+   nir_foreach_variable_with_modes(var, shader, mode) {
+      if (var->name && strcmp(var->name, "gl_ClipDistanceMESA") == 0)
+         return var;
+   }
+   return nullptr;
+}
+
+class nir_clip_cull_geometry_test : public nir_test {
+public:
+   nir_clip_cull_geometry_test()
+      : nir_test("clip_cull_geometry", MESA_SHADER_GEOMETRY)
+   {
+   }
+};
+
+TEST_F(nir_clip_cull_geometry_test,
+       geometry_arrayed_input_preserves_vertex_deref)
+{
+   create_arrayed_distance_var(b->shader, nir_var_shader_in,
+                               "gl_ClipDistance", 3, 8);
+
+   nir_deref_instr *deref = nir_build_deref_var(
+      b, find_packed_distance_var(b->shader, nir_var_shader_in));
+   /* Build the original 2D deref: per-vertex array, then distance array. */
+   deref = nir_build_deref_array_imm(b, deref, 1);
+   deref = nir_build_deref_array_imm(b, deref, 5);
+   nir_load_deref(b, deref);
+
+   EXPECT_TRUE(nir_lower_clip_cull_distance_to_vec4s(b->shader));
+
+   nir_variable *packed =
+      find_packed_distance_var(b->shader, nir_var_shader_in);
+   ASSERT_NE(packed, nullptr);
+
+   unsigned loads, stores;
+   count_packed_distance_accesses(b->shader, packed, &loads, &stores);
+   EXPECT_EQ(loads, 1);
+   EXPECT_EQ(stores, 0);
+
+#ifndef NDEBUG
+   nir_validate_shader(b->shader, "geometry arrayed clip input test");
+#endif
+}
+
+class nir_clip_cull_tess_control_test : public nir_test {
+public:
+   nir_clip_cull_tess_control_test()
+      : nir_test("clip_cull_tess_control", MESA_SHADER_TESS_CTRL)
+   {
+   }
+};
+
+TEST_F(nir_clip_cull_tess_control_test,
+       tess_control_arrayed_output_preserves_vertex_deref)
+{
+   nir_variable *clip =
+      create_arrayed_distance_var(b->shader, nir_var_shader_out,
+                                  "gl_ClipDistance", 3, 8);
+
+   nir_deref_instr *deref = nir_build_deref_var(b, clip);
+   deref = nir_build_deref_array_imm(b, deref, 1);
+   deref = nir_build_deref_array_imm(b, deref, 5);
+   nir_store_deref(b, deref, nir_imm_float(b, 1.0), 1);
+
+   EXPECT_TRUE(nir_lower_clip_cull_distance_to_vec4s(b->shader));
+
+   nir_variable *packed =
+      find_packed_distance_var(b->shader, nir_var_shader_out);
+   ASSERT_NE(packed, nullptr);
+
+   unsigned loads, stores;
+   count_packed_distance_accesses(b->shader, packed, &loads, &stores);
+   EXPECT_EQ(loads, 0);
+   EXPECT_EQ(stores, 1);
+
+#ifndef NDEBUG
+   nir_validate_shader(b->shader, "tess-control arrayed clip output test");
+#endif
+}
+
+class nir_clip_cull_tess_eval_test : public nir_test {
+public:
+   nir_clip_cull_tess_eval_test()
+      : nir_test("clip_cull_tess_eval", MESA_SHADER_TESS_EVAL)
+   {
+   }
+};
+
+TEST_F(nir_clip_cull_tess_eval_test,
+       tess_eval_arrayed_input_preserves_vertex_deref)
+{
+   create_arrayed_distance_var(b->shader, nir_var_shader_in,
+                               "gl_ClipDistance", 3, 8);
+
+   nir_deref_instr *deref = nir_build_deref_var(
+      b, find_packed_distance_var(b->shader, nir_var_shader_in));
+   deref = nir_build_deref_array_imm(b, deref, 1);
+   deref = nir_build_deref_array_imm(b, deref, 5);
+   nir_load_deref(b, deref);
+
+   EXPECT_TRUE(nir_lower_clip_cull_distance_to_vec4s(b->shader));
+
+   nir_variable *packed =
+      find_packed_distance_var(b->shader, nir_var_shader_in);
+   ASSERT_NE(packed, nullptr);
+
+   unsigned loads, stores;
+   count_packed_distance_accesses(b->shader, packed, &loads, &stores);
+   EXPECT_EQ(loads, 1);
+   EXPECT_EQ(stores, 0);
+
+#ifndef NDEBUG
+   nir_validate_shader(b->shader, "tess-eval arrayed clip input test");
+#endif
+}
