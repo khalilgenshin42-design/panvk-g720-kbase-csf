@@ -242,8 +242,14 @@ TEST_F(nir_clip_cull_distance_test,
       nir_build_deref_array_imm(b, clip_deref, 5);
    nir_load_deref(b, constant_deref);
 
+   nir_variable *index_var =
+      nir_variable_create(b->shader, nir_var_shader_in, glsl_int_type(),
+                          "dynamic_index");
+   index_var->data.location = VARYING_SLOT_VAR0;
+   index_var->data.assigned = true;
    nir_def *dynamic_index =
-      nir_imm_intN_t(b, 6, nir_get_ptr_bitsize(b->shader));
+      nir_i2iN(b, nir_load_var(b, index_var),
+               nir_get_ptr_bitsize(b->shader));
    nir_deref_instr *dynamic_deref =
       nir_build_deref_array(b, clip_deref, dynamic_index);
    nir_load_deref(b, dynamic_deref);
