@@ -3114,3 +3114,20 @@ The repaired workflow commit `e73b88697f8293613858fbfc9eee671ead46de6f`
 triggered NIR run `42023056158`, Android-only run `42023056179`, and
 wrapper run `42023056338`; all were queued at this poll. These are the
 authoritative runs for the versioned libclc package change.
+
+
+### Latest CI progress poll — 2026-11-05 12:01 UTC
+
+After the versioned package workflow commit, NIR run `42023056158` and
+Android-only run `42023056179` moved from queued to in progress. At the
+latest job-step inspection:
+- NIR job `127230348709`: checkout succeeded; dependency installation was
+  in progress; Meson configure, NIR build, and test execution had not started.
+- Android-only job `127230348185`: checkout succeeded; dependency
+  installation was in progress; host tools, Android configure/compile,
+  packaging, and artifact audit had not started.
+- Android wrapper run `42023056338` remained queued.
+
+No success/failure result is available yet for commit
+`e73b88697f8293613858fbfc9eee671ead46de6f`. Continue polling these exact
+runs; do not treat queued/in-progress status as validation.
