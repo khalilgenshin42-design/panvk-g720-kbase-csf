@@ -121,3 +121,31 @@ panvk_per_arch(CmdPushConstants2KHR)(
 
    memcpy(data, pPushConstantsInfo->pValues, pPushConstantsInfo->size);
 }
+
+#if PAN_ARCH >= 9
+/* VK_EXT_descriptor_heap push data shares the push-constant backing and is
+ * visible to every shader stage. */
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdPushDataEXT)(VkCommandBuffer commandBuffer,
+                               const VkPushDataInfoEXT *pPushDataInfo)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+   gfx_state_set_dirty(cmdbuf, TCS_PUSH_UNIFORMS);
+   gfx_state_set_dirty(cmdbuf, TES_PUSH_UNIFORMS);
+   gfx_state_set_dirty(cmdbuf, FS_PUSH_UNIFORMS);
+   compute_state_set_dirty(cmdbuf, PUSH_UNIFORMS);
+
+   const VkDeviceSize offset = pPushDataInfo->offset;
+   const VkDeviceSize size = pPushDataInfo->data.size;
+   if (offset > MAX_PUSH_CONSTANTS_SIZE ||
+       size > MAX_PUSH_CONSTANTS_SIZE - offset) {
+      assert(!"CmdPushDataEXT range exceeds push-constant storage");
+      return;
+   }
+
+   memcpy((uint8_t *)cmdbuf->state.push_constants.data + offset,
+          pPushDataInfo->data.address, size);
+}
+#endif
