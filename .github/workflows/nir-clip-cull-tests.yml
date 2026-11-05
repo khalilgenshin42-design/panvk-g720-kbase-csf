@@ -38,7 +38,8 @@ jobs:
           meson setup build \
             -Dplatforms=[] \
             -Dgallium-drivers=[] \
-            -Dvulkan-drivers=[] \
+            -Dvulkan-drivers=panfrost
+            -Dpanfrost-kmds=kbase \
             -Dtools=[] \
             -Dbuild-tests=true \
             -Dllvm=disabled \
