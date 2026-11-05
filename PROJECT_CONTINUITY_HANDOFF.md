@@ -9,7 +9,7 @@ This section supersedes older "next steps" and "no code changed" statements in t
 - Canonical handoff branch: `docs/project-continuity-handoff-2026-11-03` (the only branch containing this root handoff file).
 - Current isolated implementation branch: `experiment/g720-descriptor-heaps`, source HEAD `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`.
 - Existing primary source branch `experiment/g720-clip-cull-capabilities` remains at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`; it has not been merged with the descriptor-heap branch.
-- Capability matrix branch: `experiment/g720-performance-audit`, HEAD `a41b5f22bdc60cedb6bce783df192ac5031a7fde`.
+- Capability matrix branch: `experiment/g720-performance-audit`, HEAD `82fc0e49709e170e7b669c3c62b6bc1cbbc9e722`.
 
 ### Current implementation state
 
@@ -4170,3 +4170,13 @@ Android-only run `42078972694` completed successfully on source commit `3e4e7ee3
 This is an intermediate validation only: that commit includes the first descriptor writer implementation but predates the later custom-border registration commands/restrictions and the YCbCr descriptor-count property correction. **Do not ask the user to test or import this intermediate artifact.**
 
 Current source HEAD remains `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`; exact-head Android-only run `42080294652` is queued and must pass before packaging/testing is considered current.
+
+
+### Exhaustive extension/feature census update
+
+The capability matrix now contains an exhaustive parse of the current descriptor-heap source branch's physical-device initializer:
+- 186 explicit extension-table assignments;
+- 298 feature assignments: 173 literal true, 70 literal false, and 55 architecture/device/DRIRC-gated expressions.
+
+The matrix lists every extension initializer, every literal-false feature field, and every non-literal feature gate. It also separates likely compiler-emulatable candidates from features needing hardware/ISA confirmation and architectural limitations. This replaces older approximate counts (185/296). Matrix branch HEAD is now `82fc0e49709e170e7b669c3c62b6bc1cbbc9e722`.
+
