@@ -385,3 +385,6 @@ The experimental G720 branch now has writer implementations for:
 Image opaque capture returns `VK_ERROR_FEATURE_NOT_PRESENT` because capture/replay is not exposed. Acceleration-structure and ARM tensor descriptor writes are not supported and return `VK_ERROR_FEATURE_NOT_PRESENT`, consistent with those capabilities remaining disabled.
 
 Source HEAD `c3f9a776cb59215a42e4c6c5579a1a90f1ae8312`; exact-head Android-only build run `42079149912` queued. This remains provisional pending compile/link and runtime tests.
+
+
+Conditional custom-border-color commands required by the registry have also been added on Valhall. Since Mali sampler descriptors embed the full border-color value, registration/unregistration are valid no-op operations; requested in-range indices are preserved, and non-requested registration returns index 0. This is provisional until the latest Android build and runtime tests pass. Current source HEAD `c9377fc98595de9b873fcba5a6997c5bf514ab4c`.
