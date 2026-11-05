@@ -895,3 +895,16 @@ CI note: the first NIR workflow reached Meson configuration successfully but fai
 
 
 Host NIR CI was refined after discovering that disabling all Vulkan drivers caused Meson to select `with_nir_headers_only`, omitting the real NIR implementation and test target. The workflow now enables `vulkan-drivers=panfrost` and `panfrost-kmds=kbase` so the full NIR library/tests are built. Rerun pending; no successful result is claimed.
+
+
+### Vec4 lowering / merge ordering hazard (source audit)
+
+The generic NIR helper `nir_lower_clip_cull_distance_to_vec4s()` discovers
+clip and cull sizes from variables at the original CLIP_DIST0 and CULL_DIST0
+locations. The separate merge helper moves cull IO into the CLIP_DIST location
+range and marks declarations hidden. Therefore, blindly running vec4
+normalization after merge can lose the original cull-array size/offset.
+Existing tests currently cover gather+merge only, not this interaction.
+Treat helper ordering as unresolved until focused NIR tests cover mixed
+arrays, dereference loads/stores, indirect indexing, and arrayed GS/TCS/TES
+interfaces. No PanVK feature bits are enabled.
