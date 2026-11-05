@@ -1720,13 +1720,17 @@ panvk_nir_lower_cull_vs(nir_shader *nir, unsigned clip_count)
             nir_variable *var = nir_deref_instr_get_variable(d);
             if (!var || var->data.mode != nir_var_shader_out ||
                 !var->data.compact ||
-                var->data.location != VARYING_SLOT_CLIP_DIST0)
+                (var->data.location != VARYING_SLOT_CLIP_DIST0 &&
+                 var->data.location != VARYING_SLOT_CLIP_DIST1))
                continue;
 
             b.cursor = nir_before_instr(instr);
             nir_def *value = intr->src[1].ssa;
+            const unsigned array_base =
+               (var->data.location - VARYING_SLOT_CLIP_DIST0) * 4 +
+               var->data.location_frac;
             nir_def *index =
-               nir_iadd_imm(&b, d->arr.index.ssa, var->data.location_frac);
+               nir_iadd_imm(&b, d->arr.index.ssa, array_base);
             nir_def *cull = nir_b2f32(&b, nir_flt_imm(&b, value, 0.0));
             nir_def *out =
                nir_bcsel(&b, nir_uge_imm(&b, index, clip_count), cull, value);
