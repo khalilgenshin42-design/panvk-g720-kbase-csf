@@ -4185,3 +4185,55 @@ The matrix lists every extension initializer, every literal-false feature field,
 ### Exact-head compile failure and correction
 
 Android-only run `42080294652` reached PanVK compilation and failed at the new YCbCr descriptor-count expression: `struct pan_model` intentionally has no `arch` member. The fix derives the architecture from the actual Kbase GPU ID with `pan_arch(physical_device->kmod.dev->props.gpu_id)`, matching existing PanVK physical-device code. The corrected source is `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`; exact-head Android-only run `42082198442` is queued. The intermediate run `42078972694` still validates only the older writer implementation and is not a test artifact.
+
+
+---
+
+## 2026-11-05 — Descriptor-heap branch exact-head build and package passed
+
+The descriptor-heap implementation has now passed the first exact-current-source Android build and packaging gates.
+
+### Exact source and CI results
+
+- Source branch: `experiment/g720-descriptor-heaps`
+- Exact source HEAD: `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`
+- Android-only workflow run: `42082198442`
+  - Job `127437878725`: SUCCESS.
+  - Android ARM64 Meson configure, compile/stage, driver/manifest/dependency audit, flat Winlator/Adrenotools package build, package audit, and artifact upload all passed.
+- Android wrapper workflow run: `42082198906`
+  - Release job `127437880299`: SUCCESS.
+  - Debugoptimized job `127437880903`: SUCCESS.
+- Exact-head Android package artifact: `13441682356`
+  - Artifact name: `panvk-g720-android-only-experimental-package`
+  - Size: 16,805,654 bytes.
+  - GitHub artifact digest: `sha256:0a4f6b7899f3df42a89133f071b2c441e62739e8000ad55bdf14af7329fccf71`
+  - Expires: 2027-02-03T18:13:46Z.
+- Nested Winlator-importable package: `PanVK-G720-experimental.zip`
+  - SHA-256: `2142ecffb957580f317071b9f1c0370029650cade149d10aa62f472fc5de82d6`
+  - Package version: `26.3.0-devel-android-kbase-04947cb94a99`
+  - Flat archive contents verified: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, `SHA256SUMS`.
+  - Inner SHA256SUMS verified against both packaged binaries and metadata.
+- ELF/DRM audit: missing DRM symbol list is empty; all required DRM references are resolved by the bundled private `libpanvk_drm.so`. No missing DRM symbols were found.
+- The outer artifact was downloaded and inspected; its nested package SHA-256 matches the audit record. This is the first exact-HEAD package; older artifact `13438649591` remains stale and must not be used.
+
+### Descriptor-heap source review performed
+
+Reviewed the Valhall shader metadata/cache serialization, NIR lowering, resource-table construction, heap bind/inheritance commands, descriptor writers, custom-border registration commands, and physical-device extension/feature/property reporting.
+
+- NIR heap byte offsets are shifted by the 32-byte descriptor size and converted to resource-table handles; resource heap data loads use the resource-table UBO path.
+- Resource-table entries are reserved for resource heap, sampler heap, and embedded samplers.
+- Shader binary cache revision 1 serializes the explicit heap-use flag and packed embedded sampler data; deserialization bounds the count and checks the blob before consuming sampler bytes. The mandatory default embedded sampler means heap-using shaders have at least one embedded sampler.
+- Descriptor writer supports sampler descriptors, uniform/storage buffers, uniform/storage texel buffers, sampled/storage images, and input attachments. Unsupported acceleration-structure/tensor/vendor descriptor types return `VK_ERROR_FEATURE_NOT_PRESENT`; YCbCr/subsampled samplers are rejected by the sampler writer and YCbCr image descriptor count follows the same PanVK texture-count helper as ordinary descriptor layouts.
+- Capture/replay, sparse heaps, and protected heaps remain disabled. `VK_EXT_descriptor_heap` and `descriptorHeap` are exposed only on Valhall-class architectures (`PAN_ARCH >= 9`); G720 v12 is included. No ray-query or sparse-binding support is being force-advertised.
+- The command entrypoints compile successfully from the repository registry/generated dispatch path. This confirms compile-time API wiring, not Vulkan CTS conformance.
+
+### Current gate / user action
+
+The exact-head source has passed compile/link, Android ARM64 package creation, ELF/libdrm symbol audit, and flat package-contract audit. A device runtime test is now required. No runtime test, Vulkan CTS run, or game-compatibility claim has been made for this descriptor-heap branch.
+
+Ask the user to import **only** the nested `PanVK-G720-experimental.zip` from artifact `13441682356` into Winlator Mali 1.2 using its custom driver importer. Do not install or replace the Android vendor/system Vulkan driver. First verify that Winlator loads the package and that a Vulkan app/game reaches device creation and swapchain creation; then run the controlled Tomb Raider test and capture the complete Winlator logs. If the first runtime attempt fails, retain the logs and do not repeatedly benchmark or change unrelated wrapper settings.
+
+The package can be downloaded from the GitHub Actions run:
+https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42082198442
+
+Next engineering work after the user supplies runtime evidence: diagnose any loader/WSI/CSF fault, add descriptor-heap targeted tests (especially buffer/image/sampler descriptor writes, YCbCr image descriptor counts, secondary inheritance, and shader-cache round trips), and only then consider broader capability enablement or performance tuning. Do not claim descriptor heaps are Vulkan-conformant based on compilation alone.
