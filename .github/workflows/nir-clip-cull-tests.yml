@@ -1,0 +1,60 @@
+name: NIR clip-cull compiler tests
+
+on:
+  push:
+    branches:
+      - experiment/g720-clip-cull-capabilities
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nir-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            python3-mako \
+            python3-yaml \
+            meson \
+            ninja-build \
+            bison \
+            flex \
+            pkg-config \
+            libdrm-dev \
+            libelf-dev \
+            libzstd-dev \
+            libexpat1-dev
+
+      - name: Configure minimal host build with NIR tests
+        run: |
+          meson setup build \
+            -Dplatforms=[] \
+            -Dgallium-drivers=[] \
+            -Dvulkan-drivers=[] \
+            -Dtools=[] \
+            -Dbuild-tests=true \
+            -Dllvm=disabled \
+            -Dglx=disabled \
+            -Degl=disabled \
+            -Dgbm=disabled \
+            -Dopengl=false \
+            -Dgles1=disabled \
+            -Dgles2=disabled \
+            -Dglvnd=disabled \
+            -Dvalgrind=disabled \
+            -Dshared-glapi=disabled \
+            -Dzstd=disabled
+
+      - name: Build NIR tests
+        run: ninja -C build src/compiler/nir/nir_tests
+
+      - name: Run NIR compiler tests
+        run: meson test -C build --suite nir --print-errorlogs
