@@ -2259,3 +2259,24 @@ visual correctness, hangs, and teardown. Do not infer that the override took
 effect from the FPS alone; obtain a diagnostic log or another reliable
 confirmation of the parsed threshold. Do not change ring sizes, BO retention,
 descriptor heap topology, or kbase kernel/system driver.
+
+
+### 2026-11-05 follow-up — make heap-threshold override verifiable
+
+Added one informational log at the one-time parse site for
+`PANVK_KBASE_HEAP_RENEW_WORK` in
+`src/panfrost/vulkan/csf/panvk_vX_gpu_queue.c`. On the first Kbase heap-work
+threshold lookup, PanVK now logs the **effective parsed threshold** as
+`kbase: tiler heap renewal work threshold=<value>`. This is intentionally
+independent of `PANVK_KBASE_PROFILE`, so an uninstrumented benchmark can
+verify whether Winlator actually passed the override. It logs once per
+process/device path and does not alter threshold parsing, renewal conditions,
+or heap behavior. Commit: `52afaaf880fdf3a8cb4e6e0c5cd6598ec482d3ee`.
+
+CI is triggered for this source change and must pass before packaging. The
+next device comparison can now be performed without profiling overhead:
+first unset all `PANVK_*_PROFILE` options and record the default threshold
+log (65,536); then set only
+`PANVK_KBASE_HEAP_RENEW_WORK=262144`, repeat the exact benchmark, and
+confirm the log says 262,144. If the log remains 65,536 or is absent, the
+override is not verified and the run is not a valid threshold experiment.
