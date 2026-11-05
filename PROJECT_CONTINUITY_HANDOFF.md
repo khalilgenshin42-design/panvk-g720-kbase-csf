@@ -4009,7 +4009,7 @@ Repository-wide branch reconciliation was performed before continuing. The repos
 
 - Branch: `experiment/g720-descriptor-heaps`
 - Base: latest source branch `experiment/g720-clip-cull-capabilities` at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`
-- Current branch HEAD after descriptor heap writer-command and custom-border registration implementation: `c9377fc98595de9b873fcba5a6997c5bf514ab4c`
+- Current branch HEAD after descriptor heap writer restrictions and embedded-sampler validation: `0bf2e527c42fe06733d5c0b1557c9d2cec0c1412`
 - The existing source and audit branches remain unchanged.
 
 ### Implemented in the experimental branch (not yet build-validated)
@@ -4114,3 +4114,16 @@ The current `VK_EXT_descriptor_heap` registry also conditionally requires `vkReg
 - The sampler descriptor writer packs the actual custom border color value; it does not rely on the opaque registration index.
 
 CI now checks that both conditional custom-border commands are present. Current source HEAD is `c9377fc98595de9b873fcba5a6997c5bf514ab4c`; exact-head Android-only run `42079497576` is queued. No build or runtime validation of the descriptor writer path has passed yet.
+
+
+### Descriptor writer spec corrections
+
+The current Khronos proposal was checked for descriptor-writing constraints:
+
+- `vkWriteSamplerDescriptorsEXT` must not write YCbCr or subsampled samplers; these must use embedded samplers. The writer now rejects both.
+- Custom border colors cannot be used with embedded samplers; `panvk_init_heap_desc_info` now rejects them.
+- Custom border colors written to the sampler heap require an explicit registered index; the writer now rejects a missing/out-of-range index.
+- YCbCr image descriptors may consume multiple image descriptors. The writer uses `panvk_image_get_tex_count(PAN_ARCH, view_format)`, which is also the PanVK count used for per-binding texture descriptor allocation.
+- PanVK does not expose `VK_EXT_fragment_density_map`, QCOM image-processing descriptor types, `VK_KHR_acceleration_structure`, or `VK_ARM_tensors`; corresponding subsampled/QCOM/AS/tensor descriptor types remain unsupported.
+
+These restrictions are now reflected in source HEAD `0bf2e527c42fe06733d5c0b1557c9d2cec0c1412`. Exact-head Android-only build run `42079746341` is queued. No compile/link or runtime validation has passed yet.
