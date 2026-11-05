@@ -33,6 +33,7 @@ jobs:
             libzstd-dev \
             libexpat1-dev \
             llvm-dev \
+            libclc-dev \
             clang
 
       - name: Configure minimal host build with NIR tests
