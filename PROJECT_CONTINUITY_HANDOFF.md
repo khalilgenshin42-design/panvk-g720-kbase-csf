@@ -4068,4 +4068,4 @@ Correction:
 - Added its prototype to `panvk_sampler.h`.
 - Current source branch HEAD is now `346bffa794850bfa70c3495794f8ccccda89a251`.
 
-A new Android-only build started on the immediately preceding source commit `13bd689e56ec0baa7ee4f92bc5de0a7c81c888ef` (run `42077165223`); the header declaration commit `346bffa794850bfa70c3495794f8ccccda89a251` was pushed immediately afterward, so a fresh build on the exact latest HEAD is required. Do not treat the earlier failed run as validation, and do not package/test yet.
+A new Android-only build started on the immediately preceding source commit `13bd689e56ec0baa7ee4f92bc5de0a7c81c888ef` (run `42077165223`); the header declaration commit `346bffa794850bfa70c3495794f8ccccda89a251` was pushed immediately afterward, so a fresh build on the exact latest HEAD is required. That exact-HEAD build is now running as Android-only run `42077180170` (head `346bffa794850bfa70c3495794f8ccccda89a251`); its host-tool generation is in progress at last check. Do not treat the earlier failed run as validation, and do not package/test yet.
