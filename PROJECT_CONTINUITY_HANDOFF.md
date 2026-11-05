@@ -2401,3 +2401,30 @@ WSI/teardown behavior, and any OOM/heap errors. Reject the candidate if it
 causes instability or worse frame pacing, even if average FPS rises. Do not
 change kernel/system driver, ring size, descriptor topology, or Vulkan feature
 exposure as part of this experiment.
+
+
+### Additional kernel-level constraint — heap statistics are per CSI
+
+A source audit of the Arm Kbase CSF kernel implementation resolves an
+important ambiguity in the older PanVK comments. In
+`mali_kbase_csf.c`, `handle_oom_event(group, group_id, stream_id)` reads
+`CS_HEAP_VT_START`, `CS_HEAP_VT_END`, and `CS_HEAP_FRAG_END` using that
+same `stream_id` (CSI index), then validates
+`frag_end <= vt_end < vt_start` before allocating a chunk. Therefore the
+statistics are per command stream/CSI, not aggregated across all CSIs in a
+CSG. The Nov 4 one-CSG/three-CSI topology does **not** make it safe to restore
+`VERTEX_TILER_COMPLETED` or `FRAGMENT_COMPLETED` on the separate VT and
+fragment CSIs. Re-enabling those firmware heap operations without a new
+same-CSI design would reproduce the invalid-statistics failure. Keep the
+current kbase suppression and wholesale heap renewal; do not change it as a
+performance experiment. Kernel source: Google Android kernel Mali Kbase CSF
+`mali_kbase_csf.c`, `handle_oom_event()`, where the CSI-specific reads and
+validation are explicit:
+https://android.googlesource.com/kernel/google-modules/gpu/+/c60221160c224b1516c34151663134df22d6123d/mali_kbase/csf/mali_kbase_csf.c
+
+The Kbase device setup uses 1 MiB chunks, 10 initial chunks, and 400 max
+chunks. Thus the configured heap ceiling is 400 MiB per queue, with 10 MiB
+initial allocation, subject to kernel allocation behavior. The 4x work
+threshold candidate can let a generation grow longer toward that ceiling;
+monitor OOM/device-loss and memory pressure closely on the 12 GB device. Do
+not increase the 400-chunk cap. The 4x branch remains an A/B candidate only.
