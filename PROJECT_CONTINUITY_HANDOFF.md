@@ -3410,3 +3410,19 @@ The NIR suite passed for the initial dereference test on commit `b4b073d...` (ru
 Corrected the test to read its index from a real shader input variable (`dynamic_index`, `VARYING_SLOT_VAR0`) and convert it to the dereference pointer index width with `nir_i2iN()`. The dynamic store expectation remains five packed stores (one constant plus four guarded lane stores). New source commit: `c6dfaabc0ba69c2a863c54b55eb67a8ac07d6b1c` (`nir: exercise genuinely dynamic clip distance indexing`).
 
 This is a test-only strengthening. Its CI run must be treated as the first meaningful validation of truly dynamic dereference lowering. Earlier passing run `42026950603` does not validate the corrected dynamic case.
+
+
+### Android-only package and wrapper build completion (2026-11-05 12:34 UTC)
+
+Source SHA `b4b073d3b3ec1dd8153df888364f09bb2ac6d026` completed both Android build workflows successfully:
+
+- Android-only PanVK run `42026950488`, job `127243424163`: all steps passed, including real Android ARM64 libdrm build, Android-only Meson configure, compile/stage, driver/manifest/dependency/staged-file audit, flat Winlator/Adrenotools package, and artifact upload.
+- Artifact `13414308531`, `panvk-g720-android-only-experimental-package`, 16,751,330 bytes, SHA-256 `cf6161267381e04a62d9d7688ffa98b6d6e4890cba312c8c98dec6aa15031db0`, expires 2027-02-03. This is build/package evidence only; it does not contain the new NIR test source in the runtime binary and has not been installed or run on the phone.
+- Android wrapper run `42026950637`: Release and Debugoptimized jobs both passed compile and artifact upload. Artifacts: Release `13415120558` (4,288,183 bytes; SHA-256 `7e65d300c2816dd14c30ec516417a1c48aafdddfb9d029c7602181252917c122`); Debugoptimized `13414776990` (50,663,701 bytes; SHA-256 `5d1c6f091a6e247b86c6a1c020fcf6e2735e7910ebd1cfb5a1541e5cf81816ad`). These are wrapper build outputs, not proof of PanVK runtime feature support.
+
+NIR test CI:
+- Run `42026950603` on `b4b073d...` passed: the new test compiled and suite reported 2/2 passing. On later review, the dynamic index was a constant immediate and could be folded, so this was not considered sufficient dynamic-path validation.
+- Pointer-sized index correction commit `92e631280...` and store-count correction commit `ccc0fbde...` are test-only revisions. The latter expects one constant store plus four guarded stores for a genuinely dynamic index.
+- A further test-strengthening commit `c6dfaabc0ba69c2a863c54b55eb67a8ac07d6b1c` replaces the immediate with a shader input load and casts it to pointer index width. This is the first intended truly dynamic test. NIR run `42027837669` is currently in progress for that source; earlier NIR runs `42027059205` and `42027207795` are also compiling previous intermediate revisions.
+
+No runtime PanVK code or Vulkan feature reporting changed. Do not ask the user to install/test the package yet: the dynamic NIR test still needs a confirmed pass, and the current source SHA `c6dfaabc...` Android-only package run `42027837719` must finish if a matching latest artifact is desired.
