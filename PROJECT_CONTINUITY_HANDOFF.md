@@ -3177,3 +3177,13 @@ The NIR workflow was updated again to install `spirv-tools` and `spirv-tools-dev
 New run `42024214325` is active on this commit. At last poll, checkout passed and dependency installation was in progress; Meson configuration, NIR test build, and tests are pending. Do not claim test success yet.
 
 The wrapper and Android-only workflows also triggered on commit `0f8ce3f...`: wrapper run `42024102067` was still generating host tools in both Release and Debugoptimized jobs; Android-only run `42024102129` was installing dependencies. Newer runs on `9fcacf9...` were queued at the last poll. The earlier Android-only run `42023056179` on `e73b886...` remains the verified successful Android package build and artifact `13412349016`.
+
+
+
+### Third NIR CI dependency repair (2026-11-05 12:07 UTC)
+
+Run `42024214325` on SHA `9fcacf93ea9a23710f2bcdf91dd0054c6de7950d` installed all requested dependencies, and Meson found both `LLVMSPIRVLib 22.1.0.0` and `SPIRV-Tools 2026.1.1`. Configuration then stopped at `meson.build:2135`: C++ library `clangBasic` was not found. Again, the failure is before NIR compilation/tests.
+
+Added `libclang-22-dev` to the NIR workflow, matching the package used by the successful Android-only host-tool workflow. Commit: `df19c4403995abbbb489b08d47b5fb9f648cd8a4` (`ci: add Clang development libraries to NIR tests`). New NIR run `42024367795` was queued at the last poll; no test result yet.
+
+Runs on prior dependency-repair SHA `9fcacf9...` were still in progress at last poll: Android-only `42024214279` (host tools stage) and Android wrapper `42024214246` (dependency/host-tools stage). Runs on current SHA `df19c44...` were queued: NIR `42024367795`, Android-only `42024367447`, wrapper `42024367688`. Continue polling and avoid counting superseded runs as current-source validation.
