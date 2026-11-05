@@ -2503,3 +2503,89 @@ Verified package extracted to `/mnt/data/PanVK-G720-heap-renew-262k.zip` for del
 ### Next A/B test
 
 Install the 262,144 candidate as a separate Winlator driver. Keep the same Tomb Raider scene, resolution, quality, DXVK 1.7.2, wrapper, DXVK configuration, and comparable thermal starting condition as the 65,536 baseline. Keep all `PANVK_*_PROFILE` variables unset. Verify startup log reports `tiler heap renewal work threshold=262144`; if not, stop and report the actual value. Capture min/max/average FPS, frame pacing if available, visual correctness, crashes, heap OOM/device-loss, and teardown. Compare against baseline 9.0 / 17.6 / 13.5 FPS and repeat each variant if possible. Keep the 65K package for rollback.
+
+
+## 2026-11-05 — 262K candidate result and capability-first pivot
+
+### 262,144-work-threshold device capture
+
+Inspected user archive `TombRaider_logs_2026-11-05_02-42-14.zip`.
+The startup log confirms the imported build is the 262,144 candidate:
+`[MESA-PANVK] kbase: tiler heap renewal work threshold=262144`.
+The run therefore tested the intended threshold. The user reported min 7.8 FPS,
+max 18.9 FPS, average 3.9 FPS. The average is mathematically inconsistent
+with the reported minimum and maximum, so it is **unverified** and must not be
+used in comparisons until corrected. Do not infer a performance gain from
+min/max alone.
+
+The DXVK D3D11 log identifies Wrapper(Mali-G720 MC7), driver 26.2.149,
+Vulkan 1.3.354, and DXVK 1.7.2. It lists the device extensions/features DXVK
+actually enabled for this D3D11 device. **This is not the complete list of
+extensions/features supported by the Vulkan driver**; it is the application-
+enabled subset. The log cannot be used to claim that PanVK only supports those
+listed extensions. The uploaded capture contains no PanVK CSF fatal-error or
+device-lost report in the inspected startup/game logs.
+
+### Capability-first direction
+
+The user requested shifting effort away from low-confidence micro-tuning and
+toward enabling the Mali-G720's supported GPU capabilities, then optimizing
+against that broader capability set. Adopt this as the project direction.
+Keep the 65K baseline and 262K candidate as separate rollback/A-B artifacts;
+do not promote 262K based on this capture.
+
+Initial source audit of
+`src/panfrost/vulkan/panvk_vX_physical_device.c` on
+`experiment/g720-performance-audit` (source blob
+`6f8062ef02dd8b7707b2a16d4868aa7d84f4a4fb`):
+
+- PanVK's extension table already advertises a broad Vulkan 1.4-era set.
+  Many gates use `PAN_ARCH >= 10`, which are true for Mali v12, including
+  conditional rendering, transform feedback, descriptor indexing,
+  robustness2, draw-indirect-count, sampler-filter-minmax, and several
+  image/compute capabilities. The actual DXVK-enabled list is only a subset.
+- The v12 feature table already enables many relevant capabilities, including
+  8/16-bit storage, descriptor indexing/update-after-bind, runtime descriptor
+  arrays, non-uniform indexing, buffer device address, Vulkan memory model,
+  float16, shader int8/int64, subgroup operations, dynamic rendering, and
+  transform feedback/conditional rendering.
+- Several feature fields are deliberately false or specially gated and need
+  individual implementation audits rather than blanket flips:
+  `vertexPipelineStoresAndAtomics` (v12 remains false unless the explicit
+  force-atomics debug option is set; source comment explains the hardware
+  speculative invalid-index concern on pre-v13), `multiViewport`,
+  `pipelineStatisticsQuery`, `shaderClipDistance`, `shaderCullDistance`,
+  `geometryStreams`, sparse binding on Kbase (the sparse bind queue is a
+  stub), and selected advanced rasterization/atomic subfeatures.
+- `VK_KHR_ray_query` is absent from the PanVK extension table. Do not add its
+  extension bit alone: no end-to-end ray-query implementation has yet been
+  established across acceleration-structure handling, SPIR-V/NIR lowering,
+  shader compilation, synchronization, and feature/property reporting.
+  Hardware capability or another driver's software implementation is not
+  proof that this PanVK path exists.
+
+### Next engineering work
+
+1. Build a v12 capability matrix from the current extension table, core and
+   extension feature structs, property reporting, compiler lowering, and
+   Kbase backend constraints. Mark every field as implemented, hardware-
+   limited, compiler-limited, backend-limited, or unverified.
+2. Compare the v12 results with upstream Mesa PanVK and the relevant Mali
+   compiler/ISA support. Avoid assuming that a feature's architecture gate
+   alone proves correctness on this Kbase CSF backend.
+3. Prioritize missing features that materially help DXVK/VKD3D (descriptor
+   indexing, indirect draws, shader arithmetic/storage capabilities,
+   transform feedback, dynamic state, synchronization) before speculative
+   RT support.
+4. For each candidate, add or enable the complete implementation path and
+   tests; do not merely set an extension-table boolean or VkBool32.
+5. Keep Kbase-specific unsupported sparse binding disabled until its queue
+   path is implemented. Keep v12 vertex-pipeline stores/atomics disabled
+   until invalid-index/speculation semantics and compiler-generated accesses
+   are proven safe.
+6. Obtain a complete supported-extension/feature dump from the device (for
+   example via a Vulkan capability tool running against the imported PanVK
+   driver) to distinguish driver-supported capabilities from DXVK's enabled
+   subset. Retain the application log as a record of what DXVK actually uses.
+
+No feature exposure or runtime source change was made in this audit step.
