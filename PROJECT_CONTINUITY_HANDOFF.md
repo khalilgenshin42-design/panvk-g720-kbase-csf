@@ -1877,3 +1877,12 @@ An important architecture correction was made during the port:
 - Android-only run `41937769803` reached the PanVK C compilation stage (host tools, ARM64 libdrm and Meson setup all succeeded) and failed at `panvk_vX_shader.c` with one call-site error: the standalone shader compile helper omitted the new `vs_varying_layout` NULL argument after the compile function signature was extended.
 - Fixed the argument order in commit `7c9331a1b6706fe199f5ff02379903249ae44db2`. The failing run was on the earlier commit and does not establish that the NIR lowering itself fails to compile. A fresh Android-only build is required on the corrected head.
 - Current code branch head after this fix: `7c9331a1b6706fe199f5ff02379903249ae44db2`. Features remain disabled; no device package is considered qualified.
+
+### Latest source refinements and rebuild
+
+- `49c821509482e96fa1ef7c8db1e5686729b21feb`: cull-distance lowering now handles merged arrays beginning in either CLIP_DIST0 or CLIP_DIST1, adding the slot's four-component base plus `location_frac` before comparing the absolute index against clip_count.
+- `7c9331a1b6706fe199f5ff02379903249ae44db2`: fixed the standalone shader compile call to pass the new VS varying-layout argument as NULL. The previous Android-only build had failed only on this missing argument at the PAN_ARCH=6 compile target.
+- `e9857947b2ee2f244fe07c782cf4166bf06a34de`: changed the NIR helper to track progress per function implementation rather than reusing a cumulative progress flag for later functions.
+- Latest branch head: `e9857947b2ee2f244fe07c782cf4166bf06a34de`.
+- Fresh Android-only PanVK build run `41938609257` and wrapper-variant build run `41938609251` have started on the latest head. At last check, Android-only CI was still installing dependencies; an earlier run `41938462326` was generating host tools. Await the latest run's compile and package audit before declaring build validation.
+- No device runtime test has been run. All clip/cull feature bits remain false.
