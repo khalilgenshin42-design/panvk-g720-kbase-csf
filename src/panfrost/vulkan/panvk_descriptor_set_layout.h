@@ -60,6 +60,14 @@
  * of 16 sets, but we reserve 9 for our internal use, so we have 7 left. */
 #define MAX_SETS 7
 
+/* VK_EXT_descriptor_heap resource-table entries after driver set 0 and
+ * ordinary descriptor sets 1..MAX_SETS. Heap offsets are byte offsets into
+ * arrays of 32-byte Mali descriptors. */
+#define PANVK_HEAP_RESOURCE_TABLE (MAX_SETS + 1)
+#define PANVK_HEAP_SAMPLER_TABLE  (MAX_SETS + 2)
+#define PANVK_HEAP_EMBEDDED_TABLE (MAX_SETS + 3)
+#define PANVK_HEAP_TABLE_END      (MAX_SETS + 4)
+
 /* Hardware limit is 2^24 each of buffer, texture, and sampler descriptors. We
  * use the same hardware descriptors for multiple kinds of vulkan descriptors,
  * and may want to reorganize these in the future, so advertise a lower limit
