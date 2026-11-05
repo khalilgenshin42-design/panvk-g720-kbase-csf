@@ -242,7 +242,8 @@ TEST_F(nir_clip_cull_distance_test,
       nir_build_deref_array_imm(b, clip_deref, 5);
    nir_load_deref(b, constant_deref);
 
-   nir_def *dynamic_index = nir_imm_int(b, 6);
+   nir_def *dynamic_index =
+      nir_imm_intN_t(b, 6, nir_get_ptr_bitsize(b->shader));
    nir_deref_instr *dynamic_deref =
       nir_build_deref_array(b, clip_deref, dynamic_index);
    nir_load_deref(b, dynamic_deref);
