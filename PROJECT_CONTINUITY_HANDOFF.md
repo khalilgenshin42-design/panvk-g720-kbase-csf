@@ -2662,3 +2662,81 @@ software lowering, **not proof of complete all-stage Vulkan semantics**.
 Likewise its pipeline-statistics implementation explicitly omits indirect
 work and fragment invocations and approximates geometry/tessellation counts.
 These caveats are now part of the port plan.
+
+
+## 2026-11-05 — clip/cull pipeline transport audit (experiment branch)
+
+Dedicated branch: `experiment/g720-clip-cull-capabilities` (starting commit
+`2fb0c3c792a193d0bed9d6eafda5cee606546150`). No runtime source or feature
+exposure changes have been made in this audit step.
+
+### Newly confirmed shared infrastructure
+
+- `nir_clip_cull_distance_io_utils.c` already provides
+  `nir_gather_clip_cull_distance_sizes_from_vars()`,
+  `nir_merge_clip_cull_distance_vars()`, and
+  `nir_lower_clip_cull_distance_to_vec4s()`. The latter rewrites scalar
+  distance arrays to vec4 varyings while retaining input/output semantics and
+  supports arrayed GS/TCS/TES interfaces. Its helper asserts that each
+  distance array is at most eight elements; the driver must separately enforce
+  Vulkan's combined clip+cull limit and interface consistency.
+- `poly_nir_lower_vs_before_gs()` writes every scalarized VS/TES output to
+  libpoly's intermediate vertex buffer using the complete
+  `outputs_written` mask. The software GS input lowering reads those same
+  slots. TCS per-vertex output masks/strides also include ordinary varying
+  slots. This suggests the existing poly vertex ABI can transport clip/cull
+  values, but this is not yet proof of complete array semantics or the final
+  FS link.
+- `poly_nir_passthrough_gs.c` already has explicit
+  `clip_distance_array_size` and `cull_distance_array_size` fields in
+  `poly_passthrough_gs_key`. It combines compact clip/cull slots and forwards
+  the correct per-vertex values. This helper is not the same as PanVK's
+  current custom software-GS path.
+- PanVK's custom software-GS path calls `poly_nir_lower_gs()`. Its generated
+  rasterization VS collects output types by varying slot, selects per-output
+  values, then writes them back by slot. It has no explicit clip/cull array-size
+  handling in `poly_gs_info`; that is a critical point to audit before relying
+  on it for combined arrays, especially when both clip and cull arrays cross
+  slot 0/1 boundaries.
+- TCS/TES compilation uses libpoly's per-vertex output masks and buffer ABI;
+  TES followed by GS is explicitly lowered to the software predecessor path.
+  Clip/cull must be checked on both TES-alone and TES->GS routes, not inferred
+  from direct VS->FS behavior.
+
+### Current direct VS -> FS limitation
+
+The existing PanVK lowering captures only a direct VS->FS link, only when the
+FS does not declare clip/cull inputs, and only when the combined count is at
+most eight. It rewrites cull distances to discard indicators in the hardware
+VS and inserts FS discard checks. It does not provide a unified normalized
+interface for explicit FS reads, GS, TCS, or TES. The two feature bits and all
+three reported distance limits remain zero/false.
+
+### Required implementation order
+
+1. Normalize and record clip/cull array sizes before any IO lowering, with
+   explicit validation for absent arrays, arrayed stage interfaces, and the
+   combined eight-distance implementation limit.
+2. Establish one consistent compact varying representation for all legal
+   pre-raster stages. Verify direct VS, VS->TCS->TES, VS->GS, and
+   VS->TCS->TES->GS, including clip-only, cull-only, and mixed arrays.
+3. Extend the custom GS output collection/forwarding path to preserve compact
+   clip/cull arrays, or prove with NIR tests that its current per-slot path is
+   already correct for every array layout. Do not assume the passthrough GS
+   helper is used by this custom path.
+4. Let fragment shaders retain reads of their own ClipDistance/CullDistance
+   inputs while deriving discard from the same normalized interpolated values.
+   Check interpolation qualifiers, partial writes, and array indexing.
+5. Only then set `shaderClipDistance` / `shaderCullDistance` and report limits.
+   Keep feature bits disabled until focused NIR tests, Vulkan CTS coverage, an
+   Android build, and device visual tests pass.
+
+Useful source blobs on this branch:
+- `panvk_vX_shader.c`: `4a163dcbf74a10c48caea79801318da48f4affcc`
+- `poly_nir_lower_gs.c`: `e13f4cdd3c78794e04c653adbdd2249aba2dcc46`
+- `poly_nir_lower_tess.c`: `0950afc78a59526a0901956278de01411a1824fe`
+- `poly_nir_passthrough_gs.c`: `1c2e9ed90003a15f6a49e2ea23a61b3dd4d57b78`
+- `poly_nir.h`: `706f5a1fa636d386adf3790ab2395f4c86627c11`
+- `nir_clip_cull_distance_io_utils.c`: `79555c202ba93bb43d1ff5edc7905a2a3051166e`
+
+No claim of feature support, build success, or runtime correctness is made.
