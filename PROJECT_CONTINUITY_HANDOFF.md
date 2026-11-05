@@ -1981,3 +1981,29 @@ declare the change build-validated until both wrapper jobs and the Android-only
 build are checked. No device runtime test or FPS improvement has been claimed.
 No system/vendor driver, kbase kernel, synchronization behavior, or descriptor
 heap topology was modified.
+
+
+## 2026-11-05 follow-up — CSF ring telemetry
+
+Added further disabled-by-default profiling on
+`experiment/g720-performance-audit`:
+- Descriptor pools: `PANVK_DESCRIPTOR_PROFILE=1` records requested pool
+  backing bytes, largest pool, pool creation failures, set allocation counts,
+  requested set bytes, and allocation failures.
+- CSF ring: `PANVK_KBASE_PROFILE=1` now additionally records ring bytes
+  cleaned, wrap events, occupancy sample count, and aggregate outstanding-byte
+  high-water mark across subqueues. Firmware extract-page reads for occupancy
+  are performed only when profiling is enabled.
+
+Latest code commit:
+`842ac70aa83575b15757b869137ba598824c044e`.
+Latest audit-doc update:
+`b4f8759db3616b4e9a4aa50d1f66b0d1ef3a87bf`.
+Android-only and Android wrapper CI runs for the latest source commit were
+started and remain pending at this checkpoint. Intermediate CI runs are also
+in flight; use the latest-source run for the final compile verdict. No device
+runtime test, FPS gain, synchronization change, descriptor allocator topology
+change, or kbase kernel modification is claimed.
+
+Detailed audit and implementation notes:
+[docs/G720_PERFORMANCE_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_PERFORMANCE_AUDIT_2026-11-05.md).
