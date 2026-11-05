@@ -314,3 +314,25 @@ The same named project files were fetched on `experiment/g720-clip-cull-capabili
 6. Build all PAN_ARCH variants used by the build and run Vulkan CTS descriptor-heap tests plus VKD3D-Proton D3D12.
 
 No descriptor-heap feature has been exposed or code changed yet. The extension remains deliberately disabled until this sequence is completed.
+
+
+## Descriptor heap lowering contract (source-level reference audit)
+
+The JimVulkan Valhall reference implementation was inspected at `58f2c55854bd48b18df756edb11f187af9cd2fde`. This pins down the port contract beyond the previous high-level file map:
+
+| Layer | Required behavior | Port status |
+|---|---|---|
+| API generation | `VK_EXT_descriptor_heap` registry types, feature/property structs, command prototypes and generated entrypoints | Not yet verified in the local 26.3 generated headers/registry |
+| Shader compilation | invoke generic `vk_nir_lower_descriptor_heaps()` and preserve shader create flags / embedded sampler metadata | Generic runtime + SPIR-V parser exist; PanVK call site not present |
+| Texture NIR | heap byte offset / 32 becomes Mali resource-table handle; texture and sampler heap sources become native Mali handles | Missing in project branch |
+| Buffer NIR | `load_heap_descriptor` becomes `(handle,0,0)`; heap data reads use resource-table UBO access | Missing in project branch |
+| Image NIR | image heap load/store/atomic/size/sample intrinsics rewrite through normal image lowering | Missing in project branch |
+| Resource table | reserve heap resource, heap sampler and embedded sampler entries after ordinary sets; extend allocation for `uses_heaps` shaders | Missing in project branch |
+| Command state | bind resource/sampler heap into graphics + compute descriptor state; inherit into secondary command buffers | Missing in project branch |
+| Push data | `CmdPushDataEXT` copies into push-constant backing and dirties all stage push-uniform state; validate overflow-safe range | Missing in project branch |
+| Embedded samplers | default sampler + embedded sampler array uploaded with correct alignment; lifecycle and binary cache serialization/deserialization | Missing in project branch |
+| Feature/property | advertise only after all above paths work; 64-byte heap alignment, 32-byte descriptors, 24-bit handle range, 256-byte push data, 2048 embedded samplers in reference | Disabled in project branch |
+
+Important implementation invariant: the 32-byte descriptor stride, resource-table index allocation, NIR handle arithmetic, and max-heap-size property must agree exactly. A mismatch can silently address the wrong descriptor. The reference's `minStorageBufferOffsetAlignment=4` is supported by its measured Valhall compiler/hardware behavior and VKD3D-Proton requirements, but must be separately validated in this Mesa 26.3 source and on G720 before adopting.
+
+Next: verify generated Vulkan API inputs and inspect the generic lowerer's call contract; then port as a coherent feature series, not independent feature-bit flips.
