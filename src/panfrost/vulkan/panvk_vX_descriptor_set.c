@@ -34,6 +34,10 @@
 #include "panvk_image_view.h"
 #include "panvk_macros.h"
 #include "panvk_priv_bo.h"
+
+#include "pan_buffer.h"
+#include "pan_desc.h"
+#include "pan_props.h"
 #include "panvk_sampler.h"
 
 /* Opt-in descriptor-pool telemetry. Keep the default path to one predictable
@@ -1107,3 +1111,199 @@ void panvk_per_arch(descriptor_set_flush)(struct panvk_descriptor_set *set)
    set->descs.dirty_min = SIZE_MAX;
    set->descs.dirty_max = 0;
 }
+
+
+#if PAN_ARCH >= 9
+static VkResult
+panvk_write_heap_sampler(struct panvk_device *device,
+                         const VkSamplerCreateInfo *sampler_info,
+                         const VkHostAddressRangeEXT *dst)
+{
+   if (!dst->address || dst->size < PANVK_DESCRIPTOR_SIZE)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+
+   struct vk_sampler_state state;
+   vk_sampler_state_init(&state, sampler_info);
+
+   /* YCbCr and subsampled samplers have dedicated mapping/embedding paths. */
+   if (state.has_ycbcr_conversion ||
+       (sampler_info->flags & VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT))
+      return panvk_error(device, VK_ERROR_FEATURE_NOT_PRESENT);
+
+   struct mali_sampler_packed desc;
+   panvk_per_arch(sampler_state_fill_desc)(&state, &desc);
+   memcpy(dst->address, &desc, sizeof(desc));
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+panvk_write_heap_buffer(struct panvk_device *device,
+                        const VkDeviceAddressRangeEXT *range,
+                        bool storage,
+                        const VkHostAddressRangeEXT *dst)
+{
+   const uint64_t align_mask = storage ? 3 : 15;
+   if (!range || !dst->address || dst->size < PANVK_DESCRIPTOR_SIZE ||
+       range->size > UINT32_MAX - align_mask)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+
+   struct mali_buffer_packed desc;
+   pan_pack(&desc, BUFFER, cfg) {
+      cfg.address = range->address;
+      cfg.size = align(range->size, storage ? 4 : 16);
+   }
+   memcpy(dst->address, &desc, sizeof(desc));
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+panvk_write_heap_texel_buffer(struct panvk_device *device,
+                              const VkTexelBufferDescriptorInfoEXT *info,
+                              const VkHostAddressRangeEXT *dst)
+{
+   if (!info || !dst->address || dst->size < PANVK_DESCRIPTOR_SIZE)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+
+   enum pipe_format pfmt = vk_format_to_pipe_format(info->format);
+   uint32_t block_size = util_format_get_blocksize(pfmt);
+   if (pfmt == PIPE_FORMAT_NONE || block_size == 0 ||
+       info->addressRange.size == 0 ||
+       info->addressRange.size % block_size != 0 ||
+       info->addressRange.size / block_size > UINT32_MAX)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+
+   struct pan_buffer_view bview = {
+      .format = pfmt,
+      .width_el = info->addressRange.size / block_size,
+      .base = info->addressRange.address,
+   };
+   struct mali_buffer_packed desc;
+   GENX(pan_buffer_texture_emit)(&bview, &desc);
+   memcpy(dst->address, &desc, sizeof(desc));
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+panvk_write_heap_image(struct panvk_device *device,
+                       const VkImageDescriptorInfoEXT *info,
+                       VkDescriptorType type,
+                       const VkHostAddressRangeEXT *dst)
+{
+   if (!info || !info->pView || !dst->address)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+
+   VkImageView image_view = VK_NULL_HANDLE;
+   VkResult result = panvk_per_arch(CreateImageView)(
+      panvk_device_to_handle(device), info->pView, NULL, &image_view);
+   if (result != VK_SUCCESS)
+      return result;
+
+   VK_FROM_HANDLE(panvk_image_view, view, image_view);
+   const uint32_t tex_count =
+      panvk_image_get_tex_count(PAN_ARCH, view->vk.view_format);
+   const size_t desc_bytes = tex_count * sizeof(struct mali_texture_packed);
+
+   if (tex_count == 0 || tex_count > PANVK_MAX_PLANES ||
+       (type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && tex_count != 1) ||
+       dst->size < desc_bytes) {
+      panvk_per_arch(DestroyImageView)(panvk_device_to_handle(device),
+                                       image_view, NULL);
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+   }
+
+   for (uint32_t plane = 0; plane < tex_count; plane++) {
+      const struct mali_texture_packed *desc =
+         type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+            ? &view->descs.storage_tex[plane]
+            : &view->descs.tex[plane];
+      memcpy((uint8_t *)dst->address + plane * sizeof(*desc), desc,
+             sizeof(*desc));
+   }
+
+   panvk_per_arch(DestroyImageView)(panvk_device_to_handle(device),
+                                    image_view, NULL);
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+panvk_per_arch(WriteSamplerDescriptorsEXT)(
+   VkDevice _device, uint32_t samplerCount,
+   const VkSamplerCreateInfo *pSamplers,
+   const VkHostAddressRangeEXT *pDescriptors)
+{
+   VK_FROM_HANDLE(panvk_device, device, _device);
+   if (samplerCount == 0 || !pSamplers || !pDescriptors)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+
+   for (uint32_t i = 0; i < samplerCount; i++) {
+      VkResult result =
+         panvk_write_heap_sampler(device, &pSamplers[i], &pDescriptors[i]);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+panvk_per_arch(WriteResourceDescriptorsEXT)(
+   VkDevice _device, uint32_t resourceCount,
+   const VkResourceDescriptorInfoEXT *pResources,
+   const VkHostAddressRangeEXT *pDescriptors)
+{
+   VK_FROM_HANDLE(panvk_device, device, _device);
+   if (resourceCount == 0 || !pResources || !pDescriptors)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+
+   for (uint32_t i = 0; i < resourceCount; i++) {
+      const VkResourceDescriptorInfoEXT *resource = &pResources[i];
+      const VkHostAddressRangeEXT *dst = &pDescriptors[i];
+      VkResult result;
+
+      switch (resource->type) {
+      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+         result = panvk_write_heap_buffer(
+            device, resource->data.pAddressRange,
+            resource->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dst);
+         break;
+
+      case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+      case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+         result = panvk_write_heap_texel_buffer(
+            device, resource->data.pTexelBuffer, dst);
+         break;
+
+      case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+      case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+         result = panvk_write_heap_image(device, resource->data.pImage,
+                                         resource->type, dst);
+         break;
+
+      default:
+         /* Acceleration structures, tensors, and vendor-specific descriptor
+          * types are not implemented by this PanVK device. */
+         return panvk_error(device, VK_ERROR_FEATURE_NOT_PRESENT);
+      }
+
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
+   return VK_SUCCESS;
+}
+
+/* Descriptor heap capture/replay is deliberately not advertised. */
+VKAPI_ATTR VkResult VKAPI_CALL
+panvk_per_arch(GetImageOpaqueCaptureDataEXT)(
+   VkDevice _device, uint32_t imageCount, const VkImage *pImages,
+   VkHostAddressRangeEXT *pDatas)
+{
+   VK_FROM_HANDLE(panvk_device, device, _device);
+   return panvk_error(device, VK_ERROR_FEATURE_NOT_PRESENT);
+}
+#endif
