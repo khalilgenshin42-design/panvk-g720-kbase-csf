@@ -2428,3 +2428,44 @@ initial allocation, subject to kernel allocation behavior. The 4x work
 threshold candidate can let a generation grow longer toward that ceiling;
 monitor OOM/device-loss and memory pressure closely on the 12 GB device. Do
 not increase the 400-chunk cap. The 4x branch remains an A/B candidate only.
+
+
+### Baseline package artifact audit — source SHA a2e5ac1
+
+Android-only workflow run `41947103034` completed successfully, including
+Android ARM64 libdrm build, Android-only configure/compile/stage, driver and
+manifest/dependency audit, flat Winlator/Adrenotools ZIP creation, and artifact
+upload. Artifact `13378853545` (`panvk-g720-android-only-experimental-package`)
+was downloaded and independently inspected.
+
+- Outer workflow artifact SHA-256:
+  `0eb248e1d80d1a6eb03b015b932cd43afe2a5bf8c1b8e2e7f77cdd722aea6b58`.
+- Inner Winlator package: `PanVK-G720-experimental.zip`, 4,133,006 bytes;
+  SHA-256 `bc2bd7efa8b696fdda24a345a616dcf196d863b1133712e4a89bd4e7995ed170`.
+- Inner archive has exactly four files: `meta.json`,
+  `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`; ZIP integrity
+  test passed and all three file checksums match.
+- Both shared objects are Android ELF64 AArch64 built for Android API 30.
+  Driver has `RUNPATH=$ORIGIN`, `DT_NEEDED libpanvk_drm.so`, and the expected
+  Android platform libraries; bundled `libpanvk_drm.so` has only libc as a
+  dependency. CI's undefined-DRM-symbol audit is empty.
+- Manifest reports Vulkan API 1.4.354 and
+  `/usr/local/lib/libvulkan_panfrost.so`. Metadata identifies source package
+  version `26.3.0-devel-android-kbase-a2e5ac142b4f`, minApi 30, and explicitly
+  labels the driver experimental/non-conformant/unverified.
+
+This is a verified **65,536-work-threshold baseline package**, not the 262,144
+candidate and not a performance-promoted release. The wrapper workflow for
+run `41947103085` has Debugoptimized successful; Release was still in host-tool
+generation at the last check. Candidate branch
+`experiment/g720-heap-renew-262k` source SHA
+`8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7` has Android-only run
+`41947695997` in progress (host tools) and wrapper run `41947696048` in
+progress/queued (Release and Debugoptimized). The later baseline-source runs
+at SHA `e226f2068e3374b63481099390871d390510fece` are also still in progress.
+
+The inner package was copied to the current work area as
+`/mnt/data/PanVK-G720-baseline-65k.zip` for a controlled baseline run. Device
+A/B still requires profiling variables unset, the effective threshold log
+checked, and the same Tomb Raider scene/settings. No FPS improvement is
+claimed from the build or artifact audit.
