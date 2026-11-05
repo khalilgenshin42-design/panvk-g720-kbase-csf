@@ -1910,3 +1910,12 @@ An important architecture correction was made during the port:
 - This validates the prototype's source compilation and packaging on Android ARM64. It does **not** validate shader semantics, Vulkan CTS, or runtime on the actual Dimensity 8400 Ultra/Mali-G720 MC7.
 - The artifact predates the final direct-path safety refinements in `027589f...` and workflow assertion update `f843a225...`; do not import it as a qualified build. Latest-source Android-only run `41938817775` (head `f843a225...`) is still in progress at last check.
 - No FPS benchmark was run and no feature bits were enabled.
+
+
+## 2026-11-05 follow-up — clip/cull artifact audit
+
+The final-source Android-only build on `experiment/clip-cull-distance-v12` (`f843a225f9b4f1821e69bb52ed0718c86628b8d3`) passed workflow run `41938817775`. Artifact ID `13375886001` was downloaded; outer ZIP SHA-256 `52b73dc390ad8f0a3fcb537d9f247406f54ccbdf1fa3a966acf396796b588475` verified. The inner flat Winlator package SHA-256 is `916a4c9c2b425c2dce5e7f3be472c9e1714ca2dcdea935dad710d02edc6c8f41`; all three payload checksums pass. Driver/helper are AArch64 Android ELF; private libdrm dependency and $ORIGIN RUNPATH are correct. This remains compile/package validation only.
+
+Read-only review reconfirmed direct VS->FS gating, cull-only hardware VS transformation, untouched XFB variant, and zero/false clip/cull limits and feature bits. No dedicated PanVK test harness exists in this source tree; semantic validation remains open. Do not advertise clip/cull until direct-path shader tests and TCS/TES/GS transport are complete.
+
+Detailed source, artifact, branch inventory, test matrix, and next steps: [docs/CLIP_CULL_VS_FS_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/docs/project-continuity-handoff-2026-11-03/docs/CLIP_CULL_VS_FS_AUDIT_2026-11-05.md).
