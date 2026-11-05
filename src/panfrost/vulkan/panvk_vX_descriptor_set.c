@@ -1125,9 +1125,9 @@ panvk_write_heap_sampler(struct panvk_device *device,
    struct vk_sampler_state state;
    vk_sampler_state_init(&state, sampler_info);
 
-   /* YCbCr and subsampled samplers have dedicated mapping/embedding paths. */
-   if (state.has_ycbcr_conversion ||
-       (sampler_info->flags & VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT))
+   /* Subsampled samplers are not supported by this device. YCbCr uses
+    * one sampler descriptor on Valhall (samplerYcbcrConversionCount = 1). */
+   if (sampler_info->flags & VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT)
       return panvk_error(device, VK_ERROR_FEATURE_NOT_PRESENT);
 
    struct mali_sampler_packed desc;
