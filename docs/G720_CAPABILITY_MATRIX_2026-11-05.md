@@ -336,3 +336,8 @@ The JimVulkan Valhall reference implementation was inspected at `58f2c55854bd48b
 Important implementation invariant: the 32-byte descriptor stride, resource-table index allocation, NIR handle arithmetic, and max-heap-size property must agree exactly. A mismatch can silently address the wrong descriptor. The reference's `minStorageBufferOffsetAlignment=4` is supported by its measured Valhall compiler/hardware behavior and VKD3D-Proton requirements, but must be separately validated in this Mesa 26.3 source and on G720 before adopting.
 
 Next: verify generated Vulkan API inputs and inspect the generic lowerer's call contract; then port as a coherent feature series, not independent feature-bit flips.
+
+
+## Correction: generic heap NIR lowering is called by the shared runtime
+
+The current 26.3 project branch already calls `vk_nir_lower_descriptor_heaps()` in both `src/vulkan/runtime/vk_shader.c` and `src/vulkan/runtime/vk_pipeline.c`. The runtime extracts `VkShaderDescriptorSetAndBindingMappingInfoEXT` from shader create-info `pNext`, lowers NIR, removes dead uniform/image variables and runs DCE. Pipeline compilation additionally hashes descriptor heap mappings into the shader stage cache key. Therefore do **not** add a duplicate generic lowering call in PanVK. PanVK must instead implement backend heap-offset/handle lowering and consume the generic lowerer's `embedded_samplers_out` data through the shader compilation callback; verify callback compatibility before porting.
