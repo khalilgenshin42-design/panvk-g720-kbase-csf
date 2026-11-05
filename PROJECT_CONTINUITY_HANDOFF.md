@@ -3089,3 +3089,28 @@ Ubuntu 26.04 runner's APT package candidates. New runs
 runs `42022450295` (NIR), `42022450154` (Android-only), and
 `42022450159` (Android wrapper) were still queued/in progress. No result
 for the new dependency correction is available yet.
+
+
+### CI poll update — 2026-11-05 12:00 UTC
+
+Additional workflow results:
+- NIR run `42022450295` completed FAILURE because it checked out the
+  pre-repair commit `cec14bb825176cb714e0a6d2e4dab3c7dd44de0e`, whose
+  workflow still installs unavailable `libclc-dev`. Its log confirms failure
+  during APT dependency installation; Meson, compilation, and tests did not
+  run. This is not a test-source failure.
+- Android-only run `42022253321` for commit
+  `43bc2ca59b3f5adbc804161f662e9d55617dd5fe` completed SUCCESS. Its
+  `build-android-only` job passed. This establishes an Android ARM64 build
+  for that source revision; it does not validate the latest vec4 test commit
+  or runtime behavior.
+- Android wrapper run `42022450159` for
+  `cec14bb825176cb714e0a6d2e4dab3c7dd44de0e` remained in progress. Both
+  debugoptimized and release jobs had completed setup/dependency install and
+  were generating host tools. Wrapper output is separate from the PanVK
+  Vulkan driver artifact.
+
+The repaired workflow commit `e73b88697f8293613858fbfc9eee671ead46de6f`
+triggered NIR run `42023056158`, Android-only run `42023056179`, and
+wrapper run `42023056338`; all were queued at this poll. These are the
+authoritative runs for the versioned libclc package change.
