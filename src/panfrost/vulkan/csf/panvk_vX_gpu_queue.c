@@ -89,7 +89,9 @@ struct kbase_profile_stats {
    uint64_t subqueue_wait_calls, subqueue_wait_ns;
    uint64_t subqueue_wait_timeouts, subqueue_wait_errors;
    uint64_t status_drain_calls, status_drain_ns, status_drain_nonempty;
-   uint64_t ring_jobs, queue_doorbells, queue_kicks, native_gpu_wait_submits;
+   uint64_t ring_jobs, ring_bytes_cleaned, ring_wraps;
+   uint64_t ring_occupancy_samples, ring_occupancy_high_water;
+   uint64_t queue_doorbells, queue_kicks, native_gpu_wait_submits;
    uint64_t heap_renew_count, heap_renew_interval_triggers;
    uint64_t heap_renew_work_triggers, heap_renew_work_total;
    uint64_t heap_renew_wait_ns, heap_renew_total_ns;
@@ -176,7 +178,9 @@ kbase_profile_dump(void)
              "; subqueue waits=%" PRIu64 " total_ms=%.3f"
              " timeouts=%" PRIu64 " errors=%" PRIu64
              "; status drains=%" PRIu64 " total_ms=%.3f nonempty=%" PRIu64
-             "; ring jobs=%" PRIu64 " doorbells=%" PRIu64
+             "; ring jobs=%" PRIu64 " cleaned_KiB=%.1f wraps=%" PRIu64
+             " occupancy_samples=%" PRIu64 " occupancy_high_water_KiB=%.1f"
+             " doorbells=%" PRIu64
              " kicks=%" PRIu64 " native GPU-wait submits=%" PRIu64
              "; heap renewals=%" PRIu64 " interval=%" PRIu64
              " work=%" PRIu64 " work_total=%" PRIu64
@@ -192,6 +196,10 @@ kbase_profile_dump(void)
              kbase_profile_read(&kbase_profile.status_drain_ns) / 1000000.0,
              kbase_profile_read(&kbase_profile.status_drain_nonempty),
              kbase_profile_read(&kbase_profile.ring_jobs),
+             kbase_profile_read(&kbase_profile.ring_bytes_cleaned) / 1024.0,
+             kbase_profile_read(&kbase_profile.ring_wraps),
+             kbase_profile_read(&kbase_profile.ring_occupancy_samples),
+             kbase_profile_read(&kbase_profile.ring_occupancy_high_water) / 1024.0,
              kbase_profile_read(&kbase_profile.queue_doorbells),
              kbase_profile_read(&kbase_profile.queue_kicks),
              kbase_profile_read(&kbase_profile.native_gpu_wait_submits),
@@ -845,8 +853,26 @@ kbase_subqueue_emit_job(struct panvk_gpu_queue *queue, uint32_t subqueue,
 
    subq->kbase.insert += padded_size;
    subq->kbase.emitted_jobs++;
-   if (kbase_profile_enabled())
+   if (kbase_profile_enabled()) {
       kbase_profile_add(&kbase_profile.ring_jobs, 1);
+      kbase_profile_add(&kbase_profile.ring_bytes_cleaned, padded_size);
+      if (offset + padded_size > KBASE_RINGBUF_SIZE)
+         kbase_profile_add(&kbase_profile.ring_wraps, 1);
+
+      const uint8_t *output_page = (uint8_t *)subq->kbase.user_io + 8192;
+      uint64_t extract = *(volatile uint64_t *)(
+         output_page + CS_USER_IO_OUTPUT_CS_EXTRACT);
+      uint64_t occupancy = subq->kbase.insert - extract;
+      kbase_profile_add(&kbase_profile.ring_occupancy_samples, 1);
+
+      uint64_t high_water =
+         kbase_profile_read(&kbase_profile.ring_occupancy_high_water);
+      while (high_water < occupancy &&
+             !__atomic_compare_exchange_n(
+                &kbase_profile.ring_occupancy_high_water, &high_water,
+                occupancy, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+         ;
+   }
 
    mesa_logd("kbase: emitted subqueue %u job %" PRIu64
              ": ring offset %u, entry %u/%u bytes, stream 0x%" PRIx64
