@@ -977,6 +977,9 @@ panvk_per_arch(BeginCommandBuffer)(VkCommandBuffer commandBuffer,
    }
 
    panvk_per_arch(cmd_inherit_render_state)(cmdbuf, pBeginInfo);
+#if PAN_ARCH >= 9
+   panvk_per_arch(cmd_inherit_desc_heaps)(cmdbuf, pBeginInfo);
+#endif
 
    if (cmdbuf->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
       const VkCommandBufferInheritanceConditionalRenderingInfoEXT *cond_info =
