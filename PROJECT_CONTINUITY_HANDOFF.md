@@ -2050,3 +2050,25 @@ modified.
 
 Detailed audit:
 [docs/G720_PERFORMANCE_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_PERFORMANCE_AUDIT_2026-11-05.md).
+
+## 2026-11-05 follow-up — transient BO telemetry added
+
+On `experiment/g720-performance-audit`, commit
+`396c924ccccb07b15b429b5cdc82fd9318374664` adds disabled-by-default
+`PANVK_MEMPOOL_PROFILE=1` counters in `src/panfrost/vulkan/panvk_mempool.c`:
+allocation calls/bytes/failures, regular and large free-BO reuse counts,
+backing BO creation calls/requested bytes/failures, and largest requested BO.
+Snapshots occur every 1024 allocation requests and on failures. No BO
+selection, allocation semantics, reference ownership, reset, or cache
+maintenance behavior was changed. It does not measure retained/free-list
+bytes or exact live BO totals.
+
+The preceding telemetry build validation remains confirmed successful for
+commit `b4f8759db3616b4e9a4aa50d1f66b0d1ef3a87bf` (Android-only run
+`41941578949`; wrapper run `41941579141`). The new BO telemetry commit has
+triggered a fresh CI cycle; its result must be checked before calling this
+newest source build-validated. No device runtime validation or FPS gain is
+claimed.
+
+Detailed audit:
+[docs/G720_PERFORMANCE_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_PERFORMANCE_AUDIT_2026-11-05.md).
