@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
@@ -34,6 +35,57 @@
 #include "panvk_macros.h"
 #include "panvk_priv_bo.h"
 #include "panvk_sampler.h"
+
+/* Opt-in descriptor-pool telemetry. Keep the default path to one predictable
+ * branch per event; no logging or timing calls occur unless explicitly enabled.
+ */
+struct panvk_desc_profile_stats {
+   uint64_t pool_creates, pool_create_bytes, pool_create_failures;
+   uint64_t pool_max_bytes, set_allocs, set_alloc_bytes, set_alloc_failures;
+};
+static struct panvk_desc_profile_stats panvk_desc_profile;
+
+static bool
+panvk_desc_profile_enabled(void)
+{
+   static int enabled = -1;
+   if (enabled < 0)
+      enabled = debug_get_bool_option("PANVK_DESCRIPTOR_PROFILE", false);
+   return enabled;
+}
+
+static void
+panvk_desc_profile_add(uint64_t *counter, uint64_t value)
+{
+   __atomic_fetch_add(counter, value, __ATOMIC_RELAXED);
+}
+
+static uint64_t
+panvk_desc_profile_read(uint64_t *counter)
+{
+   return __atomic_load_n(counter, __ATOMIC_RELAXED);
+}
+
+static void
+panvk_desc_profile_dump(void)
+{
+   if (!panvk_desc_profile_enabled())
+      return;
+
+   mesa_logi("descriptor profile: pools=%" PRIu64
+             " requested_MiB=%.2f max_pool_MiB=%.2f pool_failures=%" PRIu64
+             " set_allocs=%" PRIu64 " set_alloc_MiB=%.2f set_failures=%" PRIu64,
+             panvk_desc_profile_read(&panvk_desc_profile.pool_creates),
+             panvk_desc_profile_read(&panvk_desc_profile.pool_create_bytes) /
+                (1024.0 * 1024.0),
+             panvk_desc_profile_read(&panvk_desc_profile.pool_max_bytes) /
+                (1024.0 * 1024.0),
+             panvk_desc_profile_read(&panvk_desc_profile.pool_create_failures),
+             panvk_desc_profile_read(&panvk_desc_profile.set_allocs),
+             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_bytes) /
+                (1024.0 * 1024.0),
+             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_failures));
+}
 
 static const void *
 get_desc_slot_ptr(struct panvk_descriptor_set *set, uint32_t binding,
@@ -423,12 +475,31 @@ panvk_per_arch(CreateDescriptorPool)(
 
    if (desc_count) {
       uint64_t pool_size = desc_count * PANVK_DESCRIPTOR_SIZE;
+      if (panvk_desc_profile_enabled()) {
+         panvk_desc_profile_add(&panvk_desc_profile.pool_creates, 1);
+         panvk_desc_profile_add(&panvk_desc_profile.pool_create_bytes,
+                                pool_size);
+         uint64_t old_max =
+            panvk_desc_profile_read(&panvk_desc_profile.pool_max_bytes);
+         while (old_max < pool_size &&
+                !__atomic_compare_exchange_n(
+                   &panvk_desc_profile.pool_max_bytes, &old_max, pool_size,
+                   false, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+            ;
+      }
       VkResult result = panvk_init_pool_memory(device, pool, pCreateInfo,
                                                pool_size, pAllocator);
       if (result != VK_SUCCESS) {
+         if (panvk_desc_profile_enabled()) {
+            panvk_desc_profile_add(&panvk_desc_profile.pool_create_failures, 1);
+            panvk_desc_profile_dump();
+         }
          panvk_destroy_descriptor_pool(device, pAllocator, pool);
          return result;
       }
+      if (panvk_desc_profile_enabled() &&
+          panvk_desc_profile_read(&panvk_desc_profile.pool_creates) % 16 == 0)
+         panvk_desc_profile_dump();
    }
 
    *pDescriptorPool = panvk_descriptor_pool_to_handle(pool);
@@ -568,22 +639,39 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
       }
    }
 
-   if (num_descs > UINT32_MAX)
+   if (num_descs > UINT32_MAX) {
+      if (panvk_desc_profile_enabled())
+         panvk_desc_profile_add(&panvk_desc_profile.set_alloc_failures, 1);
       return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
+   }
 
    /* Cast before multiplying: descriptor counts are untrusted app input. */
    uint64_t descs_size = num_descs * (uint64_t)PANVK_DESCRIPTOR_SIZE;
+   if (panvk_desc_profile_enabled()) {
+      panvk_desc_profile_add(&panvk_desc_profile.set_allocs, 1);
+      panvk_desc_profile_add(&panvk_desc_profile.set_alloc_bytes, descs_size);
+   }
    uint32_t first_free_set =
       __bitset_ffs(pool->free_sets, BITSET_WORDS(pool->max_sets));
-   if (first_free_set == 0 || pool->desc_heap.free_size < descs_size)
+   if (first_free_set == 0 || pool->desc_heap.free_size < descs_size) {
+      if (panvk_desc_profile_enabled()) {
+         panvk_desc_profile_add(&panvk_desc_profile.set_alloc_failures, 1);
+         panvk_desc_profile_dump();
+      }
       return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
+   }
 
    uint64_t descs_dev_addr = 0;
    if (num_descs) {
       descs_dev_addr = util_vma_heap_alloc(&pool->desc_heap, descs_size,
                                            PANVK_DESCRIPTOR_SIZE);
-      if (!descs_dev_addr)
+      if (!descs_dev_addr) {
+         if (panvk_desc_profile_enabled()) {
+            panvk_desc_profile_add(&panvk_desc_profile.set_alloc_failures, 1);
+            panvk_desc_profile_dump();
+         }
          return panvk_error(pool, VK_ERROR_FRAGMENTED_POOL);
+      }
    }
    struct panvk_descriptor_set *set = &pool->sets[first_free_set - 1];
 
