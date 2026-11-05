@@ -2007,3 +2007,46 @@ change, or kbase kernel modification is claimed.
 
 Detailed audit and implementation notes:
 [docs/G720_PERFORMANCE_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_PERFORMANCE_AUDIT_2026-11-05.md).
+
+## 2026-11-05 follow-up — performance telemetry CI passed
+
+Latest performance-branch source/document commit:
+`b4f8759db3616b4e9a4aa50d1f66b0d1ef3a87bf`.
+
+Both latest-source workflows are now confirmed SUCCESS:
+- Android-only PanVK G720 Experiment: run `41941578949`.
+  Job `build-android-only` passed Android ARM64 configure/compile/stage,
+  driver/manifest/dependency audit, flat Winlator/Adrenotools package
+  creation, and artifact upload.
+  Artifact ID `13377475268`, name
+  `panvk-g720-android-only-experimental-package`, size 16,745,729 bytes.
+- Android NDK Build (Wrapper Variant): run `41941579141`.
+  Both `debugoptimized` and `release` jobs passed configure, compile, and
+  artifact upload.
+
+The previous pending-CI statement above is superseded by this confirmed result.
+This is build and static-package validation only. It is not evidence of
+successful Mali-G720 device runtime, Vulkan conformance, game compatibility,
+or FPS improvement.
+
+Source review of the new counters:
+- Descriptor profile format string/arguments match. Pool bytes are requested
+  backing size; set bytes count attempted requested allocation size, including
+  attempts that later fail. Pool-create failures count backing-memory
+  initialization failures, not earlier host-side multialloc failures.
+- CSF profile format string/arguments match. Ring bytes cleaned are counted
+  after the existing cache-clean call. The occupancy high-water field is the
+  maximum single sampled outstanding-byte value seen across subqueues, not a
+  sum of simultaneous subqueue occupancies. The firmware extract read remains
+  behind `PANVK_KBASE_PROFILE`.
+
+Next engineering step: device-side diagnostic capture with
+`PANVK_DESCRIPTOR_PROFILE=1` and `PANVK_KBASE_PROFILE=1`, if Winlator passes
+these environment variables to the driver. Then run the identical benchmark
+again with both options disabled for performance measurement. Do not infer
+performance gains from instrumented runs. No kbase kernel, system/vendor
+driver, descriptor heap topology, or queue synchronization behavior was
+modified.
+
+Detailed audit:
+[docs/G720_PERFORMANCE_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_PERFORMANCE_AUDIT_2026-11-05.md).
