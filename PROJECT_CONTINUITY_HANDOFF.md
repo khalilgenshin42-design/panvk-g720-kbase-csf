@@ -3401,3 +3401,12 @@ Evidence from the job log:
 This confirms the glslang dependency correction fixed the prior false-green/no-tests problem and the real NIR test suite is running. Important scope: this passing run predates the new constant/dynamic dereference test (added in `b4b073d...`), so it validates the NIR suite baseline and registration, not the new test itself. Newer NIR runs `42026950603`, `42027059205`, and `42027207795` are queued/in progress for the dereference test and its subsequent test-only corrections.
 
 Android-only run `42026346036` remained in dependency installation; wrapper run `42026345779` had both Release and Debugoptimized variants compiling. No Android artifact/package success or device runtime result yet.
+
+
+### Strengthen dynamic-index test semantics (2026-11-05 12:32 UTC)
+
+The NIR suite passed for the initial dereference test on commit `b4b073d...` (run `42026950603`, job `127243424246`): Meson reported 2/2 suite tests passed and the clip/cull test translation unit compiled. However, review found the purported dynamic index was an immediate constant, so the builder could constant-fold it and fail to exercise the dynamic-store branch expansion.
+
+Corrected the test to read its index from a real shader input variable (`dynamic_index`, `VARYING_SLOT_VAR0`) and convert it to the dereference pointer index width with `nir_i2iN()`. The dynamic store expectation remains five packed stores (one constant plus four guarded lane stores). New source commit: `c6dfaabc0ba69c2a863c54b55eb67a8ac07d6b1c` (`nir: exercise genuinely dynamic clip distance indexing`).
+
+This is a test-only strengthening. Its CI run must be treated as the first meaningful validation of truly dynamic dereference lowering. Earlier passing run `42026950603` does not validate the corrected dynamic case.
