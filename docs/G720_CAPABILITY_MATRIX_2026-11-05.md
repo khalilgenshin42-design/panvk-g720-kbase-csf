@@ -391,3 +391,6 @@ Conditional custom-border-color commands required by the registry have also been
 
 
 Descriptor writer constraints checked against the current Khronos proposal: YCbCr and subsampled samplers are rejected by `vkWriteSamplerDescriptorsEXT` (they must be embedded); custom border colors are rejected for embedded samplers and require an explicit registered index for sampler-heap writes; YCbCr image descriptors use PanVK's per-format texture descriptor count. Fragment-density-map, QCOM image processing, acceleration structures, and ARM tensors are not exposed and their descriptor types remain unsupported. Source HEAD `0bf2e527c42fe06733d5c0b1557c9d2cec0c1412`; build pending.
+
+
+YCbCr count consistency fix: `VkSamplerYcbcrConversionImageFormatProperties::combinedImageSamplerDescriptorCount` is now derived from `panvk_image_get_tex_count(model->arch, format)`, matching the descriptor writer and PanVK descriptor-set layout. Source HEAD `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`; Android build pending.
