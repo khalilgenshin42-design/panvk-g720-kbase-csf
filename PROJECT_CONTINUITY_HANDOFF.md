@@ -3426,3 +3426,12 @@ NIR test CI:
 - A further test-strengthening commit `c6dfaabc0ba69c2a863c54b55eb67a8ac07d6b1c` replaces the immediate with a shader input load and casts it to pointer index width. This is the first intended truly dynamic test. NIR run `42027837669` is currently in progress for that source; earlier NIR runs `42027059205` and `42027207795` are also compiling previous intermediate revisions.
 
 No runtime PanVK code or Vulkan feature reporting changed. Do not ask the user to install/test the package yet: the dynamic NIR test still needs a confirmed pass, and the current source SHA `c6dfaabc...` Android-only package run `42027837719` must finish if a matching latest artifact is desired.
+
+
+### Dynamic-store branch test failure and correction (2026-11-05 12:36 UTC)
+
+NIR run `42027207795` on source `ccc0fbde...` failed exactly one test: `nir_clip_cull_distance_test.vertex_constant_and_dynamic_scalar_accesses_retarget_vec4`; the other 6,215 tests passed. The failure followed changing the expected store count to five while the index was still a compile-time immediate. This confirms the earlier immediate was folded and did not exercise the four-way dynamic-store lowering path; do not interpret the failure as a proven defect in the production lowering itself.
+
+The test was strengthened in commit `c6dfaabc0ba69c2a863c54b55eb67a8ac07d6b1c` to source its index from a shader input variable and convert it to pointer-index width, so the dynamic value cannot be constant-folded. The test still expects one constant store plus four guarded stores. NIR run `42027837669` is the authoritative run for this corrected test and remains in progress at this update. Earlier passing runs with immediate indices are only baseline validation.
+
+The Android-only package run for `ccc0fbde...` completed successfully (run `42027207710`); artifact `13415315237`, 16,753,662 bytes, SHA-256 `06ed38452893ba855ff65fd2a3e1a1ce920144e9f4d3b789e6fdba1f0da6fbbd`. This package contains no runtime clip/cull changes and is not a candidate for performance conclusions.
