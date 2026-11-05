@@ -421,6 +421,15 @@ struct panvk_shader_desc_info {
       uint32_t count;
    } dyn_bufs;
    uint32_t fs_varying_attr_desc_count;
+
+   /* VK_EXT_descriptor_heap: the heap tables are populated when this bit is
+    * set. The embedded table contains a default sampler followed by any
+    * shader-create-info embedded samplers. */
+   bool uses_heaps;
+   struct {
+      struct panvk_priv_mem descs;
+      uint32_t count;
+   } embedded_samplers;
 #endif
 };
 
