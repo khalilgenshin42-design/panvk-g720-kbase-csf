@@ -34,6 +34,7 @@ jobs:
             libexpat1-dev \
             libudev-dev \
             llvm-22-dev \
+            libclang-22-dev \
             libclc-22-dev \
             libllvmspirvlib-22-dev \
             spirv-tools \
