@@ -36,6 +36,8 @@ jobs:
             llvm-22-dev \
             libclc-22-dev \
             libllvmspirvlib-22-dev \
+            spirv-tools \
+            spirv-tools-dev \
             clang
 
       - name: Configure minimal host build with NIR tests
