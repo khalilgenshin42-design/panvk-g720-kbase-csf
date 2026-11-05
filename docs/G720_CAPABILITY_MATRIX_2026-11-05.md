@@ -229,3 +229,30 @@ CI note: the first NIR workflow reached Meson configuration successfully but fai
 
 
 Host NIR CI was refined after discovering that disabling all Vulkan drivers caused Meson to select `with_nir_headers_only`, omitting the real NIR implementation and test target. The workflow now enables `vulkan-drivers=panfrost` and `panfrost-kmds=kbase` so the full NIR library/tests are built. Rerun pending; no successful result is claimed.
+
+
+## 5. Exhaustive source census (2026-11-05)
+
+Directly parsed from `src/panfrost/vulkan/panvk_vX_physical_device.c` on `experiment/g720-clip-cull-capabilities` (blob `6f8062ef02dd8b7707b2a16d4868aa7d84f4a4fb`):
+- 185 extension-table field initializers in `get_physical_device_extensions()`.
+- 296 feature-field initializers in `get_physical_device_features()`.
+- These are source initializer counts, **not** counts of extensions/features enabled at runtime. `#ifdef` platform gates, architecture conditions, Kbase property checks, and explicit false feature bits must be evaluated individually.
+- The table includes Vulkan 1.4-era KHR maintenance5-9, KHR map_memory2, KHR pipeline_binary, KHR dynamic_rendering_local_read, and EXT host_image_copy, graphics_pipeline_library, nested_command_buffer, map_memory_placed, plus ARM core builtins/properties/scheduling controls. The older abbreviated list above is incomplete.
+
+### Descriptor heap: priority implementation target
+
+Current branch does not initialize `.EXT_descriptor_heap` and does not set `descriptorHeap`. Reference `JimVulkan/mali-panvk` commit `58f2c55854bd48b18df756edb11f187af9cd2fde` has a Valhall implementation (`PAN_ARCH >= 9`) with feature `descriptorHeap=true`, capture/replay false. It is not a one-line port: relevant implementation includes descriptor state, push data, descriptor resource table/layout, shader `uses_heaps`, SPIR-V `DescriptorHeapEXT`, NIR lowering, and Vulkan runtime code (`vk_nir_lower_descriptor_heaps.c`, 1,146 lines). Treat this as a full multi-file port and keep it unadvertised until end-to-end complete.
+
+### Capability safety flags
+
+- No `VK_KHR_ray_query` or acceleration-structure implementation exists in this source path. Do not expose ray query without verifying G720 RT IP support and implementing AS build/update/traversal, shader translation, memory and synchronization semantics.
+- Sparse binding/residency is unavailable on Kbase: bind queue is a stub; do not enable sparse feature bits.
+- Existing disabled/partial v12 areas include multiViewport, clip/cull distance, pipeline statistics queries, geometry streams, and selected float atomic feature bits. Audit each full path rather than flipping booleans.
+- Validate that every advertised extension's required entrypoints and feature/property structures are actually wired, especially for platform-conditional WSI and Android gralloc extensions.
+
+### Next actions
+
+1. Expand this matrix into a per-extension/per-feature/per-property ledger with exact source references, gates, entrypoints, compiler paths, Kbase dependencies, and CTS coverage.
+2. Compare and port the JimVulkan descriptor-heap implementation against this branch's exact Mesa base, including generated Vulkan registry/entrypoint/SPIR-V/NIR/runtime pieces.
+3. Audit false-positive exposure in currently advertised extensions before broadening the advertised set.
+4. Build on Android ARM64 and run descriptor indexing/heap CTS plus VKD3D-Proton D3D12 workloads only after the implementation is complete.
