@@ -3165,3 +3165,15 @@ No runtime PanVK shader/compiler changes and no Vulkan feature exposure were mad
 2. Poll wrapper run `42023056338`; record debugoptimized and release outcomes and artifacts. Do not conflate wrapper with driver.
 3. If NIR tests run, inspect failures and add focused dereference rewrite tests before wiring lowering into PanVK.
 4. Keep the Android package isolated for Winlator import; do not replace the Android vendor/system Vulkan driver.
+
+
+
+### Follow-up NIR CI dependency finding (2026-11-05 12:06 UTC)
+
+The first dependency repair exposed the next missing host dependency. Run `42024102034` (source SHA `0f8ce3f7c14a610486c678b51a2eb3c1b5dfaf90`) again failed at Meson configuration, not at NIR compilation or tests. The log confirms `LLVMSPIRVLib 22.1.0.0` is now found, then Meson stops at `meson.build:2098` because `SPIRV-Tools` is missing.
+
+The NIR workflow was updated again to install `spirv-tools` and `spirv-tools-dev`, matching the dependency pair already used by the successful Android-only workflow. Commit: `9fcacf93ea9a23710f2bcdf91dd0054c6de7950d` (`ci: add SPIR-V tools dependency to NIR tests`).
+
+New run `42024214325` is active on this commit. At last poll, checkout passed and dependency installation was in progress; Meson configuration, NIR test build, and tests are pending. Do not claim test success yet.
+
+The wrapper and Android-only workflows also triggered on commit `0f8ce3f...`: wrapper run `42024102067` was still generating host tools in both Release and Debugoptimized jobs; Android-only run `42024102129` was installing dependencies. Newer runs on `9fcacf9...` were queued at the last poll. The earlier Android-only run `42023056179` on `e73b886...` remains the verified successful Android package build and artifact `13412349016`.
