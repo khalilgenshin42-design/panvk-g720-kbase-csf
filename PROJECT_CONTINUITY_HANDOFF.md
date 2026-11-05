@@ -1919,3 +1919,39 @@ The final-source Android-only build on `experiment/clip-cull-distance-v12` (`f84
 Read-only review reconfirmed direct VS->FS gating, cull-only hardware VS transformation, untouched XFB variant, and zero/false clip/cull limits and feature bits. No dedicated PanVK test harness exists in this source tree; semantic validation remains open. Do not advertise clip/cull until direct-path shader tests and TCS/TES/GS transport are complete.
 
 Detailed source, artifact, branch inventory, test matrix, and next steps: [docs/CLIP_CULL_VS_FS_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/docs/project-continuity-handoff-2026-11-03/docs/CLIP_CULL_VS_FS_AUDIT_2026-11-05.md).
+
+
+## 2026-11-05 follow-up — Mali-G720 performance audit
+
+Created isolated branch `experiment/g720-performance-audit` from the validated
+clip/cull source checkpoint `f843a225f9b4f1821e69bb52ed0718c86628b8d3`.
+No runtime driver behavior or system/vendor driver was changed.
+
+Read-only source review covered the G720 CSF/kbase queue, command-buffer
+finalization, descriptor pool allocation, descriptor-set layout/lowering, and
+transient BO pools. Existing `PANVK_KBASE_PROFILE` already reports aggregate
+submit/wait/status-drain timing, ring jobs/doorbells/kicks, native GPU waits,
+and tiler-heap renewal counters. Command-buffer cache clean is tied to safe
+recycling and is not to be removed without a memory-lifetime proof.
+
+Descriptor pools currently allocate one backing BO based on the declared pool
+size and use a VMA heap for set ranges. The arithmetic is guarded in 64-bit,
+but very large contiguous BO requests can still fail due to kernel limits,
+address-space fragmentation, or host mapping pressure. Do not silently cap
+Vulkan allocations. A segmented descriptor heap is only a future candidate
+after real allocation traces and a complete shader-visible address/lifetime
+design.
+
+The MC7's seven shader cores are hardware execution resources, not seven
+Vulkan queues or a mandate for seven compiler workers. No forced seven-way
+dispatch, heap-renewal change, synchronization removal, or descriptor topology
+change is justified without profiling.
+
+No performance source code was changed and no new FPS/device runtime test was
+run in this step. Next step: establish a repeatable Android/Winlator baseline,
+then add disabled-by-default, low-overhead telemetry for descriptor pool sizes
+and usage, transient BO high-water marks, and CSF ring occupancy/sub-stage
+costs. Change one bottleneck at a time and compare frame-time percentiles under
+comparable thermal conditions.
+
+Detailed audit: [docs/G720_PERFORMANCE_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_PERFORMANCE_AUDIT_2026-11-05.md).
