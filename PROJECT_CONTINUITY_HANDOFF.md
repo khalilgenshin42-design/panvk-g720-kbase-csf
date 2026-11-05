@@ -3131,3 +3131,37 @@ latest job-step inspection:
 No success/failure result is available yet for commit
 `e73b88697f8293613858fbfc9eee671ead46de6f`. Continue polling these exact
 runs; do not treat queued/in-progress status as validation.
+
+
+
+## Addendum: CI dependency repair and Android package build (2026-11-05 12:xx UTC)
+
+Resumed from the clip/cull capability branch after re-reading this handoff, the performance audit, and capability matrix. The repository branch sweep confirms the canonical handoff remains on `docs/project-continuity-handoff-2026-11-03`; it is intentionally not copied to experiment branches.
+
+### Verified CI outcomes on `experiment/g720-clip-cull-capabilities`
+
+- Source SHA `e73b88697f8293613858fbfc9eee671ead46de6f`.
+- Android-only PanVK run `42023056179`: **SUCCESS**. All steps passed, including host tools, real Android ARM64 libdrm, Android-only configure/compile/stage, driver/dependency audit, flat Winlator/Adrenotools package, and artifact upload.
+- Artifact `13412349016`, `panvk-g720-android-only-experimental-package`, 16,753,532 bytes, SHA-256 digest `fedadb6852037bfd3771517ed94a172ef45cd71e81120583df909b083acbb84d`, expires 2027-02-03. This is an Android ARM64 compile/package result only; no device runtime validation is implied.
+- NIR run `42023056158`: **FAILURE during Meson configuration**, before compilation or tests. The repaired Ubuntu 26.04 apt dependencies installed successfully, but Meson then failed because `LLVMSPIRVLib` was missing (`meson.build:2090`). Build and test steps were skipped. This is a workflow dependency failure, not a NIR regression.
+- Android NDK wrapper run `42023056338`: both `debugoptimized` and `release` jobs were still compiling at the last poll. Dependency install, host tools and Meson configure passed; artifact upload was pending. Wrapper build is separate from PanVK.
+
+### Workflow correction
+
+Updated `.github/workflows/nir-clip-cull-tests.yml` on the clip/cull branch to align its dependency set with the known-working Android-only host-tool workflow:
+- use `llvm-22-dev` and `libclc-22-dev`;
+- add `libllvmspirvlib-22-dev`, which the failing Meson configure explicitly requires;
+- add `libudev-dev` to satisfy the optional host dependency probe cleanly.
+
+Commit: `0f8ce3f7c14a610486c678b51a2eb3c1b5dfaf90` (`ci: add LLVM SPIR-V dependency to NIR tests`). A follow-up NIR run is expected from this workflow-file push; its run ID/status must be checked before claiming tests passed. The NIR workflow has not yet reached `ninja -C build nir_tests` or `meson test`.
+
+### Current technical decision
+
+No runtime PanVK shader/compiler changes and no Vulkan feature exposure were made. Keep clip/cull disabled until tests exercise dereference rewriting, dynamic/constant indexing, partial writes, arrayed GS/TCS/TES interfaces, stage transport and the actual FS discard/clip behavior. The current tests cover only helper declaration/layout/gather/merge cases and vec4 declaration shape; they are not yet sufficient to enable the feature.
+
+### Next actions
+
+1. Poll the new NIR run from commit `0f8ce3f7c14a610486c678b51a2eb3c1b5dfaf90`; confirm Meson configuration, NIR test build and suite results separately.
+2. Poll wrapper run `42023056338`; record debugoptimized and release outcomes and artifacts. Do not conflate wrapper with driver.
+3. If NIR tests run, inspect failures and add focused dereference rewrite tests before wiring lowering into PanVK.
+4. Keep the Android package isolated for Winlator import; do not replace the Android vendor/system Vulkan driver.
