@@ -1955,3 +1955,29 @@ costs. Change one bottleneck at a time and compare frame-time percentiles under
 comparable thermal conditions.
 
 Detailed audit: [docs/G720_PERFORMANCE_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_PERFORMANCE_AUDIT_2026-11-05.md).
+
+
+## 2026-11-05 follow-up — descriptor telemetry implementation
+
+Continued on isolated branch `experiment/g720-performance-audit`, based on
+the known clip/cull checkpoint. Added opt-in descriptor-pool telemetry in
+`src/panfrost/vulkan/panvk_vX_descriptor_set.c`:
+- `PANVK_DESCRIPTOR_PROFILE=1` enables it; default remains off.
+- Aggregates non-empty pool count, total requested backing bytes, maximum
+  individual pool size, pool creation failures, set allocation attempts/bytes,
+  and set allocation failures.
+- Emits snapshots every 16 non-empty pool creations and on allocation errors.
+- Uses relaxed atomic counters; no descriptor allocation semantics or heap
+  layout were changed.
+
+Commits: `82f11124994e7fa614998006fd59b57f9e723101` (telemetry) and
+`a0bafee3aeeaf00127fa8d12c838246eddf4db77` (Android-only workflow branch
+filter). Detailed audit updated at
+[docs/G720_PERFORMANCE_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_PERFORMANCE_AUDIT_2026-11-05.md).
+
+Wrapper build run `41941319560` started for debugoptimized and release
+configurations; it was still in progress at the time of this note. Do not
+declare the change build-validated until both wrapper jobs and the Android-only
+build are checked. No device runtime test or FPS improvement has been claimed.
+No system/vendor driver, kbase kernel, synchronization behavior, or descriptor
+heap topology was modified.
