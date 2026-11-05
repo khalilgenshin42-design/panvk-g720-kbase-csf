@@ -55,5 +55,10 @@ jobs:
             -Dshared-glapi=disabled \
             -Dzstd=disabled
 
+      - name: Verify NIR tests are registered
+        run: |
+          meson introspect --tests build > build-tests.json
+          python3 -c 'import json; tests=json.load(open("build-tests.json")); names={t["name"] for t in tests}; print("Registered tests:", sorted(names)); assert "nir_tests" in names, "nir_tests was not registered"; assert "nir_algebraic_parser" in names, "nir_algebraic_parser was not registered"'
+
       - name: Build and run NIR compiler tests
         run: meson test -C build --suite nir --print-errorlogs
