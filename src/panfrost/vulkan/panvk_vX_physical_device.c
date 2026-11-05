@@ -153,6 +153,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_depth_clip_control = true,
       .EXT_device_address_binding_report = true,
       .EXT_device_memory_report = true,
+      .EXT_descriptor_heap = PAN_ARCH >= 9,
 #ifdef VK_USE_PLATFORM_DISPLAY_KHR
       .EXT_display_control = true,
 #endif
@@ -396,6 +397,9 @@ panvk_per_arch(get_physical_device_features)(
        * descriptor limits would be too low for the descriptorIndexing feature.
        */
       .descriptorIndexing = PAN_ARCH >= 9,
+      /* VK_EXT_descriptor_heap */
+      .descriptorHeap = PAN_ARCH >= 9,
+      .descriptorHeapCaptureReplay = false,
       .shaderInputAttachmentArrayDynamicIndexing = true,
       .shaderUniformTexelBufferArrayDynamicIndexing = true,
       .shaderStorageTexelBufferArrayDynamicIndexing = true,
@@ -1240,7 +1244,8 @@ panvk_per_arch(get_physical_device_properties)(
       /* We do not currently support VK_EXT_shader_object but this is used
        * internally by vk_shader
        */
-      .shaderBinaryVersion = 0,
+      /* PanVK shader binary layout revision 1 adds descriptor heap metadata. */
+      .shaderBinaryVersion = 1,
 
       /* VK_KHR_maintenance7 */
       /* We don't implement VK_KHR_fragment_shading_rate */
@@ -1274,6 +1279,28 @@ panvk_per_arch(get_physical_device_properties)(
 
       /* VK_EXT_custom_border_color */
       .maxCustomBorderColorSamplers = 32768,
+
+      /* VK_EXT_descriptor_heap: each heap is a resource-table entry of
+       * 32-byte descriptors indexed by a 24-bit handle. */
+      .samplerHeapAlignment = 64,
+      .resourceHeapAlignment = 64,
+      .maxSamplerHeapSize = PANVK_DESCRIPTOR_SIZE << 24,
+      .maxResourceHeapSize = PANVK_DESCRIPTOR_SIZE << 24,
+      .minSamplerHeapReservedRange = 0,
+      .minSamplerHeapReservedRangeWithEmbedded = 0,
+      .minResourceHeapReservedRange = 0,
+      .samplerDescriptorSize = PANVK_DESCRIPTOR_SIZE,
+      .imageDescriptorSize = PANVK_DESCRIPTOR_SIZE,
+      .bufferDescriptorSize = PANVK_DESCRIPTOR_SIZE,
+      .samplerDescriptorAlignment = PANVK_DESCRIPTOR_SIZE,
+      .imageDescriptorAlignment = PANVK_DESCRIPTOR_SIZE,
+      .bufferDescriptorAlignment = PANVK_DESCRIPTOR_SIZE,
+      .maxPushDataSize = 256, /* maxPushConstantsSize */
+      .imageCaptureReplayOpaqueDataSize = 0,
+      .maxDescriptorHeapEmbeddedSamplers = 2048,
+      .samplerYcbcrConversionCount = 1,
+      .sparseDescriptorHeaps = false,
+      .protectedDescriptorHeaps = false,
 
       /* VK_EXT_graphics_pipeline_library */
       .graphicsPipelineLibraryFastLinking = true,
