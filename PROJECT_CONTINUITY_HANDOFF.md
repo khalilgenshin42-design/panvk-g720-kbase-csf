@@ -3751,3 +3751,51 @@ The exact GameNative Mesa wrapper source is publicly available in `GameNative/me
 - This experiment is expected to test CPU/allocator overhead, not promise a fixed FPS gain. Compare same benchmark route, resolution, quality, wrapper, DXVK, and thermal state. If the game fails to launch or memory mapping fails, remove the variable and return to baseline.
 
 Next action needed from the user after this source audit: add `WRAPPER_DISABLE_PLACED=1` as a container environment variable for Tomb Raider Definitive Edition only, run the same benchmark once, and send min/max/average FPS plus logs. Do not apply it globally to other games.
+
+
+## 2026-11-05 — project direction correction: stop peripheral tuning
+
+The user explicitly rejected continuing with wrapper environment-variable A/B tests,
+clip/cull micro-optimisation, packaging work, or other peripheral experiments as
+the main project. These have not produced meaningful progress toward the stated
+goal. Do not ask the user to run the pending `WRAPPER_DISABLE_PLACED=1` test
+unless it becomes directly relevant to a demonstrated root cause.
+
+The next engineering phase must target substantive PanVK capability and
+architecture gaps for DX11/DX12 emulation, with source-level work and measurable
+correctness/performance impact:
+
+1. Audit the D3D12 descriptor path first. The current v12 device extension
+   table does not expose `VK_EXT_descriptor_heap`; descriptor indexing is
+   already exposed and must not be mistaken for the newer descriptor-heap API.
+   Compare the current Mesa 26.3-derived implementation with the later
+   JimVulkan G720 PanVK descriptor-heap implementation. Map the complete port:
+   Vulkan registry/generated entrypoints, device extension/features/properties,
+   descriptor heap objects and memory, descriptor writes/copies, push data,
+   NIR lowering, shader ABI, lifetime/synchronization, and tests. Do not merely
+   set the extension bit. Determine whether this extension is required by the
+   user's actual VKD3D/DX12 workload before treating it as the only DX12 path.
+2. Audit the existing descriptor-set allocator and Kbase BO mapping path as a
+   separate memory-correctness/performance task. Existing telemetry showed
+   596,561 set-allocation attempts, 299 failures, 85.30 MiB requested set bytes,
+   and 4.43 MiB cumulative pool backing in one profiled run. Determine the
+   failure classes and whether they correspond to pool exhaustion, VMA
+   fragmentation, host allocation failure, or backend BO failure. The Kbase
+   backend uses SAME_VA mappings established at BO allocation time and retains
+   the mapping for the BO lifetime; do not assume generic mmap wrapper overhead
+   without tracing the actual hot path.
+3. Do not try to map Vulkan compiler dispatch onto the seven G720 shader cores.
+   Mali firmware schedules shader-core execution. PanVK can expose ARM shader
+   core properties/scheduling controls and optimize shader/workgroup/compiler
+   behavior, but must not hard-code one compiler worker or queue per core.
+   Inspect the queried core-count property and actual CSF scheduling semantics.
+4. Keep `VK_KHR_ray_query`, sparse residency, v12 vertex-pipeline stores/atomics,
+   and other incomplete capabilities disabled until their complete API,
+   compiler, memory, synchronization, and runtime implementations exist.
+5. No more benchmark-only toggles as the default next step. First produce a
+   concrete source audit and implementation plan, then make a coherent code
+   change with tests and Android CI. Keep the custom ICD separate from the
+   Android system/vendor driver.
+
+This correction supersedes the previous immediate user action to test
+`WRAPPER_DISABLE_PLACED=1` as the next project step. That test is deferred.
