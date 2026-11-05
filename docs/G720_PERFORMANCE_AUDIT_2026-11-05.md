@@ -870,3 +870,17 @@ RADV in this Mesa tree confirms the standard interface-linking sequence:
 `nir_lower_clip_cull_distance_to_vec4s()` as a distinct representation
 lowering pass, not an assumed next step after merge. The PanVK test should
 validate which representation is required by its varying ABI.
+
+
+## 2026-11-05 — first clip/cull NIR tests
+
+On `experiment/g720-clip-cull-capabilities`, added and registered
+`src/compiler/nir/tests/clip_cull_distance_tests.cpp`. The initial tests cover
+vertex clip-only, cull-only, mixed arrays across a vec4 boundary, and fragment
+mixed inputs, checking the metadata and location/location_frac result of the
+standard gather-then-merge helper sequence. A dedicated host CI workflow builds
+and runs the NIR suite; Android PanVK build workflows are also enabled on this
+branch. The latest workflow results are pending. These tests validate the
+shared NIR merge helper only; they do not prove PanVK GS/TCS/TES transport or
+hardware discard semantics. No runtime feature exposure or driver code has
+changed.
