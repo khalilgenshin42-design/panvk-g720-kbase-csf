@@ -4,11 +4,72 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <inttypes.h>
+
 #include "panvk_device.h"
 #include "panvk_mempool.h"
 #include "panvk_priv_bo.h"
 
 #include "kmod/pan_kmod.h"
+
+#include "util/u_debug.h"
+#include "vk_log.h"
+
+/* Opt-in transient BO-pool telemetry. No counters or logging unless enabled. */
+struct panvk_mempool_profile_stats {
+   uint64_t alloc_calls, alloc_bytes, alloc_failures;
+   uint64_t small_bo_reuses, big_bo_reuses;
+   uint64_t bo_create_calls, bo_create_bytes, bo_create_failures;
+   uint64_t max_bo_bytes;
+};
+
+static struct panvk_mempool_profile_stats panvk_mempool_profile;
+
+static bool
+panvk_mempool_profile_enabled(void)
+{
+   static int enabled = -1;
+   if (enabled < 0)
+      enabled = debug_get_bool_option("PANVK_MEMPOOL_PROFILE", false);
+   return enabled;
+}
+
+static void
+panvk_mempool_profile_add(uint64_t *counter, uint64_t value)
+{
+   __atomic_fetch_add(counter, value, __ATOMIC_RELAXED);
+}
+
+static uint64_t
+panvk_mempool_profile_read(uint64_t *counter)
+{
+   return __atomic_load_n(counter, __ATOMIC_RELAXED);
+}
+
+static void
+panvk_mempool_profile_dump(void)
+{
+   if (!panvk_mempool_profile_enabled())
+      return;
+
+   mesa_logi("mempool profile: allocs=%" PRIu64 " requested_MiB=%.2f"
+             " alloc_failures=%" PRIu64 " small_reuses=%" PRIu64
+             " big_reuses=%" PRIu64 " BO_creates=%" PRIu64
+             " created_MiB=%.2f BO_create_failures=%" PRIu64
+             " max_BO_MiB=%.2f",
+             panvk_mempool_profile_read(&panvk_mempool_profile.alloc_calls),
+             panvk_mempool_profile_read(&panvk_mempool_profile.alloc_bytes) /
+                (1024.0 * 1024.0),
+             panvk_mempool_profile_read(&panvk_mempool_profile.alloc_failures),
+             panvk_mempool_profile_read(&panvk_mempool_profile.small_bo_reuses),
+             panvk_mempool_profile_read(&panvk_mempool_profile.big_bo_reuses),
+             panvk_mempool_profile_read(&panvk_mempool_profile.bo_create_calls),
+             panvk_mempool_profile_read(&panvk_mempool_profile.bo_create_bytes) /
+                (1024.0 * 1024.0),
+             panvk_mempool_profile_read(&panvk_mempool_profile.bo_create_failures),
+             panvk_mempool_profile_read(&panvk_mempool_profile.max_bo_bytes) /
+                (1024.0 * 1024.0));
+}
 
 void
 panvk_bo_pool_cleanup(struct panvk_bo_pool *bo_pool)
@@ -47,6 +108,8 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
       bo =
          list_first_entry(&pool->bo_pool->free_bos, struct panvk_priv_bo, node);
       list_del(&bo->node);
+      if (panvk_mempool_profile_enabled())
+         panvk_mempool_profile_add(&panvk_mempool_profile.small_bo_reuses, 1);
    } else {
       if (pool->big_bo_pool) {
          list_for_each_entry_safe(struct panvk_priv_bo, pooled_bo,
@@ -56,6 +119,9 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
             if (picked_bo_sz >= bo_sz) {
                bo = pooled_bo;
                list_del(&bo->node);
+               if (panvk_mempool_profile_enabled())
+                  panvk_mempool_profile_add(&panvk_mempool_profile.big_bo_reuses,
+                                            1);
                break;
             }
          }
@@ -68,9 +134,27 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
           * flags to this function and keep the read/write,
           * fragment/vertex+tiler pools separate.
           */
+         if (panvk_mempool_profile_enabled()) {
+            panvk_mempool_profile_add(&panvk_mempool_profile.bo_create_calls, 1);
+            panvk_mempool_profile_add(&panvk_mempool_profile.bo_create_bytes,
+                                      bo_sz);
+            uint64_t old_max =
+               panvk_mempool_profile_read(&panvk_mempool_profile.max_bo_bytes);
+            while (old_max < bo_sz &&
+                   !__atomic_compare_exchange_n(
+                      &panvk_mempool_profile.max_bo_bytes, &old_max, bo_sz,
+                      false, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+               ;
+         }
+
          VkResult result =
             panvk_priv_bo_create(pool->dev, bo_sz, pool->props.create_flags,
                                  VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
+         if (result != VK_SUCCESS && panvk_mempool_profile_enabled()) {
+            panvk_mempool_profile_add(&panvk_mempool_profile.bo_create_failures,
+                                      1);
+            panvk_mempool_profile_dump();
+         }
 
          /* Pool allocations are indirect, meaning there's no VkResult returned
           * and no way for the caller to know why the device memory allocation
@@ -137,6 +221,11 @@ panvk_pool_alloc_mem(struct panvk_pool *pool, struct panvk_pool_alloc_info info)
    if (pool->props.needs_locking)
       simple_mtx_lock(&pool->lock);
 
+   if (panvk_mempool_profile_enabled()) {
+      panvk_mempool_profile_add(&panvk_mempool_profile.alloc_calls, 1);
+      panvk_mempool_profile_add(&panvk_mempool_profile.alloc_bytes, info.size);
+   }
+
    /* Find or create a suitable BO */
    struct panvk_priv_bo *bo = pool->transient_bo;
    unsigned offset = ALIGN_POT(pool->transient_offset, info.alignment);
@@ -151,6 +240,15 @@ panvk_pool_alloc_mem(struct panvk_pool *pool, struct panvk_pool_alloc_info info)
       pool->transient_offset = offset + info.size;
       if (!pool->props.owns_bos)
          panvk_priv_bo_ref(bo);
+   }
+
+   if (bo == NULL && panvk_mempool_profile_enabled()) {
+      panvk_mempool_profile_add(&panvk_mempool_profile.alloc_failures, 1);
+      panvk_mempool_profile_dump();
+   } else if (panvk_mempool_profile_enabled() &&
+              panvk_mempool_profile_read(&panvk_mempool_profile.alloc_calls) %
+                 1024 == 0) {
+      panvk_mempool_profile_dump();
    }
 
    uint32_t flags = 0;
