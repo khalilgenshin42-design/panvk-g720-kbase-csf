@@ -2949,3 +2949,95 @@ Meson reported missing `libclc`; added `libclc-dev` in workflow commit
 `43bc2ca59b3f5adbc804161f662e9d55617dd5fe`. Its NIR workflow run was queued
 at the last check. The new test-source commit also queues a newer run. No
 compile/test pass is claimed until the latest run completes.
+
+
+## 2026-11-05 — cross-branch continuity refresh and NIR CI dependency repair
+
+### Cross-branch handoff audit
+
+Enumerated all 25 repository branches through the GitHub branches API and
+checked for `PROJECT_CONTINUITY_HANDOFF.md` on each branch. The file exists
+only on the canonical documentation branch
+`docs/project-continuity-handoff-2026-11-03`; all other 24 branches returned
+404 for that path. This is not a missing-source problem: the canonical
+documentation branch is the authoritative continuity record. Do not create
+divergent copies on every source branch unless explicitly requested.
+
+Re-read the canonical handoff (blob SHA
+`0545c274982d0bddbab152a541099a790a05f27b)), plus:
+- `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md` on
+  `experiment/g720-performance-audit` (blob
+  `3532367ef27ec31425c12d1359413aa83cb857b6));
+- `docs/G720_CAPABILITY_MATRIX_2026-11-05.md` on
+  `experiment/g720-performance-audit` (blob
+  `3ce03988e319030e9f2170ff8e6a613b616067fb)).
+
+Current working source branch remains
+`experiment/g720-clip-cull-capabilities`. No runtime PanVK source or Vulkan
+feature bits were changed in this step.
+
+### CI inspection
+
+Inspected the latest clip/cull branch workflow runs. The NIR workflow run
+`42022253198` (commit
+`43bc2ca59b3f5adbc804161f662e9d55617dd5fe`) failed during dependency
+installation, before Meson configuration or compilation. The Ubuntu 26.04
+runner reported that package `libclc-dev` has no installation candidate and
+listed versioned packages including `libclc-22-dev`. This is a CI package
+name/version mismatch, not a NIR test failure.
+
+At the same time, Android-only build and Android wrapper workflows for
+`cec14bb825176cb714e0a6d2e4dab3c7dd44de0e` were still in progress; no result
+was claimed at this checkpoint. Earlier Android-only and wrapper runs for
+`3ef7647a44c5cd804c1c8e9fba40d96502b29c83` had completed successfully.
+Those runs validate their respective Android build paths at that commit,
+not NIR tests and not runtime behavior.
+
+### Workflow repair
+
+Updated `.github/workflows/nir-clip-cull-tests.yml` on
+`experiment/g720-clip-cull-capabilities`:
+- Replaced the unavailable generic package `libclc-dev` with the runner's
+  available versioned package `libclc-22-dev`.
+- Workflow-only commit:
+  `e73b88697f8293613858fbfc9eee671ead46de6f`.
+
+New runs triggered by that commit:
+- NIR compiler tests: `42023056158` (queued at the time of this update).
+- Android-only PanVK build: `42023056179` (queued).
+- Android NDK wrapper debug/release: `42023056338` (queued).
+
+The preceding source commit `cec14bb825176cb714e0a6d2e4dab3c7dd44de0e`
+also has pending runs:
+- NIR: `42022450295` (queued).
+- Android-only: `42022450154` (in progress).
+- Android wrapper: `42022450159` (in progress).
+
+Next action: poll the new NIR run and verify the package install, Meson
+configuration (including LLVM/CLC), `nir_tests` build, and `nir` test suite
+individually. Then inspect the Android-only and wrapper run conclusions and
+artifacts. Do not claim NIR tests pass until the suite completes successfully.
+
+### NIR test coverage checkpoint
+
+The current test source commit
+`cec14bb825176cb714e0a6d2e4dab3c7dd44de0e` adds declaration-layout checks
+for `nir_lower_clip_cull_distance_to_vec4s()`:
+- mixed clip=3/cull=2;
+- cull-only size=5;
+- mixed clip=5/cull=3.
+
+These validate packed vec4 declaration array length/component layout only.
+They do not validate dereference rewrites, constant or indirect indexing,
+loads/stores, partial writes, arrayed GS/TCS/TES interfaces, or helper pass
+ordering. Keep the pass-order question open and do not wire the helpers into
+PanVK runtime until those tests exist and pass.
+
+### Branch documentation policy confirmed
+
+The branch sweep confirms the intended documentation arrangement: keep the
+continuity file on `docs/project-continuity-handoff-2026-11-03` as the single
+canonical handoff. Update it after each meaningful repository/CI/source step;
+source experiment branches need not carry independent copies. The
+performance audit and capability matrix remain on
+`experiment/g720-performance-audit`.
