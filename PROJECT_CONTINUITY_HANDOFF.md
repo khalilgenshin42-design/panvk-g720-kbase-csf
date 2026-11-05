@@ -3371,3 +3371,10 @@ CI triggered on the test commit:
 At the latest poll, the new NIR job had started checkout but had not yet reached build/test execution; Android-only and wrapper jobs were queued. The prior NIR run `42026345910` had completed Meson setup and the test-registration guard, and was still compiling/running the suite at poll time. Earlier Android-only and wrapper jobs from `4a9c415...` were still running at their host-tool/dependency stages. No test or package success is claimed yet.
 
 Remaining NIR coverage targets: partial component writes with non-zero clip/cull packing offsets; dynamic index bounds/negative index semantics; arrayed GS/TCS/TES derefs. Do not expand into runtime clip/cull exposure until those tests and full stage interface transport are proven.
+
+
+### Test-construction portability correction (2026-11-05 12:27 UTC)
+
+Reviewed the newly added dynamic dereference test against `nir_build_deref_array()`: NIR dereference indices must match the pointer-sized bit width of the parent dereference. The test initially used `nir_imm_int()` (32-bit), which could assert on a 64-bit host. Corrected it to `nir_imm_intN_t(b, 6, nir_get_ptr_bitsize(b->shader))`.
+
+Correction commit: `92e631280b36a4abadbc427093e97d6ecac837b0` (`nir: use pointer-sized dynamic deref test index`). This is test-only and does not alter compiler lowering/runtime behavior. It triggers a new NIR CI run; previous run `42026950603` was already compiling the earlier test revision and is not final evidence for this correction.
