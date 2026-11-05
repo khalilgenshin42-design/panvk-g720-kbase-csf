@@ -3464,3 +3464,18 @@ Coverage added:
 Each test checks that accesses are retargeted to the generated `gl_ClipDistanceMESA` variable and invokes `nir_validate_shader()` in debug builds. These tests are newly added and not yet validated by CI. The next NIR run on the corrected latest source commit is required before treating them as valid.
 
 Prior result: genuinely dynamic vertex dereference test passed on `c6dfaabc...`, run `42027837669`, job `127246403106` (2/2 Meson tests, zero failures). No runtime PanVK code changed.
+
+
+### Arrayed GS/TCS/TES NIR tests validated (2026-11-05 12:44 UTC)
+
+Latest corrected source `ab0e7e13e0088e0202d6925a51347c0f3828c317` passed NIR run `42028832260`, job `127249751771`. Meson reports `nir_algebraic_parser` and `nir_tests` both OK (2/2, zero failures). This is the first passing run containing all three arrayed-interface tests after fixing the original-deref construction bug.
+
+The earlier run on `7bb1a1b...` failed with SIGSEGV in the first geometry arrayed-input test because that draft attempted to construct the dereference from a not-yet-created packed variable. The follow-up `ab0e7e1...` now correctly builds the dereference from the original `gl_ClipDistance` variable before invoking the lowering pass. The corrected run passes.
+
+Current NIR test coverage now includes:
+- Declaration metadata and merged clip/cull locations.
+- Vec4 packing and boundary-crossing layouts.
+- Constant-index and genuinely dynamic scalar loads/stores, including dynamic store lane expansion.
+- Geometry shader arrayed input, tessellation-control arrayed output, and tessellation-evaluation arrayed input, with debug NIR validation.
+
+Next correctness gap: mixed clip+cull accesses with non-zero cull offset and scalar/partial-lane stores. Add a targeted test to verify cull index mapping into the shared packed vec4 array. No runtime PanVK feature reporting has changed.
