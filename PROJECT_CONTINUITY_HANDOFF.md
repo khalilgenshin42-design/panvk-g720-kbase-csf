@@ -3497,3 +3497,14 @@ Source SHA `989f931ec6af96c1e9db2c4c683b992581efe770` passed NIR run `4202981040
 The new `vertex_cull_accesses_use_clip_offset_in_shared_vec4_array` test validates clip size 3 + cull size 2 and confirms the transformed cull[1] load/store dereferences point to packed vec4 array element 1, as required by the combined index offset. This covers the non-zero cull offset and scalar masked-store path.
 
 Current NIR test coverage now validates declaration merge/layout, vec4 packing, constant/dynamic loads and stores, arrayed GS/TCS/TES interfaces, and mixed clip+cull offset. This is compiler helper correctness only. PanVK's own direct VS->FS lowering remains a separate implementation and full stage transport/feature exposure is not yet complete.
+
+
+### PanVK direct VS -> FS clip/cull merge integration (2026-11-05 12:53 UTC)
+
+Source commit `197a5303131d1759e88df534fa1cd17331ba6988` updates `src/panfrost/vulkan/panvk_vX_shader.c`.
+
+Audit finding: SPIR-V maps `BuiltInClipDistance` to `VARYING_SLOT_CLIP_DIST0` and `BuiltInCullDistance` to `VARYING_SLOT_CULL_DIST0`, and marks both compact. PanVK's direct VS cull rewrite only processes compact stores in the CLIP_DIST slots, while its synthetic FS discard inputs are also assigned to CLIP_DIST slots. However, the direct pipeline linker previously captured `clip_distance_array_size` / `cull_distance_array_size` and inspected FS inputs without explicitly gathering sizes from variables or merging the separate clip/cull declarations. This left the path dependent on upstream metadata/interface behavior and could miss cull-only or mixed clip+cull cases.
+
+Fix: when a direct VS -> FS link is present, explicitly call `nir_gather_clip_cull_distance_sizes_from_vars()` followed by `nir_merge_clip_cull_distance_vars()` on both VS outputs and FS inputs before capturing counts and checking explicit FS reads. This aligns cull stores and the synthetic FS varying layout with the same packed clip-distance location scheme. Non-direct VS -> GS/TES paths remain untouched. Vulkan feature bits remain disabled.
+
+This is the first PanVK runtime compiler-path change in this clip/cull workstream. It is intentionally scoped to the already-limited direct VS -> FS path. Required next validation: compile Android PanVK and wrapper variants, inspect NIR dumps for cull-only and mixed clip+cull VS/FS pairs, then add/execute targeted shader tests before considering feature exposure. No device runtime or performance claim.
