@@ -345,3 +345,70 @@ unresolved driver DRM API symbols against the bundled helper export set.
 This is static linkage/package evidence only; Android loader namespace,
 Winlator importer behavior, and runtime symbol resolution still require
 device validation.
+
+
+## 2026-11-05 device benchmark — Tomb Raider PanVK telemetry
+
+User supplied `TombRaider_logs_2026-11-05_02-03-50.zip` with reported
+benchmark result: **7.7 min / 19.7 max / 13.6 average FPS**. The Wine log
+identifies the active Vulkan device as `Wrapper(Mali-G720 MC7)`, and emits
+PanVK kbase, descriptor, and transient-BO profile output. This is therefore a
+PanVK runtime capture, not a System-driver result.
+
+### Runtime findings (final cumulative snapshots)
+
+- Kbase queue submits: 16,160; submit errors: 0.
+- Subqueue waits: 68,077; aggregate wait time 95,764.843 ms; timeouts: 0;
+  errors: 0. Wait durations can overlap across threads and are not wall-clock
+  frame time.
+- CSF ring jobs: 41,704; cache-cleaned ring data: 7,819.5 KiB; wraps: 0;
+  sampled occupancy high-water: 1.8 KiB. No evidence of ring capacity or wrap
+  pressure in this run.
+- Heap renewals: 4,068; work-triggered renewals: 4,066; interval-triggered
+  renewals: 2; aggregate heap-renewal wait: 52,804.121 ms; total renewal time:
+  61,272.081 ms. This is the clearest measured queue/heap cost to investigate.
+- Transient BO pool: 8,817,664 allocation requests; 46,981.32 MiB cumulative
+  requested bytes; 0 allocation failures; 145,499 regular reuses and 2,680
+  large-BO reuses; 680 backing BO creates; 539.07 MiB cumulative created
+  backing bytes; 0 BO creation failures; largest BO 42 MiB. These byte totals
+  are cumulative traffic, **not live or retained VRAM usage**.
+- Descriptor allocator: 9 pools, 4.43 MiB cumulative requested pool backing,
+  largest pool 1.40 MiB, 0 pool-create failures; 596,561 set allocation
+  attempts, 85.30 MiB cumulative requested set bytes, 299 failures. The
+  current counter merges no-free-set / insufficient-pool-space and VMA
+  fragmentation outcomes, so the failure reason is not yet known. The rate is
+  about 0.05% of attempts; do not assume every failure is fatal.
+
+### Runtime shutdown symptom
+
+At log end, WSI reports `VK_ERROR_SURFACE_LOST_KHR`, followed by a Wine
+`vkWaitForFences` assertion. This occurs at teardown/end-of-capture in this
+log; it is not enough evidence to attribute the measured FPS to that shutdown
+failure. Preserve the exact tail for a separate WSI/fence-lifetime audit.
+
+### Interpretation and next controlled experiment
+
+The ring is not showing pressure (zero wraps and only 1.8 KiB sampled
+high-water), and neither transient BO allocation nor BO creation failed.
+Descriptor allocation failures are real but rare and currently unclassified.
+The strongest optimization lead is the high frequency/cost of tiler-heap
+renewal: roughly 4,068 renewals and 52.8 seconds aggregate waiting. The source
+supports `PANVK_KBASE_HEAP_RENEW_WORK` as a diagnostic override; default is
+65,536 estimated work units. Do not change the heap algorithm or ring size
+based on this single capture. First run the identical benchmark with profiling
+variables disabled and test a conservative 4x work threshold
+(`PANVK_KBASE_HEAP_RENEW_WORK=262144`), leaving all other settings unchanged.
+Compare FPS, visual correctness, hangs, and the final WSI/fence behavior. If
+Winlator cannot reliably pass environment variables, do not claim that the
+threshold was applied.
+
+Next source instrumentation task: split descriptor allocation failure
+counters by exact path (descriptor-count overflow, no free set/insufficient
+heap bytes, and VMA allocation/fragmentation) before considering allocator
+changes. Keep all diagnostics opt-in. No kernel/kbase changes, system-driver
+replacement, descriptor heap topology changes, or FPS improvement are claimed.
+
+Previous comparable user-reported run: 8.7 / 18.0 / 13.5 FPS. Current average
+is +0.1 FPS (effectively flat); current minimum is lower. Treat benchmark
+variance and instrumentation overhead as unresolved until an uninstrumented
+repeat is captured.
