@@ -311,11 +311,11 @@ public:
 TEST_F(nir_clip_cull_geometry_test,
        geometry_arrayed_input_preserves_vertex_deref)
 {
-   create_arrayed_distance_var(b->shader, nir_var_shader_in,
-                               "gl_ClipDistance", 3, 8);
+   nir_variable *clip =
+      create_arrayed_distance_var(b->shader, nir_var_shader_in,
+                                  "gl_ClipDistance", 3, 8);
 
-   nir_deref_instr *deref = nir_build_deref_var(
-      b, find_packed_distance_var(b->shader, nir_var_shader_in));
+   nir_deref_instr *deref = nir_build_deref_var(b, clip);
    /* Build the original 2D deref: per-vertex array, then distance array. */
    deref = nir_build_deref_array_imm(b, deref, 1);
    deref = nir_build_deref_array_imm(b, deref, 5);
@@ -384,11 +384,11 @@ public:
 TEST_F(nir_clip_cull_tess_eval_test,
        tess_eval_arrayed_input_preserves_vertex_deref)
 {
-   create_arrayed_distance_var(b->shader, nir_var_shader_in,
-                               "gl_ClipDistance", 3, 8);
+   nir_variable *clip =
+      create_arrayed_distance_var(b->shader, nir_var_shader_in,
+                                  "gl_ClipDistance", 3, 8);
 
-   nir_deref_instr *deref = nir_build_deref_var(
-      b, find_packed_distance_var(b->shader, nir_var_shader_in));
+   nir_deref_instr *deref = nir_build_deref_var(b, clip);
    deref = nir_build_deref_array_imm(b, deref, 1);
    deref = nir_build_deref_array_imm(b, deref, 5);
    nir_load_deref(b, deref);
