@@ -32,13 +32,6 @@ jobs:
             libelf-dev \
             libzstd-dev \
             libexpat1-dev \
-            libudev-dev \
-            llvm-22-dev \
-            libclang-22-dev \
-            libclc-22-dev \
-            libllvmspirvlib-22-dev \
-            spirv-tools \
-            spirv-tools-dev \
             clang
 
       - name: Configure minimal host build with NIR tests
@@ -46,11 +39,10 @@ jobs:
           meson setup build \
             -Dplatforms=[] \
             -Dgallium-drivers=[] \
-            -Dvulkan-drivers=panfrost \
-            -Dpanfrost-kmds=kbase \
+            -Dvulkan-drivers=[] \
             -Dtools=[] \
             -Dbuild-tests=true \
-            -Dllvm=enabled \
+            -Dllvm=disabled \
             -Dglx=disabled \
             -Degl=disabled \
             -Dgbm=disabled \
