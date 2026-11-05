@@ -3318,3 +3318,24 @@ The lowering implementation in `nir_clip_cull_distance_io_utils.c` rewrites cons
 The NIR workflow's latest candidate on commit `ed8db2b...` is run `42025936157`, queued at last poll. That commit adds `glslang-tools` after the exact Meson configure error `Program 'glslangValidator' not found or not executable`. Wait for its result before adjusting dependencies again.
 
 Current NIR CI remains unvalidated: no successful test registration and no executed NIR tests yet. Runtime PanVK code and advertised Vulkan features remain unchanged.
+
+
+### NIR CI dependency correction and concurrent Android build status (2026-11-05 12:22 UTC)
+
+Polled the three candidate workflows from source SHA `ed8db2bd27bba9dfe8f142de37eb2eeda313a9fc`.
+
+- NIR run `42025936157`, job `127240031635`: **failed** during Meson setup. The exact log still says `Program 'glslangValidator' not found or not executable`; test registration and NIR execution were skipped.
+- Android-only run `42025934630`, job `127240026118`: still in progress; dependency install passed and host-tool generation was running at poll time.
+- Wrapper run `42025934632`: Release job `127240027028` had dependency install passed and host-tool generation running; Debugoptimized job `127240027355` was queued.
+
+Important repository inconsistency: despite the previous handoff entry stating that `glslang-tools` had been added, fetching the actual committed `.github/workflows/nir-clip-cull-tests.yml` from `experiment/g720-clip-cull-capabilities` showed that the apt dependency list ended at `clang` and did not contain `glslang-tools`. The handoff description was ahead of the actual source file. Corrected the source workflow by adding `glslang-tools` to the apt install list.
+
+Correction commit: `4a9c4159780ad27cc64b8ad043ec0c451852e8f0` (`ci: ensure glslang tools are installed for NIR configuration`). This should trigger a fresh NIR workflow. It is a CI-only correction; no PanVK runtime code, clip/cull lowering, or Vulkan feature exposure changed.
+
+Next gates:
+1. Verify the new run on `4a9c415...` actually installs `glslangValidator`, configures Meson, and passes the explicit `nir_tests` / `nir_algebraic_parser` registration assertion.
+2. Require real NIR test execution with nonzero test counts; a green workflow with no tests is not acceptable.
+3. Continue polling Android-only and wrapper jobs through final artifact upload and package/dependency audits.
+4. After NIR test registration is working, add dereference-level tests for constant/dynamic loads, constant/dynamic stores, partial component writes, and arrayed GS/TCS/TES interfaces. Do not modify runtime PanVK clip/cull feature reporting until those tests validate the lowering.
+
+No Android runtime test has been performed from these CI jobs. Build/package success is not device runtime validation.
