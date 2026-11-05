@@ -77,7 +77,7 @@ panvk_desc_profile_dump(void)
    mesa_logi("descriptor profile: pools=%" PRIu64
              " requested_MiB=%.2f max_pool_MiB=%.2f pool_failures=%" PRIu64
              " set_allocs=%" PRIu64 " set_alloc_MiB=%.2f set_failures=%" PRIu64
-             " (overflow=%" PRIu64 " capacity=%" PRIu64 " vma=%" PRIu64 ")";
+             " (overflow=%" PRIu64 " capacity=%" PRIu64 " vma=%" PRIu64 ")",
              panvk_desc_profile_read(&panvk_desc_profile.pool_creates),
              panvk_desc_profile_read(&panvk_desc_profile.pool_create_bytes) /
                 (1024.0 * 1024.0),
