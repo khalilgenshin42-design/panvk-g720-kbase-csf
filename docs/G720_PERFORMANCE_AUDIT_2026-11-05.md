@@ -918,3 +918,11 @@ configuration failure before compilation. The workflow now installs
 `llvm-dev` and `clang` and configures `-Dllvm=enabled`
 (commit `21247310892a4be2209d13a586db21e42a95e2b7`). Await the next run;
 do not classify this as a NIR test failure or claim tests pass.
+
+
+### NIR CI follow-up: libclc
+
+After enabling LLVM, Meson configuration advanced but stopped because
+`libclc` was not installed. Added Ubuntu package `libclc-dev` to the host
+workflow (commit `43bc2ca59b3f5adbc804161f662e9d55617dd5fe`). This is still
+a host CI dependency issue before compilation; no NIR test result exists yet.
