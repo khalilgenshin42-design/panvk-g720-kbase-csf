@@ -3041,3 +3041,51 @@ canonical handoff. Update it after each meaningful repository/CI/source step;
 source experiment branches need not carry independent copies. The
 performance audit and capability matrix remain on
 `experiment/g720-performance-audit`.
+
+
+### Follow-up: exact vec4-lowering implementation traced
+
+Inspected the complete implementation of
+`nir_lower_clip_cull_distance_to_vec4s()`,
+`lower_distance_to_vec4()`, and `combine_clip_cull()` in
+`src/compiler/nir/nir_clip_cull_distance_io_utils.c`.
+
+This refines the earlier pass-order warning:
+- The vec4 pass first scans original variable locations to calculate
+  `clip_size` and `cull_size`.
+- It sets `total_size = clip_size + cull_size`, lowers
+  `gl_ClipDistance` at offset 0, then lowers `gl_CullDistance` at offset
+  `clip_size`.
+- The same newly-created `gl_ClipDistanceMESA` variable is retained between
+  the clip and cull lowering calls, so both arrays are packed into one vec4
+  array. The original variables become shader temporaries and their
+  dereferences are rewritten.
+- `nir_merge_clip_cull_distance_vars()` separately changes cull locations
+  and is not required by the vec4 lowering routine's packing algorithm.
+  Running merge first prevents the vec4 pass from discovering the original
+  cull variable at `VARYING_SLOT_CULL_DIST0`; it can then calculate an
+  undersized `total_size` while still applying the cull offset. This can
+  produce an invalid packed layout or out-of-range access.
+
+Working PanVK hypothesis, pending regression tests: gather Vulkan clip/cull
+array sizes before any lowering, then use the vec4 packing pass directly for
+the libpanfrost varying ABI; do not chain the generic merge pass ahead of it.
+The standard gather+merge sequence observed in RADV applies to its own
+interface-linking path and is not automatically the right sequence for
+PanVK's packed vec4 representation.
+
+Current tests still only assert packed declaration shape. The next test
+increment must exercise constant and dynamic dereference indices, both loads
+and stores, and mixed clip/cull offsets; then cover arrayed GS/TCS/TES
+interfaces. No runtime PanVK changes or feature exposure were made.
+
+### CI status after dependency repair
+
+Workflow commit `e73b88697f8293613858fbfc9eee671ead46de6f` changed the host
+workflow dependency from `libclc-dev` to `libclc-22-dev`, matching the
+Ubuntu 26.04 runner's APT package candidates. New runs
+`42023056158` (NIR), `42023056179` (Android-only), and
+`42023056338` (Android wrapper) were queued at the latest poll. Earlier
+runs `42022450295` (NIR), `42022450154` (Android-only), and
+`42022450159` (Android wrapper) were still queued/in progress. No result
+for the new dependency correction is available yet.
