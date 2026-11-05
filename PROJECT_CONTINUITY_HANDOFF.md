@@ -3306,3 +3306,15 @@ Current validation state:
 - No runtime PanVK changes or clip/cull feature exposure have been made.
 
 Older Android-only / wrapper build jobs from SHAs `9f8faa1...`, `2102a0a...`, `171a78a...`, and `3f75710...` were still queued/in progress at the last poll; do not interpret these as successful until their full package audits and artifact uploads complete.
+
+
+
+### Clip/cull test scope re-audit (2026-11-05 12:19 UTC)
+
+Re-read the actual NIR utility and test source after the CI dependency fixes. Current `clip_cull_distance_tests.cpp` tests variable declaration metadata, merged location/location_frac, gathered sizes, and packed vec4 declaration shape. It does **not** currently execute `nir_lower_clip_cull_distance_to_vec4s()` against real load/store derefs, nor verify rewritten SSA values, masked stores, dynamic indices, partial writes, or arrayed GS/TCS/TES interfaces.
+
+The lowering implementation in `nir_clip_cull_distance_io_utils.c` rewrites constant-index loads via `nir_channel`, dynamic-index loads via `nir_vector_extract`, constant-index stores via `nir_build_write_masked_store`, and dynamic-index stores via `nir_build_write_masked_stores`. It also handles arrayed interfaces by preserving the per-vertex deref before indexing the packed vec4 array. These paths are the next correctness test targets, but no implementation change is justified from source inspection alone.
+
+The NIR workflow's latest candidate on commit `ed8db2b...` is run `42025936157`, queued at last poll. That commit adds `glslang-tools` after the exact Meson configure error `Program 'glslangValidator' not found or not executable`. Wait for its result before adjusting dependencies again.
+
+Current NIR CI remains unvalidated: no successful test registration and no executed NIR tests yet. Runtime PanVK code and advertised Vulkan features remain unchanged.
