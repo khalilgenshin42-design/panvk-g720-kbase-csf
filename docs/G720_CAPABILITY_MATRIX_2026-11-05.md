@@ -366,3 +366,6 @@ A separate implementation branch, `experiment/g720-descriptor-heaps`, now contai
 The port intentionally does not enable descriptor-heap sparse residency, protected heaps, or capture/replay. The source branch has a per-variant descriptor-info layout, unlike the Mesa 27 reference's per-shader layout; the first implementation duplicates embedded-sampler backing for variants. Consolidating immutable sampler backing is a review item before finalizing.
 
 **Do not mark this extension production-ready or package it for Winlator until the Android ARM64 build, generated Vulkan API/entrypoint checks, NIR validation, and descriptor-heap runtime tests pass.** The stock Android driver remains untouched.
+
+
+Compile follow-up: the first Android compile reached the PanVK sources and found one missing Mesa-26.3 sampler-state-to-Mali-descriptor helper required for embedded samplers. That helper and its declaration have now been ported; exact latest-HEAD build is pending. The earlier failed run does not count as descriptor-heap validation.
