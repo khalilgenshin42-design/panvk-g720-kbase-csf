@@ -2334,3 +2334,70 @@ ZIP offered. The device benchmark plan remains unchanged: uninstrumented
 baseline with default threshold (expected log 65,536), then one-variable
 experiment with `PANVK_KBASE_HEAP_RENEW_WORK=262144`, verified by the new
 threshold log. No FPS improvement is claimed.
+
+
+## 2026-11-05 continuation — heap-renewal optimization candidate
+
+Re-read the handoff and performance audit before source work. Reviewed the
+latest performance-branch source and the CI failure history.
+
+### Confirmed compile regression and correction
+
+Android-only run `41946843838` on older source SHA
+`0afc4d49ee0986e4cfb144fd014e83a1723947db` failed during compilation of
+`panvk_vX_descriptor_set.c`. The compiler pinpointed a missing closing
+parenthesis in the descriptor-profile `mesa_logi()` call at line 80. This
+was a genuine source compile failure, not a dependency/runner issue. The
+current performance branch contains the correction in commit
+`a2e5ac142b4f0df71cb28204ece4337bace046de`; current source line 80 ends the
+format string with a comma and keeps all counter arguments in the call.
+
+### Heap-renewal source audit
+
+The prior Tomb Raider profile showed 4,068 tiler-heap renewals, 4,066
+work-triggered and 2 interval-triggered, with 52,804.121 ms aggregate wait
+and 61,272.081 ms aggregate renewal duration. Ring occupancy was only 1.8
+KiB sampled high-water with zero wraps; transient BO allocation/creation
+failures were zero. This keeps heap renewal as the strongest measured lead,
+not proof of a frame-time-equivalent 52.8-second cost.
+
+The Kbase path accumulates a CPU-side `tiler_work_estimate` from direct draws
+as `vertex.count * instance.count`; indirect draws use
+`draw_count * 256`. It renews after either 128 graphics submissions or
+65,536 estimated work units by default. Renewal drains graphics targets,
+creates a new kbase tiler heap context, updates/cleans the heap descriptor,
+and retires the old context only after subsequent VT and fragment ring jobs
+have both executed. The estimate is a heuristic, not actual heap bytes or
+chunk consumption. A higher threshold can reduce drains/context churn but
+can also let the heap grow closer to its maximum and increase memory pressure.
+
+### Isolated 4x experiment branch
+
+Created `experiment/g720-heap-renew-262k` from source/document checkpoint
+`e226f2068e3374b63481099390871d390510fece`.
+- `2f992b1a6464dc7a0e623e7f6c7355123ef5d772`: add the experiment branch to
+the Android-only workflow push filter.
+- `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`: change only the Kbase work
+threshold default from 65,536 to 262,144 (4x), retaining the interval of 128,
+all environment override semantics, and the effective-threshold log.
+- Candidate source line explicitly labels the 4x value as an isolated
+experiment requiring peak-heap and stability validation.
+
+CI for the experiment source SHA is queued:
+- Android-only run `41947695997`.
+- Android wrapper run `41947696048` (Release and Debugoptimized matrix).
+No compile or package success is claimed. Also in flight are the corrected
+baseline-source builds at SHA `e226f2068e3374b63481099390871d390510fece`:
+Android-only run `41947306451`, wrapper run `41947306616`. At last check,
+the Android-only job and both wrapper variants were still generating host
+tools; target compile/package stages had not begun.
+
+Next: inspect both experiment workflows through actual target compilation;
+if green, audit the Android-only package and compare it with the baseline.
+Then run the same Tomb Raider scene/settings first on the baseline and then
+on the 262,144 candidate with all profiling disabled. Record effective
+threshold log, min/max/average FPS, frame pacing, visual correctness, hangs,
+WSI/teardown behavior, and any OOM/heap errors. Reject the candidate if it
+causes instability or worse frame pacing, even if average FPS rises. Do not
+change kernel/system driver, ring size, descriptor topology, or Vulkan feature
+exposure as part of this experiment.
