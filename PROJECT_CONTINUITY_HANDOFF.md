@@ -3435,3 +3435,18 @@ NIR run `42027207795` on source `ccc0fbde...` failed exactly one test: `nir_clip
 The test was strengthened in commit `c6dfaabc0ba69c2a863c54b55eb67a8ac07d6b1c` to source its index from a shader input variable and convert it to pointer-index width, so the dynamic value cannot be constant-folded. The test still expects one constant store plus four guarded stores. NIR run `42027837669` is the authoritative run for this corrected test and remains in progress at this update. Earlier passing runs with immediate indices are only baseline validation.
 
 The Android-only package run for `ccc0fbde...` completed successfully (run `42027207710`); artifact `13415315237`, 16,753,662 bytes, SHA-256 `06ed38452893ba855ff65fd2a3e1a1ce920144e9f4d3b789e6fdba1f0da6fbbd`. This package contains no runtime clip/cull changes and is not a candidate for performance conclusions.
+
+
+### Truly dynamic clip-distance dereference test passed (2026-11-05 12:38 UTC)
+
+Authoritative NIR run for source SHA `c6dfaabc0ba69c2a863c54b55eb67a8ac07d6b1c`: run `42027837669`, job `127246403106`, **success**.
+
+- The test now uses a shader input variable as the array index, so it is genuinely dynamic and cannot be folded from an immediate constant.
+- It validates constant and dynamic scalar loads and stores after vec4 lowering.
+- Dynamic store expansion is checked as four guarded component stores plus one constant-index store (five packed-root stores total).
+- Debug shader validation is run after lowering.
+- Meson test suite: `nir_algebraic_parser` OK, `nir_tests` OK; 2/2 Meson tests passed, zero failures.
+
+This is the first successful validation of the genuinely dynamic dereference path. The prior `ccc0fbde...` run failed the test because the index was still constant-foldable, validating that the strengthened test catches the distinction.
+
+Next compiler test target: arrayed 2D clip-distance dereferences for GS/TES inputs and TCS outputs, to validate that the per-vertex array dimension is preserved while the inner distance array is packed into vec4s. Runtime PanVK clip/cull exposure remains unchanged pending complete stage transport.
