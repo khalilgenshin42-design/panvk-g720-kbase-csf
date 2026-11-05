@@ -2928,7 +2928,11 @@ shader_desc_info_deserialize(struct panvk_device *dev,
                       shader->desc_info.dyn_bufs.count);
    shader->desc_info.fs_varying_attr_desc_count = blob_read_uint32(blob);
 
-   shader->desc_info.uses_heaps = blob_read_uint8(blob) != 0;
+   const uint8_t uses_heaps = blob_read_uint8(blob);
+   if (blob->overrun || uses_heaps > 1)
+      return panvk_error(dev, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
+   shader->desc_info.uses_heaps = uses_heaps != 0;
+
    const uint32_t embedded_count = blob_read_uint32(blob);
    if (embedded_count > 2049 ||
        shader->desc_info.uses_heaps != (embedded_count != 0))
