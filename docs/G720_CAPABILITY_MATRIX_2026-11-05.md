@@ -393,15 +393,15 @@ Conditional custom-border-color commands required by the registry have also been
 Descriptor writer constraints checked against the current Khronos proposal: YCbCr and subsampled samplers are rejected by `vkWriteSamplerDescriptorsEXT` (they must be embedded); custom border colors are rejected for embedded samplers and require an explicit registered index for sampler-heap writes; YCbCr image descriptors use PanVK's per-format texture descriptor count. Fragment-density-map, QCOM image processing, acceleration structures, and ARM tensors are not exposed and their descriptor types remain unsupported. Source HEAD `0bf2e527c42fe06733d5c0b1557c9d2cec0c1412`; build pending.
 
 
-YCbCr count consistency fix: `VkSamplerYcbcrConversionImageFormatProperties::combinedImageSamplerDescriptorCount` is now derived from `panvk_image_get_tex_count(model->arch, format)`, matching the descriptor writer and PanVK descriptor-set layout. Source HEAD `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`; Android build pending.
+YCbCr count consistency fix: `VkSamplerYcbcrConversionImageFormatProperties::combinedImageSamplerDescriptorCount` is now derived from `panvk_image_get_tex_count(model->arch, format)`, matching the descriptor writer and PanVK descriptor-set layout. Source HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`; Android build pending.
 
 
-Intermediate build evidence: Android-only run `42078972694` at source `3e4e7ee3849ebab12c114eef8c6c3a650cd14b8f` passed compile, staging, ELF/libdrm audit, and package upload. It validates the initial writer-command implementation but predates custom-border command/restriction and YCbCr count fixes. Artifact `13438649591` is not the current test package. Exact latest source `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2` still awaits run `42080294652`.
+Intermediate build evidence: Android-only run `42078972694` at source `3e4e7ee3849ebab12c114eef8c6c3a650cd14b8f` passed compile, staging, ELF/libdrm audit, and package upload. It validates the initial writer-command implementation but predates custom-border command/restriction and YCbCr count fixes. Artifact `13438649591` is not the current test package. Exact latest source `04947cb94a9987bbe8f6b98d63142a5b64b1abf3` still awaits run `42080294652`.
 
 
 ## Exhaustive Vulkan initializer census — 2026-11-05
 
-Source of truth: `src/panfrost/vulkan/panvk_vX_physical_device.c` on `experiment/g720-descriptor-heaps` at `65ea07c485e2a9a1d936ff4fc17c9f6d6e07f249` (source branch commit `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`). These counts describe explicit C initializer assignments, not the number of extensions/features enabled at runtime on every architecture.
+Source of truth: `src/panfrost/vulkan/panvk_vX_physical_device.c` on `experiment/g720-descriptor-heaps` at `65ea07c485e2a9a1d936ff4fc17c9f6d6e07f249` (source branch commit `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`). These counts describe explicit C initializer assignments, not the number of extensions/features enabled at runtime on every architecture.
 
 - Extension-table assignments: **186**
 - Feature-structure assignments: **298** — 173 literal `true`, 70 literal `false`, 55 architecture/device/DRIRC-gated expressions.
@@ -679,3 +679,8 @@ Specific safety gates already established:
 - `shaderFloat64` and related float64 atomic/FMA fields remain false; do not infer support from unrelated FP16/FP32 features.
 
 This census is the baseline for the remaining "enable every genuinely supported feature" audit. It supersedes earlier approximate counts of 185 extension and 296 feature initializers.
+
+
+### YCbCr count build correction
+
+Exact-head Android build `42080294652` failed because `struct pan_model` has no `arch` member. The property calculation now derives the architecture with `pan_arch(physical_device->kmod.dev->props.gpu_id)`, consistent with existing PanVK code. Corrected source HEAD: `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`; exact-head Android-only run `42082198442` is queued.
