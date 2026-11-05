@@ -4009,7 +4009,7 @@ Repository-wide branch reconciliation was performed before continuing. The repos
 
 - Branch: `experiment/g720-descriptor-heaps`
 - Base: latest source branch `experiment/g720-clip-cull-capabilities` at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`
-- Current branch HEAD after initial port and binary-reader hardening: `0bfd34d0392efb0c98e31ad0400d991141f671ff`
+- Current branch HEAD after initial port, binary-reader hardening, and sampler-state packing helper: `346bffa794850bfa70c3495794f8ccccda89a251`
 - The existing source and audit branches remain unchanged.
 
 ### Implemented in the experimental branch (not yet build-validated)
@@ -4057,3 +4057,15 @@ No new device benchmark was run. The last user-reported Tomb Raider Definitive E
 
 
 Follow-up hardening on `experiment/g720-descriptor-heaps`: shader-binary deserialization now rejects non-boolean heap-use flag bytes and checks blob overrun immediately before accepting the embedded-sampler count. This is included in source HEAD `0bfd34d0392efb0c98e31ad0400d991141f671ff`; a fresh final-head Android build is required because the earlier build run targets `4edd96ec9bb936dc29b86e7f2b1f814f9f9922c3`.
+
+
+### First Android compile result and correction
+
+The first final-stage Android-only compile on source HEAD `4edd96ec9bb936dc29b86e7f2b1f814f9f9922c3` reached PanVK compilation and failed in `panvk_vX_shader.c` because this Mesa 26.3 branch did not yet declare/implement the reference's `panvk_per_arch(sampler_state_fill_desc)` helper. The descriptor heap API/property fields, command-state source, push-data source, and NIR lowering source were compiled before the failure; the error was not an absent Vulkan registry declaration.
+
+Correction:
+- Ported `panvk_per_arch(sampler_state_fill_desc)` from the Mesa 27 reference into `panvk_vX_sampler.c`.
+- Added its prototype to `panvk_sampler.h`.
+- Current source branch HEAD is now `346bffa794850bfa70c3495794f8ccccda89a251`.
+
+A new Android-only build started on the immediately preceding source commit `13bd689e56ec0baa7ee4f92bc5de0a7c81c888ef` (run `42077165223`); the header declaration commit `346bffa794850bfa70c3495794f8ccccda89a251` was pushed immediately afterward, so a fresh build on the exact latest HEAD is required. Do not treat the earlier failed run as validation, and do not package/test yet.
