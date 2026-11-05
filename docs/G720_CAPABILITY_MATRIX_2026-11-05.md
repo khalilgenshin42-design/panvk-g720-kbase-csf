@@ -77,11 +77,15 @@ dispatches, software geometry/tessellation, and conditional rendering.
 ## 3. High-value comparison with later PanVK work
 
 The later `JimVulkan/mali-panvk` tree (Mesa 27.0.0-devel; its README reports
-G720 testing) has working software paths for:
+G720 testing) is a useful implementation reference for:
 - multiple viewports: geometry-shader viewport-index output, vertex position
   remapping, and fragment discard against the selected viewport rectangle;
-- clip/cull distances: generic varying transport and fragment discard;
-- pipeline statistics: CPU accounting from command parameters;
+- clip/cull distances: generic varying transport and fragment discard on the
+  direct pre-raster-to-fragment path (its linker still passes zero clip/cull
+  counts when GS/TES precedes FS);
+- pipeline statistics: CPU accounting from command parameters, with documented
+  omissions for indirect work and fragment invocations and approximations for
+  geometry/tessellation;
 - BCn texture emulation for formats not natively decoded by a Mali GPU;
 - `VK_EXT_descriptor_heap`, with descriptor heap tables, push-data handling,
   shader lowering and device feature/property support.
