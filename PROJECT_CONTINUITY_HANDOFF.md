@@ -2761,3 +2761,17 @@ location. Calling these in an assumed order could lose the cull-size signal or
 create mismatched IO. First add a focused NIR test covering clip-only,
 cull-only, mixed arrays (including non-vec4-aligned clip counts), and arrayed
 GS/TCS/TES interfaces; then integrate the verified pass order.
+
+
+### NIR pass-order refinement from RADV precedent
+
+A source comparison in this same Mesa tree found RADV's established sequence
+in `src/amd/vulkan/radv_shader.c`: call
+`nir_gather_clip_cull_distance_sizes_from_vars(nir)`, then
+`nir_merge_clip_cull_distance_vars(nir)`. This is a confirmed precedent for
+interface linking. It does **not** mean
+`nir_lower_clip_cull_distance_to_vec4s()` should be chained after merge; that
+helper is a distinct representation-lowering pass and its location-based size
+scan needs separate analysis. Keep the two mechanisms distinct until a test
+proves the exact PanVK representation and pass sequence. RADV source blob:
+`c6b392bb638c7755356950130e1521f9106343d7`.
