@@ -1,6 +1,33 @@
 # PanVK G720 project continuity handoff
 Last updated: 2026-11-03 (UTC)
 
+## Authoritative current state — 2026-11-05
+
+This section supersedes older "next steps" and "no code changed" statements in the historical addenda below. Keep the historical record; do not treat its older status as current.
+
+- Repository branch inventory was checked across all 25 branches. The only branch containing the root `PROJECT_CONTINUITY_HANDOFF.md` is `docs/project-continuity-handoff-2026-11-03`; no other branch has a divergent copy.
+- Canonical handoff branch HEAD at this update: `37d2633e71269644ceb72d1566a7d136ae780cee`.
+- Current isolated implementation branch: `experiment/g720-descriptor-heaps`, source HEAD `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`.
+- Existing primary source branch `experiment/g720-clip-cull-capabilities` remains at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`; it has not been merged with the descriptor-heap branch.
+- Capability matrix branch: `experiment/g720-performance-audit`, HEAD `a41b5f22bdc60cedb6bce783df192ac5031a7fde`.
+
+### Current implementation state
+
+The isolated Valhall branch now contains the PanVK descriptor-heap backend path: NIR heap lowering, heap resource-table entries, sampler/resource heap binding, secondary-command-buffer inheritance, push data, explicit shader heap-use metadata, embedded sampler packing and shader binary/cache lifecycle, descriptor writer commands, conditional custom-border registration commands, and extension/feature/property reporting.
+
+The current registry command audit covers `vkWriteSamplerDescriptorsEXT`, `vkWriteResourceDescriptorsEXT`, `vkCmdBindSamplerHeapEXT`, `vkCmdBindResourceHeapEXT`, `vkCmdPushDataEXT`, `vkGetImageOpaqueCaptureDataEXT`, common-runtime `vkGetPhysicalDeviceDescriptorSizeEXT`, and conditional `vkRegisterCustomBorderColorEXT` / `vkUnregisterCustomBorderColorEXT`. YCbCr and subsampled samplers are rejected by the sampler-heap writer; YCbCr image descriptor counts now match the per-format PanVK texture descriptor count. Custom border colors are not allowed in embedded samplers. Acceleration structures, ARM tensors, QCOM image-processing descriptor types, sparse heaps, protected heaps, and descriptor-heap capture/replay remain unsupported/disabled.
+
+### Build and test status
+
+- Intermediate Android-only build run `42078972694` passed compile, stage, package audit and upload at older source `3e4e7ee3849ebab12c114eef8c6c3a650cd14b8f`. Its artifact `13438649591` is stale and must not be sent to the user for testing.
+- Exact-current-source Android-only build run `42080294652` targets `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2` and was queued at last check. Wrapper build run `42080294724` was also queued.
+- No exact-current-source compile/link/package validation has passed yet. No device runtime test has been requested or performed for this descriptor-heap branch.
+
+### User action gate
+
+Continue source review and CI work autonomously. Do not ask the user to import/test until the exact current source has passed Android ARM64 compile/link, ELF/libdrm audit, package creation, and package-contract audit. Keep the custom package separate and importable through Winlator Mali; never replace the Android vendor/system Vulkan driver. Do not return to tiny FPS A/B changes as the default work. Ray query, sparse residency, and any other incomplete feature remain disabled until end-to-end implementation and correctness evidence exist.
+
+
 This document is the durable handoff for future ChatGPT sessions working on this project. Read it before making changes. Treat GitHub history, branches, workflow artifacts, and the user's uploaded diagnostic archives as the source of truth. Do not assume this document contains every historical discussion; it records the key decisions, current state, and pointers needed to continue safely.
 
 ## User goal and hard constraints
