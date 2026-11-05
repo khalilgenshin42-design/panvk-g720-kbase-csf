@@ -214,3 +214,43 @@ Android-only and wrapper CI runs for this latest source commit
 pending. Earlier CI runs from intermediate commits are also in flight. Runtime
 testing is still required to ensure the telemetry output is useful on the
 actual Mali-G720 MC7.
+
+## 2026-11-05 validation checkpoint — performance telemetry builds
+
+Latest performance-branch source/document commit:
+`b4f8759db3616b4e9a4aa50d1f66b0d1ef3a87bf`.
+
+Both latest-source GitHub Actions workflows completed successfully:
+- Android-only PanVK G720 Experiment: run `41941578949`, conclusion SUCCESS.
+  Job `build-android-only` passed configure, compile/stage, driver/manifest/
+  dependency audit, flat Winlator/Adrenotools package creation, and artifact
+  upload. Artifact ID `13377475268`, name
+  `panvk-g720-android-only-experimental-package`, size 16,745,729 bytes.
+- Android NDK Build (Wrapper Variant): run `41941579141`, conclusion SUCCESS.
+  Both `debugoptimized` and `release` jobs passed configure, compile, and
+  artifact upload.
+
+This validates compilation and static packaging on the latest branch commit.
+It does not establish on-device kbase ABI compatibility, runtime stability,
+Vulkan conformance, or any FPS improvement. No runtime test has yet been run.
+
+### Telemetry source review notes
+
+The descriptor profile format string and argument ordering match. Pool byte
+counters measure requested backing size; set allocation bytes count requested
+bytes before heap allocation, so failed attempts are included. Pool-create
+failure counts the backing-memory initialization failure path, not every
+possible earlier host allocation failure. The option is disabled by default.
+
+The CSF profile format string and argument ordering match. Ring bytes cleaned
+are counted after the existing cache-clean call. The occupancy high-water
+counter is the **maximum single sampled outstanding-byte value observed across
+all subqueues**, not the sum of simultaneous occupancy across subqueues. It is
+a diagnostic peak sample, not an exact global ring-memory usage total.
+The extract read is gated by `PANVK_KBASE_PROFILE`; no queue/ring behavior is
+changed. Monotonic insert/extract sequence semantics are assumed by the
+existing ring code and should be confirmed against runtime logs.
+
+Next: obtain a reproducible device-side run with both profile options enabled
+for a diagnostic capture, then repeat the performance benchmark with profiling
+disabled. Keep instrumented and uninstrumented measurements separate.
