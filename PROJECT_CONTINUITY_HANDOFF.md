@@ -2589,3 +2589,41 @@ Initial source audit of
    subset. Retain the application log as a record of what DXVK actually uses.
 
 No feature exposure or runtime source change was made in this audit step.
+
+
+## 2026-11-05 — corrected 262K benchmark and detailed v12 capability matrix
+
+The user corrected the 262,144-threshold Tomb Raider result: **min 7.8 /
+max 18.9 / average 13.9 FPS** (not 3.9). Against the 65,536 baseline
+(9.0 / 17.6 / 13.5), the candidate's average is +0.4 FPS while minimum is
+-1.2 FPS. This single-run difference is inconclusive; retain 65K as the
+reference and do not promote 262K.
+
+Created
+[docs/G720_CAPABILITY_MATRIX_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_CAPABILITY_MATRIX_2026-11-05.md)
+on the performance-audit branch. It records current v12 extension/feature
+coverage, exact reasons the following remain disabled, and the implementation
+port priorities:
+- multiViewport: current limit is one viewport; a software geometry/fragment
+  path exists in later JimVulkan PanVK work.
+- shaderClipDistance / shaderCullDistance: current branch has a partial direct
+  VS->FS lowering but no explicit FS-read or geometry/tessellation propagation.
+- pipelineStatisticsQuery: no query result writer; shader stats address is
+  currently lowered to the safe OOB sink.
+- geometryStreams: current lowering only models stream zero.
+- sparse Kbase binding: no sparse bind queue.
+- vertex-pipeline stores/atomics: retain v12 safety gate due speculative
+  invalid-index references.
+- ray query and descriptor heap: absent from this branch's complete driver
+  implementation; later forks are research references, not drop-in patches.
+
+Compared `JimVulkan/mali-panvk` (Mesa 27.0.0-devel, README reports G720
+testing). Its source includes software paths for clip/cull, multi-viewport,
+CPU-counted pipeline statistics, BCn texture emulation, and
+`VK_EXT_descriptor_heap`. These are candidate port references only; source
+and generated-registry differences mean each needs a real port, build, tests,
+and runtime validation. The next smallest coherent source task is to complete
+the existing clip/cull lowering, on a dedicated branch, without enabling the
+feature bits until all pipeline-stage and property semantics are covered.
+
+No runtime feature flag was changed in this step.
