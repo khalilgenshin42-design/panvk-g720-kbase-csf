@@ -3548,3 +3548,25 @@ Wrapper workflow on source SHA `4f4d02e...` also completed Release and Debugopti
 NIR run `42031227168` on `4f4d02e...` passed 2/2 Meson suite tests. The test coverage includes dynamic accesses, arrayed GS/TCS/TES interfaces and mixed clip/cull offset.
 
 Next user-dependent gate: import the Android-only package into Winlator's custom driver path (do not replace the Android system/vendor Vulkan driver), launch a test workload that uses clip/cull distance, and provide the log or crash report. Prefer a known DXVK game benchmark with a fixed scene and capture PanVK shader/NIR debug output if available. Compare stability and FPS against the immediately preceding package with the same Winlator settings. Until this device validation, do not enable Vulkan clip/cull feature bits or claim performance improvement.
+
+
+### Winlator Mali 1.2 package compatibility clarification (2026-11-05 14:08 UTC)
+
+A user correctly asked whether artifact `13417170405` is definitely packaged for Winlator Mali 1.2. Audited the exact workflow and packaging script at source SHA `4f4d02e01723d61f1ff19713951be6bcbfa8d08d`.
+
+Verified facts:
+- The workflow builds an Android ARM64 PanVK ICD and invokes `.github/scripts/package-panvk-adpkg.sh`.
+- The script creates a flat-root ZIP with `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+- `meta.json` uses schemaVersion 1 and libraryName `libvulkan_panfrost.so`; the driver has a private `$ORIGIN` dependency on `libpanvk_drm.so`.
+- The package script performs ELF architecture, SONAME, RUNPATH, dependency, and ZIP-layout checks.
+- The external FristOneRR PanVK project documents Winlator Mali 1.2+ (AdrenoTools) as a supported app and uses the same install path (import the ZIP itself). Winlator Mali's own README says Mali containers select Graphics Driver = Wrapper.
+
+Important qualification:
+- The artifact is **AdrenoTools/ADPKG-format and intended for the Winlator Mali 1.2 AdrenoTools custom-driver path**, not a Winlator-Mali-specific bespoke package format.
+- The packaging workflow does **not** run an actual Winlator Mali importer, validate the app's extraction/loader behavior, or launch the driver on-device. Thus importer acceptance and runtime loading are not yet proven. The extra private dependency `libpanvk_drm.so` is deliberately included beside the ICD and linked via `$ORIGIN`, but still requires runtime confirmation in the target app.
+- Do not describe the artifact as confirmed Winlator Mali-compatible until the user imports it and we verify that it appears/selects correctly and the process actually loads this PanVK ICD rather than silently falling back.
+- No need to rebuild solely for this clarification. The next device test should first establish import acceptance and actual driver identity (GPU info / Vulkan device name / PanVK log), then proceed to the fixed Tomb Raider benchmark only if the driver is confirmed loaded.
+
+External references checked:
+- `FristOneRR/FristOneRR-Panvk-Driver` README documents Winlator Mali 1.2+ (AdrenoTools) support and ZIP import instructions.
+- `GunaCharanTeja/WinlatorMali` README documents Wrapper selection for Mali.
