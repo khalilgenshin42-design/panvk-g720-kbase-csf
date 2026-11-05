@@ -541,3 +541,71 @@ ZIP offered. The device benchmark plan remains unchanged: uninstrumented
 baseline with default threshold (expected log 65,536), then one-variable
 experiment with `PANVK_KBASE_HEAP_RENEW_WORK=262144`, verified by the new
 threshold log. No FPS improvement is claimed.
+
+
+## 2026-11-05 — isolated tiler-heap renewal threshold experiment
+
+### Source review
+
+The current Kbase submit path accumulates `tiler_work_estimate` and triggers
+heap renewal when either the graphics-submit count reaches 128 or accumulated
+work reaches 65,536 by default. Direct draws contribute
+`vertex.count * instance.count`; indirect draws contribute
+`draw_count * 256`. This is a CPU-side proxy, not an observation of actual
+firmware heap occupancy, allocated chunks, or bytes.
+
+On renewal, PanVK waits for graphics subqueue target sequence numbers,
+creates a replacement Kbase tiler heap context, updates and cache-cleans the
+heap descriptor, and defers destruction of the old context until both VT and
+fragment subqueues have emitted and executed later ring entries. The last
+profiled Tomb Raider capture recorded 4,068 renewals (4,066 work-triggered,
+2 interval-triggered), 52,804.121 ms aggregate wait, and 61,272.081 ms total
+renewal time. These are aggregate counters and must not be interpreted as
+wall-clock frame time. The CSF ring had zero wraps and only 1.8 KiB sampled
+occupancy high-water; transient BO allocation and BO creation failures were
+zero. Therefore the threshold is a defensible next A/B variable, but heap
+memory growth and correctness are explicit risks.
+
+### Compile failure diagnosis
+
+Android-only run `41946843838` failed at
+`src/panfrost/vulkan/panvk_vX_descriptor_set.c:80` while compiling the
+profile log call: missing closing parenthesis. This was subsequently fixed
+on the baseline branch at commit
+`a2e5ac142b4f0df71cb28204ece4337bace046de`. Current source excerpt was
+re-fetched and verified to contain the closing parenthesis and all variadic
+arguments within `mesa_logi()`.
+
+### 4x threshold candidate
+
+Created branch `experiment/g720-heap-renew-262k` from
+`e226f2068e3374b63481099390871d390510fece`. The candidate changes only
+`KBASE_TILER_HEAP_RENEW_WORK` from 65,536 to 262,144; interval remains 128,
+and the runtime environment override and effective-value log remain intact.
+This is a 4x threshold experiment, not a permanent optimization claim.
+
+Commits:
+- `2f992b1a6464dc7a0e623e7f6c7355123ef5d772`: CI push-filter inclusion.
+- `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`: 262,144 default.
+
+Queued validation for candidate SHA `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`:
+- Android-only run `41947695997`.
+- Android wrapper run `41947696048` (Release and Debugoptimized).
+Baseline-source CI at SHA `e226f2068e3374b63481099390871d390510fece` also
+remains in progress: Android-only `41947306451`, wrapper `41947306616`.
+The jobs were still in host-tool generation at the last detailed step check;
+no target compile or package success is yet established.
+
+### Acceptance test
+
+Do not distribute the candidate until Android-only and wrapper builds pass
+and the generated flat Winlator package passes manifest, ELF, dependency,
+member-hash, and archive-layout audits. Device A/B must use the same Tomb
+Raider scene, resolution, graphics settings, wrapper, and thermal starting
+state. Disable all profile variables in both runs. Verify the effective
+threshold log (65,536 baseline vs 262,144 candidate); capture min/max/average
+FPS and frame-time distribution if available; inspect visual artifacts,
+crashes, device-lost/CSF faults, heap allocation/OOM behavior, and WSI teardown.
+A 4x threshold should nominally reduce work-triggered renewal frequency only
+if the heuristic tracks the workload linearly and the heap does not reach its
+limit; neither is assumed. Keep the baseline branch unchanged for rollback.
