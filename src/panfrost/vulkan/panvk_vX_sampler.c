@@ -212,6 +212,42 @@ panvk_per_arch(sampler_state_fill_desc)(const struct vk_sampler_state *s,
                            s->mag_filter, s->reduction_mode, s->flags);
 }
 
+
+#if PAN_ARCH >= 9
+/* Valhall sampler descriptors contain the complete custom border-color
+ * value, so no hardware palette slot needs to be allocated or tracked. */
+VKAPI_ATTR VkResult VKAPI_CALL
+panvk_per_arch(RegisterCustomBorderColorEXT)(
+   VkDevice _device,
+   const VkSamplerCustomBorderColorCreateInfoEXT *pBorderColor,
+   VkBool32 requestIndex, uint32_t *pIndex)
+{
+   (void)_device;
+   (void)pBorderColor;
+
+   if (requestIndex) {
+      /* The requested index is an opaque capture/replay value. Since the
+       * descriptor embeds the color, every in-range index is valid. */
+      if (*pIndex >= 32768)
+         return VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS;
+   } else {
+      /* Registration is a no-op; index zero is valid for all colors. */
+      *pIndex = 0;
+   }
+
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(UnregisterCustomBorderColorEXT)(VkDevice _device,
+                                               uint32_t index)
+{
+   (void)_device;
+   (void)index;
+}
+#endif
+
+
 VKAPI_ATTR VkResult VKAPI_CALL
 panvk_per_arch(CreateSampler)(VkDevice _device,
                               const VkSamplerCreateInfo *pCreateInfo,
