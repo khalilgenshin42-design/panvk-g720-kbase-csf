@@ -440,6 +440,7 @@ if with_tests and not with_nir_headers_only
           'tests/comparison_pre_tests.cpp',
           'tests/control_flow_tests.cpp',
           'tests/core_tests.cpp',
+          'tests/clip_cull_distance_tests.cpp',
           'tests/dce_tests.cpp',
           'tests/format_convert_tests.cpp',
           'tests/fp_class_tests.cpp',
