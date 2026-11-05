@@ -2823,3 +2823,8 @@ have been changed. Do not package or benchmark this branch yet.
 ## 2026-11-05 — first clip/cull NIR tests
 
 On `experiment/g720-clip-cull-capabilities`, added `src/compiler/nir/tests/clip_cull_distance_tests.cpp` and registered it in `src/compiler/nir/meson.build`. Initial cases cover VS clip-only, VS cull-only, mixed VS arrays within one vec4 slot, mixed arrays crossing a vec4 boundary, and mixed FS inputs. They assert gathered array-size metadata and the merged `location`/`location_frac` layout. A dedicated host CI workflow builds `src/compiler/nir/nir_tests` and runs the `nir` Meson suite; Android build workflows are also enabled for the experiment branch. Results are pending, so no test or build success is claimed. These tests cover generic NIR gather/merge only, not vec4 lowering, software GS/TCS/TES transport, interpolation, or PanVK fragment discard semantics. No runtime PanVK code or Vulkan feature exposure changed. Latest source test commit: `2acdfa52b5ec748cfd8f59ccf45754fd18674ce3`.
+
+
+### CI correction — 2026-11-05
+
+The first dedicated NIR workflow configured Meson successfully but failed before compilation because its Ninja target was specified as `src/compiler/nir/nir_tests`, which is not a valid target name in this build graph. This is a workflow target-selection error, not a C++ compile or test failure. Corrected the workflow to build `nir_tests` (`1d64f878f15366f912b48c885858e89b199de841`). A new run is queued; no NIR test result is available yet. Android build jobs for the source branch are also still pending.
