@@ -47,6 +47,9 @@ jobs:
           grep -q "CmdBindSamplerHeapEXT" src/panfrost/vulkan/panvk_vX_cmd_desc_state.c
           grep -q "CmdBindResourceHeapEXT" src/panfrost/vulkan/panvk_vX_cmd_desc_state.c
           grep -q "CmdPushDataEXT" src/panfrost/vulkan/panvk_vX_cmd_push_constant.c
+          grep -q "WriteSamplerDescriptorsEXT" src/panfrost/vulkan/panvk_vX_descriptor_set.c
+          grep -q "WriteResourceDescriptorsEXT" src/panfrost/vulkan/panvk_vX_descriptor_set.c
+          grep -q "GetImageOpaqueCaptureDataEXT" src/panfrost/vulkan/panvk_vX_descriptor_set.c
           grep -q ".EXT_descriptor_heap = PAN_ARCH >= 9" src/panfrost/vulkan/panvk_vX_physical_device.c
           grep -q ".descriptorHeap = PAN_ARCH >= 9" src/panfrost/vulkan/panvk_vX_physical_device.c
 
