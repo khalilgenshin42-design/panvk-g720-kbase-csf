@@ -1886,3 +1886,11 @@ An important architecture correction was made during the port:
 - Latest branch head: `e9857947b2ee2f244fe07c782cf4166bf06a34de`.
 - Fresh Android-only PanVK build run `41938609257` and wrapper-variant build run `41938609251` have started on the latest head. At last check, Android-only CI was still installing dependencies; an earlier run `41938462326` was generating host tools. Await the latest run's compile and package audit before declaring build validation.
 - No device runtime test has been run. All clip/cull feature bits remain false.
+
+### Final gating correction and CI assertion repair
+
+- `ea483d2b4d83dfa3df01f7e897ca3e5c96acabcf`: added an explicit requirement that a fragment stage is actually present before marking the direct VS->FS path eligible.
+- `027589f85c4ff3635cf5148168b1d368d308a2f0`: pass the validated direct-path counts to both VS and FS compilation. The VS cull transform now keys off the validated linked cull count, so it cannot rewrite cull values when no FS is present or when the FS explicitly reads the original distance values.
+- Android-only run `41938752951` failed at the workflow's checkout assertion only: the source guard had been strengthened, but the grep assertion still expected the old expression. No compilation was attempted in that run.
+- Updated the assertion in workflow commit `f843a225f9b4f1821e69bb52ed0718c86628b8d3` to match the stronger source guard.
+- Fresh Android-only run `41938787852` was queued on source commit `027589f...`; wrapper-variant run `41938787810` was in progress. Await the post-assertion run for the latest source before declaring compile validation.
