@@ -824,6 +824,12 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const struct lower_desc_ctx *ctx)
 {
    bool progress = false;
 
+#if PAN_ARCH >= 9
+   /* Heap texture handles have already been lowered to native Mali handles. */
+   if (nir_tex_instr_src_index(tex, nir_tex_src_texture_handle) >= 0)
+      return false;
+#endif
+
    b->cursor = nir_before_instr(&tex->instr);
 
    lower_tex_immutable(b, tex, ctx);
