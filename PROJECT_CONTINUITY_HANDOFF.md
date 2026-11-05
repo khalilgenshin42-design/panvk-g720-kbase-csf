@@ -3339,3 +3339,11 @@ Next gates:
 4. After NIR test registration is working, add dereference-level tests for constant/dynamic loads, constant/dynamic stores, partial component writes, and arrayed GS/TCS/TES interfaces. Do not modify runtime PanVK clip/cull feature reporting until those tests validate the lowering.
 
 No Android runtime test has been performed from these CI jobs. Build/package success is not device runtime validation.
+
+
+Follow-up run IDs after the source correction commit `4a9c4159780ad27cc64b8ad043ec0c451852e8f0`:
+- NIR test workflow: run `42026345910`, job `127241399440`.
+- Android-only build/package: run `42026346036`, job `127241400075`.
+- Android wrapper: run `42026345779`, Release job `127241398933`, Debugoptimized job `127241399443`.
+
+All four jobs were confirmed queued immediately after the commit; none had started, so there are no new test/build results yet. These are the current candidate runs and supersede earlier pending candidates for validation of the corrected workflow/source SHA. Canonical handoff update commit: this entry is appended after the previous 12:22 UTC correction record.
