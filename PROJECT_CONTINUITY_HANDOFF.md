@@ -3488,3 +3488,12 @@ Source commit `989f931ec6af96c1e9db2c4c683b992581efe770` adds `vertex_cull_acces
 The test declares clip distance size 3 and cull distance size 2, then loads/stores `gl_CullDistance[1]`. Correct packing requires `clip[0..2]` to occupy packed lanes 0..2 and `cull[1]` to map to `gl_ClipDistanceMESA[1].x`. The test counts packed-root load/store derefs specifically at vec4 array index 1 and runs NIR validation in debug builds.
 
 This targets the remaining mixed-array offset path and scalar partial-lane write behavior. CI for the new test is pending; no runtime code has changed.
+
+
+### Mixed clip/cull non-zero offset test passed (2026-11-05 12:50 UTC)
+
+Source SHA `989f931ec6af96c1e9db2c4c683b992581efe770` passed NIR run `42029810407`, job `127253076467`. Meson reported `nir_algebraic_parser` OK and `nir_tests` OK (2/2, zero failures).
+
+The new `vertex_cull_accesses_use_clip_offset_in_shared_vec4_array` test validates clip size 3 + cull size 2 and confirms the transformed cull[1] load/store dereferences point to packed vec4 array element 1, as required by the combined index offset. This covers the non-zero cull offset and scalar masked-store path.
+
+Current NIR test coverage now validates declaration merge/layout, vec4 packing, constant/dynamic loads and stores, arrayed GS/TCS/TES interfaces, and mixed clip+cull offset. This is compiler helper correctness only. PanVK's own direct VS->FS lowering remains a separate implementation and full stage transport/feature exposure is not yet complete.
