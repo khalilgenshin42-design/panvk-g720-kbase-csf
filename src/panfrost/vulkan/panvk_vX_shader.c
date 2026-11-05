@@ -1564,6 +1564,7 @@ panvk_shader_variant_destroy(struct panvk_shader_variant *shader)
       panvk_pool_free_mem(&shader->spds.pos_triangles);
 #endif
    }
+   panvk_pool_free_mem(&shader->desc_info.embedded_samplers.descs);
 #endif
 
    if (shader->own_bin)
@@ -1584,6 +1585,54 @@ panvk_shader_destroy(struct vk_device *vk_dev, struct vk_shader *vk_shader,
 }
 
 static const struct vk_shader_ops panvk_shader_ops;
+
+#if PAN_ARCH >= 9
+static VkResult
+panvk_upload_embedded_samplers(struct panvk_device *dev,
+                               struct panvk_shader_desc_info *desc_info,
+                               const struct mali_sampler_packed *descs,
+                               uint32_t count)
+{
+   desc_info->uses_heaps = true;
+   desc_info->embedded_samplers.count = count;
+   desc_info->embedded_samplers.descs = panvk_pool_upload_aligned(
+      &dev->mempools.rw, descs, count * sizeof(*descs), PANVK_DESCRIPTOR_SIZE);
+   if (!panvk_priv_mem_check_alloc(desc_info->embedded_samplers.descs))
+      return panvk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+panvk_init_heap_desc_info(struct panvk_device *dev,
+                          struct panvk_shader_desc_info *desc_info,
+                          const struct vk_shader_compile_info *info)
+{
+   if (!(info->flags & VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT))
+      return VK_SUCCESS;
+
+   /* The embedded sampler table always starts with a default sampler. */
+   if (info->embedded_sampler_count > 2048)
+      return panvk_error(dev, VK_ERROR_FEATURE_NOT_PRESENT);
+
+   const uint32_t count = 1 + info->embedded_sampler_count;
+   struct mali_sampler_packed *descs = malloc(count * sizeof(*descs));
+   if (!descs)
+      return panvk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   pan_pack(&descs[0], SAMPLER, cfg) {
+      cfg.clamp_integer_array_indices = false;
+   }
+   for (uint32_t i = 0; i < info->embedded_sampler_count; i++)
+      panvk_per_arch(sampler_state_fill_desc)(&info->embedded_samplers[i],
+                                              &descs[i + 1]);
+
+   VkResult result =
+      panvk_upload_embedded_samplers(dev, desc_info, descs, count);
+   free(descs);
+   return result;
+}
+#endif
 
 static VkResult
 panvk_compile_gs_compute_variant(
@@ -1827,6 +1876,18 @@ panvk_compile_shader(struct panvk_device *dev,
                              pAllocator, size);
    if (shader == NULL)
       return panvk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+#if PAN_ARCH >= 9
+   if (info->flags & VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT) {
+      panvk_shader_foreach_variant(shader, variant) {
+         result = panvk_init_heap_desc_info(dev, &variant->desc_info, info);
+         if (result != VK_SUCCESS) {
+            panvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
+            return result;
+         }
+      }
+   }
+#endif
 
    nir_variable_mode robust_modes = 0;
    if (info->robustness->uniform_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT)
@@ -2866,7 +2927,26 @@ shader_desc_info_deserialize(struct panvk_device *dev,
                    sizeof(*shader->desc_info.dyn_bufs.map) *
                       shader->desc_info.dyn_bufs.count);
    shader->desc_info.fs_varying_attr_desc_count = blob_read_uint32(blob);
+
+   shader->desc_info.uses_heaps = blob_read_uint8(blob) != 0;
+   const uint32_t embedded_count = blob_read_uint32(blob);
+   if (embedded_count > 2049 ||
+       shader->desc_info.uses_heaps != (embedded_count != 0))
+      return panvk_error(dev, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
+   if (embedded_count > 0) {
+      const struct mali_sampler_packed *descs = blob_read_bytes(
+         blob, embedded_count * sizeof(struct mali_sampler_packed));
+      if (blob->overrun)
+         return panvk_error(dev, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
+      VkResult result = panvk_upload_embedded_samplers(
+         dev, &shader->desc_info, descs, embedded_count);
+      if (result != VK_SUCCESS)
+         return result;
+   }
 #endif
+
+   if (blob->overrun)
+      return panvk_error(dev, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
 
    return VK_SUCCESS;
 }
@@ -3057,6 +3137,13 @@ shader_desc_info_serialize(struct blob *blob,
                     sizeof(*shader->desc_info.dyn_bufs.map) *
                        shader->desc_info.dyn_bufs.count);
    blob_write_uint32(blob, shader->desc_info.fs_varying_attr_desc_count);
+   blob_write_uint8(blob, shader->desc_info.uses_heaps);
+   const uint32_t embedded_count = shader->desc_info.embedded_samplers.count;
+   blob_write_uint32(blob, embedded_count);
+   if (embedded_count > 0)
+      blob_write_bytes(blob,
+                       panvk_priv_mem_host_addr(shader->desc_info.embedded_samplers.descs),
+                       embedded_count * sizeof(struct mali_sampler_packed));
 #endif
 }
 
