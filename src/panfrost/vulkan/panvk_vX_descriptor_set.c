@@ -1140,10 +1140,14 @@ panvk_write_heap_sampler(struct panvk_device *device,
    struct vk_sampler_state state;
    vk_sampler_state_init(&state, sampler_info);
 
-   /* Subsampled samplers are not supported by this device. YCbCr uses
-    * one sampler descriptor on Valhall (samplerYcbcrConversionCount = 1). */
-   if (sampler_info->flags & VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT)
+   /* YCbCr and subsampled samplers must be embedded, not written to the
+    * sampler heap. Custom border colors require an explicit registered index. */
+   if (state.has_ycbcr_conversion ||
+       (sampler_info->flags & VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT))
       return panvk_error(device, VK_ERROR_FEATURE_NOT_PRESENT);
+   if (vk_border_color_is_custom(state.border_color) &&
+       state.border_color_index >= 32768)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
 
    struct mali_sampler_packed desc;
    panvk_per_arch(sampler_state_fill_desc)(&state, &desc);
