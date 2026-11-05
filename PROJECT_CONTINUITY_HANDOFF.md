@@ -3799,3 +3799,19 @@ correctness/performance impact:
 
 This correction supersedes the previous immediate user action to test
 `WRAPPER_DISABLE_PLACED=1` as the next project step. That test is deferred.
+
+
+## 2026-11-05 — user directive: maximal G720 capability enablement
+
+The user has explicitly requested that the next custom PanVK driver test expose and enable every Vulkan extension and feature that the Mali-G720 v12 hardware and this driver can genuinely support, then optimize performance afterward. They are no longer willing to spend time on tiny FPS A/B experiments. Treat this as the project priority and do not send more peripheral wrapper toggles or micro-benchmarks as the next action.
+
+Interpretation and safety contract:
+- Perform an exhaustive extension + feature + property inventory, not a blanket true assignment to the Vulkan extension table. The extension bit alone is not sufficient: generated entrypoints, feature structs, properties, command implementations, NIR/SPIR-V lowering, shader ABI, synchronization, memory lifetime, format support and Kbase CSF backend must all be present.
+- Distinguish silicon/ISA capability from PanVK implementation and Kbase backend capability. Expose all end-to-end implemented combinations; port missing but feasible implementations where they materially unlock DXVK or VKD3D-Proton workloads; keep genuinely unsupported backend paths disabled.
+- The current source already exposes many v12 capabilities (descriptor indexing, runtime arrays/non-uniform indexing, update-after-bind, timeline semaphores, synchronization2, BDA, dynamic rendering, subgroup features, conditional rendering, transform feedback, ARM shader-core properties and scheduling controls, etc.). Do not waste time toggling already-true bits.
+- A high-value confirmed gap is VK_EXT_descriptor_heap: it is absent from this branch's device extension table. The later JimVulkan/mali-panvk implementation advertises it for PAN_ARCH >= 9, and its README explicitly identifies descriptor heaps as part of the Valhall VKD3D-Proton D3D12 path. Its implementation spans Vulkan runtime descriptor-heap lowering, SPIR-V DescriptorHeapEXT support, NIR heap-offset/descriptor loads, PanVK heap resource-table state, push-data commands, shader ABI, resource ownership and device feature/property reporting. Port this coherently, not as an extension boolean. Reference commit inspected: 58f2c55854bd48b18df756edb11f187af9cd2fde.
+- Other candidate features to exhaustively evaluate and implement where possible: multiViewport software lowering, complete clip/cull-distance transport and semantics, geometry shader streams, pipeline-statistics queries, float atomic-add variants, and other v12-appropriate extension feature structs. Their current limitations are recorded in docs/G720_CAPABILITY_MATRIX_2026-11-05.md.
+- Sparse residency/binding is currently blocked by missing Kbase sparse-bind queue/page-remapping support. Do not expose it as a false feature. Ray query likewise requires a complete software acceleration-structure and traversal implementation; do not claim G720 hardware support or expose it merely to satisfy a list.
+- Next deliverable: a machine-checkable exhaustive matrix of every extension, every feature struct bit and relevant property, classified as (A) already enabled and implemented, (B) hardware-capable but missing PanVK code, (C) possible with software emulation, (D) blocked by Kbase/Android, or (E) not supported by G720. Include exact source files and required ports. Then create a dedicated capability branch and implement the highest-value coherent missing features, starting with descriptor heaps for D3D12. Build and test the custom Winlator-importable ZIP; never replace the Android system driver.
+
+The user requested no more tiny-FPS optimization loops until this capability phase has materially expanded the driver's usable feature set.
