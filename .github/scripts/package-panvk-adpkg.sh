@@ -62,7 +62,7 @@ for key in required:
         raise SystemExit(f"meta.json: missing/non-string required field: {key}")
 if meta["libraryName"] != "libvulkan_panfrost.so":
     raise SystemExit("meta.json: unexpected Vulkan libraryName")
-if "/" in meta["name"] or "\\\\" in meta["name"]:
+if "/" in meta["name"] or "\\" in meta["name"]:
     raise SystemExit("meta.json: driver name must be a single safe directory name")
 if meta.get("schemaVersion") != 1:
     raise SystemExit("meta.json: unsupported ADPKG schemaVersion")
