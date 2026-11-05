@@ -2493,7 +2493,9 @@ panvk_GetPhysicalDeviceImageFormatProperties2(
       goto fail;
 
    if (ycbcr_props)
-      ycbcr_props->combinedImageSamplerDescriptorCount = 1;
+      ycbcr_props->combinedImageSamplerDescriptorCount =
+         panvk_image_get_tex_count(physical_device->model->arch,
+                                   base_info->format);
 
    return VK_SUCCESS;
 
