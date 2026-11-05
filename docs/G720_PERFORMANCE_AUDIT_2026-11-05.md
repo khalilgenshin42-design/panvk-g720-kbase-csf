@@ -314,3 +314,34 @@ instrumented FPS against baseline and do not change ring capacity, BO reuse
 policy, descriptor heap topology, or synchronization until the counters
 identify a measured bottleneck. The BO counters currently do not measure
 retained/free-list bytes or exact live BO totals.
+
+
+### 2026-11-05 artifact inspection — run 41942926968
+
+Downloaded and inspected artifact `13376674548` (16,749,203 bytes).
+The inner flat package contains exactly `meta.json`,
+`libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+Metadata identifies package version
+`26.3.0-devel-android-kbase-396c924ccccb`, min API 30, and explicitly
+marks Vulkan conformance and device/game compatibility as unverified.
+
+Inner package SHA-256:
+`2f82639a4c1a8ccf60c264f9a754edf0c10d75cad352487587648b328c3ff00a`.
+Package member hashes:
+- `libvulkan_panfrost.so`:
+  `0386f18c942ab59265a297a451f703695f66e981a6d7a6a7b03431f011af2ee3`
+- `libpanvk_drm.so`:
+  `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`
+- `meta.json`:
+  `d50d8453fc7a7e451e5b4fdfad5b46b27508e7021c6a7b2ef1300bd23b28ddce`
+
+ELF audit: driver is ELF64 AArch64 Android (min Android API 30). The
+packaged driver has RUNPATH `$ORIGIN` and DT_NEEDED
+`libpanvk_drm.so` (not `libdrm.so`); the helper has SONAME
+`libpanvk_drm.so` and depends only on Android `libc.so`. The package
+script patches this private dependency and runpath for the flat package.
+The build audit's `missing-drm-symbols.txt` is empty, indicating no
+unresolved driver DRM API symbols against the bundled helper export set.
+This is static linkage/package evidence only; Android loader namespace,
+Winlator importer behavior, and runtime symbol resolution still require
+device validation.
