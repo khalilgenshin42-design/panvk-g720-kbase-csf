@@ -176,3 +176,26 @@ software lowering, **not proof of complete all-stage Vulkan semantics**.
 Likewise its pipeline-statistics implementation explicitly omits indirect
 work and fragment invocations and approximates geometry/tessellation counts.
 These caveats are now part of the port plan.
+
+
+## 5. Follow-up source audit: stage transport (2026-11-05)
+
+The shared compiler tree contains useful building blocks that were not wired
+into PanVK's current clip/cull path:
+
+- NIR has generic gather, merge, and float-array-to-vec4 lowering helpers,
+  including arrayed interfaces for geometry and tessellation stages.
+- libpoly's software VS/TES output-buffer ABI uses the complete varying-slot
+  output mask; TCS per-vertex output masks likewise include ordinary slots.
+  This is a plausible transport path for clip/cull values, subject to NIR
+  interface and layout tests.
+- The passthrough geometry helper has explicit clip/cull sizes and compact
+  packing logic. PanVK's active custom software-GS path instead calls
+  `poly_nir_lower_gs()`; its raster-shader output collector is per-slot and
+  does not visibly consume clip/cull size metadata. These are distinct paths.
+
+Therefore, the next implementation must explicitly test and, if needed, fix
+custom GS transport rather than assuming passthrough-GS support covers it.
+TCS/TES-alone and TES->GS paths also require independent verification. The
+current direct VS->FS lowering still excludes explicit FS reads and non-direct
+stage links. No feature bits or property limits have been changed.
