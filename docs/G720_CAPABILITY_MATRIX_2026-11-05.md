@@ -369,3 +369,19 @@ The port intentionally does not enable descriptor-heap sparse residency, protect
 
 
 Compile follow-up: the first Android compile reached the PanVK sources and found one missing Mesa-26.3 sampler-state-to-Mali-descriptor helper required for embedded samplers. That helper and its declaration have now been ported; exact latest-HEAD build is pending. The earlier failed run does not count as descriptor-heap validation.
+
+
+### Descriptor heap command completeness follow-up
+
+The exact repository Vulkan registry was inspected. In addition to heap binding and push data, the current `VK_EXT_descriptor_heap` command set requires `vkWriteSamplerDescriptorsEXT`, `vkWriteResourceDescriptorsEXT`, and `vkGetImageOpaqueCaptureDataEXT`; `vkGetPhysicalDeviceDescriptorSizeEXT` is already handled by the shared runtime. The initial Mesa 27 PanVK reference omitted the two writer commands and capture-data command, so it was not a complete port.
+
+The experimental G720 branch now has writer implementations for:
+- samplers (Mali sampler descriptor packing);
+- uniform/storage buffers;
+- uniform/storage texel buffers;
+- sampled/storage images and input attachments (including Valhall multi-plane descriptor output);
+- null resource descriptors.
+
+Image opaque capture returns `VK_ERROR_FEATURE_NOT_PRESENT` because capture/replay is not exposed. Acceleration-structure and ARM tensor descriptor writes are not supported and return `VK_ERROR_FEATURE_NOT_PRESENT`, consistent with those capabilities remaining disabled.
+
+Source HEAD `c3f9a776cb59215a42e4c6c5579a1a90f1ae8312`; exact-head Android-only build run `42079149912` queued. This remains provisional pending compile/link and runtime tests.
