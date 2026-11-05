@@ -1869,3 +1869,11 @@ An important architecture correction was made during the port:
 3. Add shader-level tests for clip-only, cull-only, mixed arrays, arrays crossing the vec4 boundary, partial final slot, and explicit FS distance reads. Then run Vulkan CTS direct VS->FS clip/cull cases on the actual G720 MC7.
 4. Extend distance transport through our libpoly VS/TCS/TES/GS paths, generated GS rasterization VS, and transform-feedback variants. The feature bits remain false until all relevant final-pre-raster-stage paths and explicit FS reads pass.
 5. Do not mix this prototype into the Tomb Raider FPS benchmark until it is independently runtime-qualified; it is a correctness/compatibility feature experiment, not an expected performance optimization for the current DXVK 1.7.2 game.
+
+### Follow-up correction — second-slot cull packing and first CI compile error
+
+- Reviewed our exact `nir_merge_clip_cull_distance_vars()` implementation. It places the cull array at `VARYING_SLOT_CLIP_DIST0 + clip_count / 4` and sets `location_frac = clip_count % 4`. When clip_count >= 4, the cull variable starts in CLIP_DIST1; when clip_count is 1-3 it starts in CLIP_DIST0 at a nonzero component.
+- Updated `panvk_nir_lower_cull_vs()` to handle both CLIP_DIST0 and CLIP_DIST1 and compute the absolute array base as `(location - CLIP_DIST0) * 4 + location_frac`. This covers mixed clip/cull arrays crossing the vec4 boundary; the corresponding test case remains mandatory.
+- Android-only run `41937769803` reached the PanVK C compilation stage (host tools, ARM64 libdrm and Meson setup all succeeded) and failed at `panvk_vX_shader.c` with one call-site error: the standalone shader compile helper omitted the new `vs_varying_layout` NULL argument after the compile function signature was extended.
+- Fixed the argument order in commit `7c9331a1b6706fe199f5ff02379903249ae44db2`. The failing run was on the earlier commit and does not establish that the NIR lowering itself fails to compile. A fresh Android-only build is required on the corrected head.
+- Current code branch head after this fix: `7c9331a1b6706fe199f5ff02379903249ae44db2`. Features remain disabled; no device package is considered qualified.
