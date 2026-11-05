@@ -2627,3 +2627,38 @@ the existing clip/cull lowering, on a dedicated branch, without enabling the
 feature bits until all pipeline-stage and property semantics are covered.
 
 No runtime feature flag was changed in this step.
+
+
+### Clip/cull follow-up source inspection on dedicated branch
+
+Created dedicated branch `experiment/g720-clip-cull-capabilities` from the
+performance-audit checkpoint. No runtime source files have been changed yet.
+
+Further inspection confirms the generic Mesa NIR helpers already exist in
+this tree:
+- `nir_merge_clip_cull_distance_vars()` and
+  `nir_gather_clip_cull_distance_sizes_from_vars()` in
+  `src/compiler/nir/nir_clip_cull_distance_io_utils.c` (blob
+  `79555c202ba93bb43d1ff5edc7905a2a3051166e`).
+- `nir_separate_merged_clip_cull_io()` in
+  `src/compiler/nir/nir_separate_merged_clip_cull_io.c` (blob
+  `b47d2aeb353780c3b7bd0508c8e24766a948b5db`).
+- `nir_opt_clip_cull_const()` in
+  `src/compiler/nir/nir_opt_clip_cull_const.c` (blob
+  `4f937bda39fa4d893f80a9eb2b92472047834a41`).
+
+The current PanVK `panvk_vX_shader.c` contains no calls to these helpers;
+it only invokes its own direct VS->FS lowering. This suggests the next step
+should be to wire and validate the standard NIR representation/array
+normalization through PanVK's VS, TES, GS-emulation and FS pipeline before
+changing feature bits.
+
+Important correction to the comparison reference: JimVulkan's later PanVK
+sets clip/cull feature bits true and handles the direct pre-raster-to-FS path,
+but its shader-linking code explicitly sets clip/cull counts to zero when a
+geometry or tessellation stage precedes the FS, with a comment that geometry
+emulation does not yet carry those values. Treat it as a reference for the
+software lowering, **not proof of complete all-stage Vulkan semantics**.
+Likewise its pipeline-statistics implementation explicitly omits indirect
+work and fragment invocations and approximates geometry/tessellation counts.
+These caveats are now part of the port plan.
