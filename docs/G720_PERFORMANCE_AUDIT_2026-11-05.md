@@ -160,3 +160,33 @@ A candidate is retained only if:
   telemetry, followed by a reproducible baseline. Do not change descriptor
   heap topology, heap renewal thresholds, shader scheduling, or synchronization
   until the counters identify the limiting path.
+
+
+## 2026-11-05 implementation checkpoint — descriptor telemetry
+
+Commit `82f11124994e7fa614998006fd59b57f9e723101` adds opt-in descriptor
+pool telemetry to `panvk_vX_descriptor_set.c`, controlled by
+`PANVK_DESCRIPTOR_PROFILE=1`. The default is disabled. When enabled it
+aggregates:
+- number of non-empty descriptor pools created;
+- total requested descriptor backing bytes and largest individual pool;
+- pool creation failures;
+- descriptor set allocation attempts and requested bytes;
+- descriptor set allocation failures, including out-of-pool and fragmented
+  pool returns.
+
+Snapshots are emitted every 16 non-empty pool creations and on allocation
+failures. The counters use relaxed atomic operations and do not add per-event
+logging or timing calls. This is diagnostic instrumentation, not a runtime
+performance optimisation; it is intended to reveal whether giant pool
+declarations or descriptor-set fragmentation correlate with game failures.
+
+Commit `a0bafee3aeeaf00127fa8d12c838246eddf4db77` adds the isolated branch to
+the Android-only build workflow's push filter. The existing Android wrapper
+workflow also started on the branch. At checkpoint time, wrapper build run
+`41941319560` was still in progress (debugoptimized and release jobs); no
+successful compile claim is made until its results are inspected. The Android-
+only workflow result must also be checked independently.
+
+No allocator semantics, descriptor heap layout, cache maintenance, queue
+synchronization, or shader behavior has been changed.
