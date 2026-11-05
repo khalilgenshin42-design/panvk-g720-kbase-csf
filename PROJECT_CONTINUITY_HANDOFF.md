@@ -2775,3 +2775,46 @@ helper is a distinct representation-lowering pass and its location-based size
 scan needs separate analysis. Keep the two mechanisms distinct until a test
 proves the exact PanVK representation and pass sequence. RADV source blob:
 `c6b392bb638c7755356950130e1521f9106343d7`.
+
+
+## 2026-11-05 — first clip/cull NIR regression tests added
+
+Dedicated source branch: `experiment/g720-clip-cull-capabilities`.
+
+Commits:
+- `293dc13912fe9da8304532041c35f1bdb617f963`: add focused NIR test source.
+- `8d6af89e8c1207a4eb4eeb59bbf2090e8a0e6108`: register it in
+  `src/compiler/nir/meson.build`.
+- `7b3e18b005e9db62618b2591e214f7521f93b423`: fix fixtures to construct
+  vertex and fragment NIR shaders with the appropriate stage.
+- `6791ecac76598d337a31ef657fef65b4e1177d13`: add this experiment branch to
+  the Android-only build workflow filter.
+- `55285f2b125f4a45c1c2bb9ace125de276099f7a`: add a dedicated minimal host
+  workflow to build and run the NIR suite.
+- `2acdfa52b5ec748cfd8f59ccf45754fd18674ce3`: add clip-only and cull-only
+  coverage.
+
+New test file: `src/compiler/nir/tests/clip_cull_distance_tests.cpp`.
+It currently covers:
+- VS clip-only and cull-only interfaces;
+- VS mixed clip=3/cull=2, where cull begins at location_frac 3;
+- VS mixed clip=5/cull=3, where cull moves to CLIP_DIST1 component 1;
+- FS mixed clip=6/cull=2, where cull begins at CLIP_DIST1 component 2;
+- gathered shader_info array sizes and merged variable locations/metadata.
+
+These are initial unit tests for the generic NIR gather/merge helpers, not a
+full PanVK shader-pipeline test. They do not yet cover vec4 representation
+lowering, indirect dereferences, partial writes, GS/TCS/TES arrayed interfaces,
+interpolation, or actual hardware fragment discard semantics.
+
+CI:
+- Android-only build workflow and wrapper build workflow are configured to
+  run on this branch.
+- New `NIR clip-cull compiler tests` workflow builds
+  `src/compiler/nir/nir_tests` and runs the `nir` Meson suite.
+- At the time of this checkpoint the workflows have been submitted and are
+  still running; no pass/fail result is claimed. The latest test-source commit
+  may also cause a newer run than the initial run IDs.
+
+No PanVK runtime source, Vulkan feature flags, or reported distance limits
+have been changed. Do not package or benchmark this branch yet.
