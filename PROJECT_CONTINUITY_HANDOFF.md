@@ -2890,3 +2890,23 @@ focused tests for vec4 lowering on clip-only, cull-only, mixed arrays
 and loads, plus arrayed GS/TCS/TES interfaces. Inspect the resulting NIR
 variables, array lengths, locations, and component offsets before selecting
 the PanVK pass order. No PanVK runtime source or feature flags changed.
+
+
+## 2026-11-05 — NIR workflow LLVM dependency correction
+
+The NIR workflow run `42021321900` now reaches Meson configuration but
+fails before compilation with the explicit error:
+`Feature llvm cannot be disabled: CLC requires LLVM`.
+This is a build-configuration dependency failure, not a NIR source/test
+failure. The previous workflow had `-Dllvm=disabled`; corrected it by
+installing `llvm-dev` and `clang` in CI and setting `-Dllvm=enabled`.
+
+Workflow-only commit:
+- `21247310892a4be2209d13a586db21e42a95e2b7`
+- Branch: `experiment/g720-clip-cull-capabilities`
+
+A new NIR CI run is expected from this commit. Its Meson configuration,
+Ninja build, and test result must all be inspected. No NIR test pass is
+claimed yet. Android-only build and wrapper runs on earlier commits remain
+separate checks; inspect their terminal conclusions before claiming current
+source validation. No PanVK runtime source or Vulkan feature exposure changed.
