@@ -388,3 +388,6 @@ Source HEAD `c3f9a776cb59215a42e4c6c5579a1a90f1ae8312`; exact-head Android-only 
 
 
 Conditional custom-border-color commands required by the registry have also been added on Valhall. Since Mali sampler descriptors embed the full border-color value, registration/unregistration are valid no-op operations; requested in-range indices are preserved, and non-requested registration returns index 0. This is provisional until the latest Android build and runtime tests pass. Current source HEAD `c9377fc98595de9b873fcba5a6997c5bf514ab4c`.
+
+
+Descriptor writer constraints checked against the current Khronos proposal: YCbCr and subsampled samplers are rejected by `vkWriteSamplerDescriptorsEXT` (they must be embedded); custom border colors are rejected for embedded samplers and require an explicit registered index for sampler-heap writes; YCbCr image descriptors use PanVK's per-format texture descriptor count. Fragment-density-map, QCOM image processing, acceleration structures, and ARM tensors are not exposed and their descriptor types remain unsupported. Source HEAD `0bf2e527c42fe06733d5c0b1557c9d2cec0c1412`; build pending.
