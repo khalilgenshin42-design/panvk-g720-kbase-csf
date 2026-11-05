@@ -4009,7 +4009,7 @@ Repository-wide branch reconciliation was performed before continuing. The repos
 
 - Branch: `experiment/g720-descriptor-heaps`
 - Base: latest source branch `experiment/g720-clip-cull-capabilities` at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`
-- Current branch HEAD after initial port, binary-reader hardening, and sampler-state packing helper: `346bffa794850bfa70c3495794f8ccccda89a251`
+- Current branch HEAD after descriptor heap writer-command implementation and CI guards: `c3f9a776cb59215a42e4c6c5579a1a90f1ae8312`
 - The existing source and audit branches remain unchanged.
 
 ### Implemented in the experimental branch (not yet build-validated)
@@ -4069,3 +4069,35 @@ Correction:
 - Current source branch HEAD is now `346bffa794850bfa70c3495794f8ccccda89a251`.
 
 A new Android-only build started on the immediately preceding source commit `13bd689e56ec0baa7ee4f92bc5de0a7c81c888ef` (run `42077165223`); the header declaration commit `346bffa794850bfa70c3495794f8ccccda89a251` was pushed immediately afterward, so a fresh build on the exact latest HEAD is required. That exact-HEAD build is now running as Android-only run `42077180170` (head `346bffa794850bfa70c3495794f8ccccda89a251`); its checkout verification, dependency installation, host-tool generation, real Android ARM64 libdrm build, and Meson configuration have passed; the full Android ARM64 compile/stage step is in progress at last check. Do not treat the earlier failed run as validation, and do not package/test yet.
+
+
+### Full Vulkan registry command audit — descriptor heap writers
+
+The earlier API audit was extended by reading the repository's actual `src/vulkan/registry/vk.xml` and `include/vulkan/vulkan_core.h` through the GitHub contents API (the registry file was not empty; the earlier limitation was only the file-view transport). The current registry requires these descriptor-heap commands:
+
+- `vkWriteSamplerDescriptorsEXT`
+- `vkWriteResourceDescriptorsEXT`
+- `vkCmdBindSamplerHeapEXT`
+- `vkCmdBindResourceHeapEXT`
+- `vkCmdPushDataEXT`
+- `vkGetImageOpaqueCaptureDataEXT`
+- `vkGetPhysicalDeviceDescriptorSizeEXT` (already implemented by Mesa's shared Vulkan runtime)
+
+This exposed an incompleteness in the Mesa 27 reference PanVK port: it contained the three command-buffer operations but not the two descriptor-writing commands or the image opaque-capture command. We are not treating that reference as a complete implementation.
+
+The isolated branch now also implements:
+- sampler descriptor writes using `vk_sampler_state_init` and the Valhall Mali sampler packer;
+- resource descriptor writes for uniform/storage buffers, uniform/storage texel buffers, sampled/storage images, and input attachments;
+- Mali null-descriptor packing for null resource descriptors;
+- multi-plane image descriptor output using PanVK's Valhall texture-count helper;
+- `vkGetImageOpaqueCaptureDataEXT` as a `VK_ERROR_FEATURE_NOT_PRESENT` stub because descriptor-heap capture/replay remains disabled;
+- CI guards requiring all three descriptor-heap command-buffer operations, both writer commands, and the capture-data entrypoint.
+
+Acceleration-structure and ARM tensor descriptor writes deliberately return `VK_ERROR_FEATURE_NOT_PRESENT`; PanVK does not expose those corresponding device capabilities. The descriptor-heap extension must not be advertised as supporting those descriptor types.
+
+For Valhall, inspection of `panvk_vX_image_view.c` confirmed the auxiliary `view->mem` attribute-buffer allocation is used only under `PAN_ARCH < 9`; the Valhall texture descriptors are self-contained, so temporary image views can be destroyed after copying their descriptors.
+
+Current source HEAD: `c3f9a776cb59215a42e4c6c5579a1a90f1ae8312`.
+Exact-head Android-only build: run `42079149912` (queued at last check). Wrapper build: run `42079150104` (queued at last check). The earlier Android run `42077180170` targets the pre-writer implementation and is not final validation.
+
+Next: compile/link the new writer entrypoints; inspect all warnings and API dispatch generation; add descriptor-writer-specific validation; then package only after full Android ARM64 build and audit pass. No device test is requested yet.
