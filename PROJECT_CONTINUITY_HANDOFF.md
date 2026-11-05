@@ -2740,3 +2740,24 @@ Useful source blobs on this branch:
 - `nir_clip_cull_distance_io_utils.c`: `79555c202ba93bb43d1ff5edc7905a2a3051166e`
 
 No claim of feature support, build success, or runtime correctness is made.
+
+
+### Additional correctness issue in the existing cull emulation
+
+The current direct VS->FS cull emulation converts each cull distance to a
+per-vertex 0/1 indicator (negative becomes 1), interpolates it, then discards
+when the interpolated value is >= 0.9999. This approximates Vulkan's
+primitive-level cull-distance rule, but the epsilon can discard a very small
+region of a primitive when only some vertices have a negative value. It must
+be tested against a reference implementation and should not be treated as a
+fully proven implementation. Do not simply copy this threshold into GS/TES
+paths.
+
+The generic NIR helper pass order also needs to be established from actual
+call-site expectations before integration. In particular,
+`nir_merge_clip_cull_distance_vars()` rewrites cull locations, while
+`nir_lower_clip_cull_distance_to_vec4s()` discovers clip/cull array sizes by
+location. Calling these in an assumed order could lose the cull-size signal or
+create mismatched IO. First add a focused NIR test covering clip-only,
+cull-only, mixed arrays (including non-vec4-aligned clip counts), and arrayed
+GS/TCS/TES interfaces; then integrate the verified pass order.
