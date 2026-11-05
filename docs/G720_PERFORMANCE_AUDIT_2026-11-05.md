@@ -254,3 +254,23 @@ existing ring code and should be confirmed against runtime logs.
 Next: obtain a reproducible device-side run with both profile options enabled
 for a diagnostic capture, then repeat the performance benchmark with profiling
 disabled. Keep instrumented and uninstrumented measurements separate.
+
+## 2026-11-05 implementation checkpoint — transient BO telemetry
+
+Commit `396c924ccccb07b15b429b5cdc82fd9318374664` adds opt-in counters to
+`panvk_mempool.c`, enabled only by `PANVK_MEMPOOL_PROFILE=1` (default off):
+- transient pool allocation calls and requested bytes;
+- allocation failures;
+- reuse counts from regular and large free-BO pools;
+- BO creation calls and requested backing bytes;
+- BO creation failures and largest requested BO size.
+
+The counters use relaxed atomics, with snapshots every 1024 pool allocation
+requests and on failures. This does not alter BO selection, allocation size,
+reference ownership, pool reset, cache flush/invalidate, or Vulkan allocation
+semantics. It is diagnostic telemetry, not a performance optimization. It does
+not yet report retained/free-list bytes or current live BO totals; those require
+lifetime-aware accounting and are intentionally not inferred from request
+counters.
+
+CI for this new source commit is pending. No runtime test has been run.
