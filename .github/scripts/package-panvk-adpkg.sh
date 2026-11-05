@@ -45,8 +45,33 @@ cat > "$OUT_DIR/meta.json" <<EOF
 }
 EOF
 
+# Match Winlator Mali 1.2's AdrenotoolsManager parser contract:
+# it reads name, driverVersion and libraryName from root-level meta.json,
+# then loads libraryName from the extracted driver directory.
+python3 - "$OUT_DIR" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+meta = json.loads((root / "meta.json").read_text())
+required = ("name", "driverVersion", "libraryName")
+for key in required:
+    value = meta.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise SystemExit(f"meta.json: missing/non-string required field: {key}")
+if meta["libraryName"] != "libvulkan_panfrost.so":
+    raise SystemExit("meta.json: unexpected Vulkan libraryName")
+if "/" in meta["name"] or "\\\\" in meta["name"]:
+    raise SystemExit("meta.json: driver name must be a single safe directory name")
+if meta.get("schemaVersion") != 1:
+    raise SystemExit("meta.json: unsupported ADPKG schemaVersion")
+for filename in (meta["libraryName"], "libpanvk_drm.so"):
+    if not (root / filename).is_file():
+        raise SystemExit(f"package is missing required library: {filename}")
+PY
+
 # Structural and linker checks against the exact flat package layout.
-grep -Fq '"libraryName": "libvulkan_panfrost.so"' "$OUT_DIR/meta.json"
 readelf -h "$OUT_DIR/$LIBRARY_NAME" | grep -Fq 'AArch64'
 readelf -d "$OUT_DIR/$LIBRARY_NAME" > "$OUT_DIR/driver-dynamic-section.txt"
 readelf -d "$OUT_DIR/libpanvk_drm.so" > "$OUT_DIR/libpanvk-drm-dynamic-section.txt"
