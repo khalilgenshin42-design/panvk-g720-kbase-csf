@@ -3519,3 +3519,10 @@ Updated `.github/workflows/android-only-experiment.yml` to verify the new invari
 - `nir_merge_clip_cull_distance_vars(fs_nir)`
 
 CI-only correction commit: `4f4d02e01723d61f1ff19713951be6bcbfa8d08d`. This does not change runtime code. Fresh CI is required; prior run `42031120657` provides no compile evidence because all build steps were skipped after the stale grep failed.
+
+
+### NIR regression suite passed after PanVK direct-link integration (2026-11-05 13:00 UTC)
+
+The NIR test workflow on runtime source SHA `197a5303131d1759e88df534fa1cd17331ba6988` passed: run `42031120675`, job `127257527564`. The fresh CI-only workflow-guard correction SHA `4f4d02e01723d61f1ff19713951be6bcbfa8d08d` also passed NIR: run `42031227168`, job `127257885748`. Both report `nir_algebraic_parser` OK, `nir_tests` OK, 2/2 Meson suite tests, zero failures.
+
+The new PanVK direct VS -> FS prepass is therefore syntactically compatible with the NIR helper API; full Android driver compilation remains pending. Android-only run `42031227285` has passed dependency install and host-tool generation and is building Android libdrm/driver. Wrapper run `42031227198` has Debugoptimized complete and Release compiling. Older wrapper run `42031120736` is still compiling both variants. No runtime install/performance test has been done.
