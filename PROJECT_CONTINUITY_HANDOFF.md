@@ -3205,3 +3205,15 @@ Workflow commit: `a15faa79af6dd4a06bde3da236d32d198be54ccc` (`ci: isolate NIR te
 At last poll, previous run `42024367795` (SHA `df19c44...`) had successfully installed dependencies and was still in Meson configuration; it is superseded by the isolated configuration but may still provide useful diagnostic evidence. Android-only run `42024367447` had completed dependency install and was generating host tools. Wrapper run `42024367688` had completed dependency installation and was generating host tools in Release and Debugoptimized jobs. Neither had reached final compile/package results yet.
 
 Do not claim NIR test success until a run on the isolated workflow commit completes both the `nir_tests` build and `meson test --suite nir`. No runtime PanVK source or feature flags were changed.
+
+
+
+### NIR test target correction (2026-11-05 12:10 UTC)
+
+The isolated NIR workflow on SHA `a15faa79af6dd4a06bde3da236d32d198be54ccc` successfully completed Meson configuration with no Vulkan drivers and LLVM disabled. The next step failed because the Ninja target was invoked as bare `nir_tests`, which is not a top-level Ninja target in this Meson build. The log explicitly reports `ninja: error: unknown target 'nir_tests'`; the test suite itself was not built or run.
+
+Inspected `src/compiler/nir/meson.build`: the `nir_tests` executable is declared inside the NIR subdirectory and registered as Meson test `nir_tests` in suite `nir`. Corrected the build target to `src/compiler/nir/nir_tests` while retaining the final `meson test -C build --suite nir --print-errorlogs` invocation.
+
+Workflow commit: `6f965eaa43b8149ece37a189a839dc44b53562ff` (`ci: use Meson path for NIR test executable`). New run `42024927571` was in progress at the last poll, with checkout just starting; its build and test result are pending.
+
+This is a CI target-path correction, not a code/test failure. The NIR workflow now avoids unrelated Panfrost CLC dependencies and targets the actual executable path. Do not count this as passing until both the executable build and suite finish.
