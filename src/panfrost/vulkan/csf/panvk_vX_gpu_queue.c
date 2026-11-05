@@ -79,7 +79,8 @@
  * frames within the heap limit without draining the queues after every small
  * vkmark/vkcube frame. */
 #define KBASE_TILER_HEAP_RENEW_INTERVAL 128
-#define KBASE_TILER_HEAP_RENEW_WORK 65536
+/* Isolated 4x heap-renewal threshold experiment; validate peak heap use and stability. */
+#define KBASE_TILER_HEAP_RENEW_WORK 262144
 
 #define KBASE_GPU_WAIT_MAX 3
 
