@@ -908,3 +908,13 @@ Existing tests currently cover gather+merge only, not this interaction.
 Treat helper ordering as unresolved until focused NIR tests cover mixed
 arrays, dereference loads/stores, indirect indexing, and arrayed GS/TCS/TES
 interfaces. No PanVK feature bits are enabled.
+
+
+### Host NIR CI — LLVM dependency correction
+
+The corrected workflow shell invocation reached Meson, which reported
+`Feature llvm cannot be disabled: CLC requires LLVM`. This is a CI dependency
+configuration failure before compilation. The workflow now installs
+`llvm-dev` and `clang` and configures `-Dllvm=enabled`
+(commit `21247310892a4be2209d13a586db21e42a95e2b7`). Await the next run;
+do not classify this as a NIR test failure or claim tests pass.
