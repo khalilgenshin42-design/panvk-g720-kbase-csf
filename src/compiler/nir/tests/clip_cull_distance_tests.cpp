@@ -28,6 +28,36 @@ protected:
    }
 };
 
+TEST_F(nir_clip_cull_distance_test, vertex_clip_only_keeps_clip_location)
+{
+   nir_variable *clip =
+      create_distance_var(nir_var_shader_out, "gl_ClipDistance",
+                          VARYING_SLOT_CLIP_DIST0, 4);
+
+   nir_gather_clip_cull_distance_sizes_from_vars(b->shader);
+   EXPECT_EQ(b->shader->info.clip_distance_array_size, 4);
+   EXPECT_EQ(b->shader->info.cull_distance_array_size, 0);
+
+   EXPECT_TRUE(nir_merge_clip_cull_distance_vars(b->shader));
+   EXPECT_EQ(clip->data.location, VARYING_SLOT_CLIP_DIST0);
+   EXPECT_EQ(clip->data.location_frac, 0);
+}
+
+TEST_F(nir_clip_cull_distance_test, vertex_cull_only_starts_at_clip_location)
+{
+   nir_variable *cull =
+      create_distance_var(nir_var_shader_out, "gl_CullDistance",
+                          VARYING_SLOT_CULL_DIST0, 4);
+
+   nir_gather_clip_cull_distance_sizes_from_vars(b->shader);
+   EXPECT_EQ(b->shader->info.clip_distance_array_size, 0);
+   EXPECT_EQ(b->shader->info.cull_distance_array_size, 4);
+
+   EXPECT_TRUE(nir_merge_clip_cull_distance_vars(b->shader));
+   EXPECT_EQ(cull->data.location, VARYING_SLOT_CLIP_DIST0);
+   EXPECT_EQ(cull->data.location_frac, 0);
+}
+
 TEST_F(nir_clip_cull_distance_test, vertex_mixed_arrays_share_location)
 {
    nir_variable *clip =
