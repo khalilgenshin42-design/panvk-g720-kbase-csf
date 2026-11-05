@@ -3187,3 +3187,21 @@ Run `42024214325` on SHA `9fcacf93ea9a23710f2bcdf91dd0054c6de7950d` installed al
 Added `libclang-22-dev` to the NIR workflow, matching the package used by the successful Android-only host-tool workflow. Commit: `df19c4403995abbbb489b08d47b5fb9f648cd8a4` (`ci: add Clang development libraries to NIR tests`). New NIR run `42024367795` was queued at the last poll; no test result yet.
 
 Runs on prior dependency-repair SHA `9fcacf9...` were still in progress at last poll: Android-only `42024214279` (host tools stage) and Android wrapper `42024214246` (dependency/host-tools stage). Runs on current SHA `df19c44...` were queued: NIR `42024367795`, Android-only `42024367447`, wrapper `42024367688`. Continue polling and avoid counting superseded runs as current-source validation.
+
+
+
+### NIR workflow isolation change (2026-11-05 12:08 UTC)
+
+The third dependency failure was traced to Meson's CLC configuration, not to the NIR tests. The Panfrost Vulkan driver sets `with_driver_using_cl`, which activates Mesa CLC and consequently requires LLVM, LLVM-SPIRV, SPIRV-Tools and Clang libraries. The NIR helper tests do not require building the Panfrost Vulkan driver or its CLC compiler.
+
+Rather than continuing to add increasingly broad host compiler dependencies, the NIR workflow was narrowed to a generic Mesa/NIR test build:
+- `-Dvulkan-drivers=[]` (no Panfrost/PanVK driver in this test-only build);
+- `-Dllvm=disabled`;
+- no explicit LLVM, libclc, LLVM-SPIRV, SPIRV-Tools or Clang development packages;
+- retain `-Dbuild-tests=true` and build/run the NIR test suite.
+
+Workflow commit: `a15faa79af6dd4a06bde3da236d32d198be54ccc` (`ci: isolate NIR tests from Panfrost CLC dependencies`). The workflow file was fetched back and checked after commit; command continuation and Meson options are syntactically consistent. A new workflow run for this commit had not appeared in the Actions list at the last poll.
+
+At last poll, previous run `42024367795` (SHA `df19c44...`) had successfully installed dependencies and was still in Meson configuration; it is superseded by the isolated configuration but may still provide useful diagnostic evidence. Android-only run `42024367447` had completed dependency install and was generating host tools. Wrapper run `42024367688` had completed dependency installation and was generating host tools in Release and Debugoptimized jobs. Neither had reached final compile/package results yet.
+
+Do not claim NIR test success until a run on the isolated workflow commit completes both the `nir_tests` build and `meson test --suite nir`. No runtime PanVK source or feature flags were changed.
