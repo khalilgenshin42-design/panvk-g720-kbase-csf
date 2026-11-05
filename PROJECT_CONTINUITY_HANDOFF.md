@@ -3986,3 +3986,14 @@ Inspected the full relevant reference functions at JimVulkan/mali-panvk commit `
 - The reference exposes `.descriptorHeap = PAN_ARCH >= 9`, `.descriptorHeapCaptureReplay = false`. This confirms the feature gate used by that reference, not proof that our incomplete backend is ready to expose it.
 
 Reference caveat: its binary format's implicit heap-use inference from nonzero embedded sampler count is a potential zero-embedded-sampler edge case. Preserve explicit heap-use metadata in our implementation and cache format. No source code changed and the extension remains disabled in our branch.
+
+
+## Addendum: API registry and command dispatch blocker (2026-11-05)
+
+The repository Git tree resolves the earlier registry ambiguity: `src/vulkan/registry/vk.xml` is a real tracked blob of 3,258,412 bytes (blob SHA `4d66622efa2937668bc35cfcc114a302813828d9`) on `experiment/g720-clip-cull-capabilities`. The previous zero-byte `fetch_file` response was a connector retrieval limitation, not an empty registry. The raw 3.2 MB file was rejected by the GitHub fetch connector as too large, so the exact presence/absence of `VK_EXT_descriptor_heap` declarations in this XML is still not established.
+
+The project code tree has `src/panfrost/vulkan/meson.build` blob `35b447a33f49ee25b1aa0293931fe81bf6835a94`, which generates the PanVK entrypoint sources from the Vulkan registry. Current PanVK backend command-state files contain no implementations of `CmdBindSamplerHeapEXT`, `CmdBindResourceHeapEXT`, `CmdPushDataEXT`, nor secondary heap inheritance. This means command exposure cannot be completed by merely adding feature bits: registry commands, dispatch prototypes, per-arch implementations, and extension table must all align.
+
+A direct GitHub code-search for `VK_EXT_descriptor_heap`, `VkPhysicalDeviceDescriptorHeapFeaturesEXT`, `CmdPushDataEXT`, and the feature structure type returned no indexed matches for this branch. Code search indexes the default branch, so this is not authoritative evidence of absence on the experiment branch. Treat as unresolved until a local checkout or a small generated-file inspection is available.
+
+The reference implementation is a later Mesa 27 snapshot while this branch is Mesa 26.3-devel. Its descriptor heap code cannot safely be copied wholesale. No code changes made; descriptor heap remains unexposed. To resolve registry/API definitively, inspect local checkout `src/vulkan/registry/vk.xml` for `VK_EXT_descriptor_heap`, plus generated `vk_device_dispatch_table.h`, `vk_device_entrypoints.h`, and `vk_physical_device_features.h` / feature struct definitions. If present, proceed with PanVK backend port; if absent, first update Vulkan-Headers/registry and generated code consistently using Mesa's normal generation scripts.
