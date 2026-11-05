@@ -199,3 +199,15 @@ custom GS transport rather than assuming passthrough-GS support covers it.
 TCS/TES-alone and TES->GS paths also require independent verification. The
 current direct VS->FS lowering still excludes explicit FS reads and non-direct
 stage links. No feature bits or property limits have been changed.
+
+
+### Correctness gates before implementation
+
+- Existing direct cull emulation uses an interpolated 0/1 marker and an
+  FS threshold of `0.9999`. That is an approximation of primitive-level
+  culling and can produce a narrow false-discard region for mixed-sign
+  vertex values. A reference test must define the accepted behavior.
+- NIR clip/cull helper ordering is not yet established for this tree. The
+  merge pass rewrites cull locations and the vec4 pass gathers sizes by
+  location; add NIR tests for clip-only, cull-only, mixed/non-vec4-aligned
+  arrays, and arrayed GS/TCS/TES IO before wiring either pass into PanVK.
