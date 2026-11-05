@@ -2863,3 +2863,30 @@ were queued/in progress at the time of this note; their final results are
 also pending. Next: inspect the new NIR run, verify the Meson summary actually
 contains Panfrost/Kbase and the `nir_tests` target, then fix any genuine
 compile/test failures. Continue to keep clip/cull feature bits disabled.
+
+
+## 2026-11-05 — clip/cull vec4-lowering pass-order hazard
+
+A closer read of `src/compiler/nir/nir_clip_cull_distance_io_utils.c`
+identified a concrete reason not to wire the helper passes based only on the
+RADV gather/merge precedent:
+
+- `nir_lower_clip_cull_distance_to_vec4s()` independently discovers
+  `clip_size` and `cull_size` by scanning variables whose locations are
+  exactly `VARYING_SLOT_CLIP_DIST0` and `VARYING_SLOT_CULL_DIST0`.
+- `nir_merge_clip_cull_distance_vars()` relocates the cull variable into the
+  CLIP_DIST location range and marks the original declarations hidden.
+  Depending on the clip count, the relocated cull variable may share
+  CLIP_DIST0 with a nonzero `location_frac`, or move to CLIP_DIST1.
+- Consequently, blindly invoking vec4 lowering after merge can make its
+  location scan lose the separate cull-array size/offset. The existing NIR
+  tests only validate gather+merge metadata and do not exercise this
+  representation-lowering interaction.
+
+This is a source-level pass-order hazard, not yet a demonstrated runtime bug.
+Do not assume either gather->merge->vec4 or vec4->merge is correct. Add
+focused tests for vec4 lowering on clip-only, cull-only, mixed arrays
+(including clip counts 3 and 5), constant and indirect dereferences, stores
+and loads, plus arrayed GS/TCS/TES interfaces. Inspect the resulting NIR
+variables, array lengths, locations, and component offsets before selecting
+the PanVK pass order. No PanVK runtime source or feature flags changed.
