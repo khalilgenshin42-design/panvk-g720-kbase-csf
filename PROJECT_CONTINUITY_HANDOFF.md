@@ -3668,3 +3668,43 @@ Next development focus:
 3. Investigate WSI swapchain recreation and X11 Present failure. Keep this separate from GPU shader performance and avoid claiming it explains the FPS.
 4. Benchmark repeatability: capture at least 3 same-scene runs before attributing a small 0.1 FPS change to code.
 5. Continue to preserve separate experimental driver packaging; never replace the Android vendor Vulkan driver.
+
+
+
+### Full-power runtime audit — Tomb Raider logs 2026-11-05
+
+User explicitly requested a more aggressive, evidence-led optimization effort after marginal FPS progress. The uploaded archive `TombRaider_logs_2026-11-05_14-26-52.zip` was unpacked and inspected (logcat, Wine debug, DXVK D3D11/DXGI/D3D9 logs).
+
+#### Exact test configuration recovered from Wine debug
+- Winlator Mali 1.2.1 Bionic (23), Android 16, device MT6899 / Xiaomi 25069PTEBG.
+- Graphics driver field: `wrapper-gamenative`.
+- DXVK version 1.7.2; game executable is Tomb Raider Definitive Edition (not the earlier original GOTY title).
+- DXVK config effective values include `d3d11.maxQueuedFrames=1`, `dxvk.numCompilerThreads=4`, `dxvk.memoryTrack=True`, `dxvk.useEarlyDiscard=True`, `d3d11.relaxedBarriers=True`, and `d3d11.ignoreGraphicsBarriers=True`.
+- DXVK reports no valid state cache entries and creates a new cache.
+- Device reports 900x506 swapchain, initially IMMEDIATE with 3 images then FIFO with 4 images. It logs `D3D11SwapChain: Failed to recreate swap chain`.
+- Wine debug ends with `X11DRV_vulkan_surface_create get_client_rect failed` and `_wassert ... "!status && \"vkQueueSubmit\""`. Treat these as a real WSI/submit error path, not harmless generic Wine noise; establish whether it occurs before/after benchmark and whether it correlates with frame stalls/crashes.
+
+#### Runtime facts and discrepancies
+- Custom ICD load is confirmed in logcat: `hook_android_dlopen_ext: loading custom driver .../PanVK Mali G720 (experimental)/libvulkan_panfrost.so`.
+- PanVK startup logs: raw coherency mode 0; Kbase tiler heap renewal threshold 65536; Kbase profiling disabled. No captured GPU shareability fault, GPU fault, OOM, or Vulkan error in this log.
+- DXVK device feature output says `multiViewport=1`, `shaderClipDistance=1`, `shaderCullDistance=1`, and `geometryStreams=1`.
+- The inspected PanVK source on `experiment/g720-clip-cull-capabilities` explicitly sets `multiViewport=false`, `shaderClipDistance=false`, `shaderCullDistance=false`, and `geometryStreams=false`. Thus DXVK's values are not a trustworthy direct reflection of those PanVK capability bits; likely an effect of wrapper feature adaptation / feature emulation / wrapper logging semantics. Do NOT enable those PanVK features to match the DXVK log. Audit GameNative wrapper's VkGetPhysicalDeviceFeatures interception and extension emulation separately.
+- DXVK logs device name `Wrapper(Mali-G720 MC7)`, consistent with the Winlator wrapper layer being active above the custom PanVK ICD.
+- The logcat records 14 calls to `panvk_android_import_ahb_memory`, 9 AHB-properties queries and 30 successful kbase dmabuf BO allocations in the captured startup interval; many are ~1.85 MiB 900x506 presentation buffers. These are startup/WSI events, not evidence of per-frame allocations. Do not optimize by caching AHB imports until ownership, fd identity, VkImage lifetime and synchronization are proven.
+
+#### New high-value WSI research
+- Reviewed Lee Gao's 2026-07-28 technical article, “WSI Woes on Mali”: https://leegao.github.io/winlator-internals/wrapper/2026/07/28/wsi-woes-mali.html
+- It describes Winlator Bionic wrapper's Mali WSI path falling back from direct rendering to a two-image blit path because Mali does not accept BGRA AHB import in that implementation; this adds one copy per present. It also documents wrapper-side `VK_EXT_map_memory_placed` emulation interactions with dedicated allocations and multiple AHB native-handle FDs.
+- This is a plausible major performance target because this test uses `wrapper-gamenative` and logcat shows repeated AHB/DRI3 presentation-buffer handling, but it is NOT YET proven that this exact GameNative wrapper build uses that same fallback. Inspect the exact GameNative wrapper source/build and runtime WSI mode before making a patch.
+- The article's RGBA-AHB / virtual-BGRA view approach is a candidate zero-copy direction only if the Winlator Mali X11 compositor's expected pixel layout and image-view/format-feature constraints are satisfied. Do not blindly advertise direct rendering or bypass the copy without proving channel correctness, usage support, export/import compatibility and synchronization.
+
+#### Immediate priority order (replace speculative feature enabling)
+1. **Wrapper WSI path audit (highest expected frame-time payoff):** identify the exact `wrapper-gamenative` source/version used by Winlator Mali 1.2.1; trace swapchain mode (direct vs blit), BGRA/RGBA AHB probe, external memory allocation path, `VK_EXT_map_memory_placed` emulation and image-copy path. Determine whether each present incurs a copy. If confirmed, prototype a separate wrapper patch/branch; do not mix wrapper code into PanVK.
+2. **Fix/characterize swapchain recreation:** trace the IMMEDIATE-to-FIFO transition and the failed `D3D11SwapChain` recreation; inspect Wine `vkQueueSubmit` assertion and X11 surface failure. Preserve exact error VkResult with instrumentation before altering WSI synchronization.
+3. **Capability audit at wrapper boundary:** compare PanVK raw physical-device feature bits with features returned through GameNative wrapper; maintain truthful PanVK feature exposure and identify only the wrapper emulations that are complete.
+4. **Controlled DXVK baseline:** current test uses DXVK 1.7.2, no state cache, four compiler threads and memory tracking. For performance comparison, keep all game settings fixed and disable diagnostic `dxvk.memoryTrack` only in a separate controlled run; do not change multiple settings simultaneously. State-cache warm/cold runs must be separated.
+5. **PanVK shader/queue/memory optimization only after isolating the above.** Do not infer shader-core scheduling from 7 MC7 cores; firmware schedules cores. Do not expose ray query, pipeline stats, clip/cull, multiViewport or geometryStreams solely to increase DXVK's printed feature values.
+
+Reported result for this run: Min 9.4 / Max 19.4 / Avg 14.0 FPS. Compare cautiously with prior 13.9 average because the game edition, wrapper selection and likely environment differ. The 0.1 FPS average change is not a demonstrated improvement.
+
+The user asked the assistant to continue independently and return only when user action is needed. Next assistant work should be source-level audit of the exact GameNative wrapper and WSI path, then commit a reproducible audit/experiment and update this handoff. Do not ask user to re-run the same benchmark before the source audit is done.
