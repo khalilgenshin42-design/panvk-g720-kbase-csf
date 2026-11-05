@@ -248,6 +248,8 @@ kbase_tiler_heap_renew_work(void)
       int64_t v = debug_get_num_option("PANVK_KBASE_HEAP_RENEW_WORK",
                                        KBASE_TILER_HEAP_RENEW_WORK);
       threshold = v > 0 ? v : 0;
+      mesa_logi("kbase: tiler heap renewal work threshold=%" PRIu64,
+                threshold);
    }
 
    return threshold;
