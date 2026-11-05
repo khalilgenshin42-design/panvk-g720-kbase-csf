@@ -3378,3 +3378,10 @@ Remaining NIR coverage targets: partial component writes with non-zero clip/cull
 Reviewed the newly added dynamic dereference test against `nir_build_deref_array()`: NIR dereference indices must match the pointer-sized bit width of the parent dereference. The test initially used `nir_imm_int()` (32-bit), which could assert on a 64-bit host. Corrected it to `nir_imm_intN_t(b, 6, nir_get_ptr_bitsize(b->shader))`.
 
 Correction commit: `92e631280b36a4abadbc427093e97d6ecac837b0` (`nir: use pointer-sized dynamic deref test index`). This is test-only and does not alter compiler lowering/runtime behavior. It triggers a new NIR CI run; previous run `42026950603` was already compiling the earlier test revision and is not final evidence for this correction.
+
+
+### Dynamic-store test expectation correction (2026-11-05 12:29 UTC)
+
+A static review of `nir_build_write_masked_stores()` showed that dynamic scalar stores are expanded into four guarded component stores (one per vec4 lane), not one dynamic store intrinsic. Corrected the test's expected packed store count from 2 to 5: one constant-index store plus four guarded dynamic-index stores.
+
+Commit: `ccc0fbdece659ea8c49c4570f107327100c92033` (`nir: account for guarded stores in dynamic clip index test`). Test-only correction; no runtime changes. It triggers a fresh NIR run. Previous run `42026950603` compiles the earlier revision and must not be treated as validation for this final expected count.
