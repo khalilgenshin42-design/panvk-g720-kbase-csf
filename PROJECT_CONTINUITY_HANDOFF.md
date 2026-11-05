@@ -7,7 +7,7 @@ This section supersedes older "next steps" and "no code changed" statements in t
 
 - Repository branch inventory was checked across all 25 branches. The only branch containing the root `PROJECT_CONTINUITY_HANDOFF.md` is `docs/project-continuity-handoff-2026-11-03`; no other branch has a divergent copy.
 - Canonical handoff branch: `docs/project-continuity-handoff-2026-11-03` (the only branch containing this root handoff file).
-- Current isolated implementation branch: `experiment/g720-descriptor-heaps`, source HEAD `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`.
+- Current isolated implementation branch: `experiment/g720-descriptor-heaps`, source HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`.
 - Existing primary source branch `experiment/g720-clip-cull-capabilities` remains at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`; it has not been merged with the descriptor-heap branch.
 - Capability matrix branch: `experiment/g720-performance-audit`, HEAD `82fc0e49709e170e7b669c3c62b6bc1cbbc9e722`.
 
@@ -20,7 +20,7 @@ The current registry command audit covers `vkWriteSamplerDescriptorsEXT`, `vkWri
 ### Build and test status
 
 - Intermediate Android-only build run `42078972694` passed compile, stage, package audit and upload at older source `3e4e7ee3849ebab12c114eef8c6c3a650cd14b8f`. Its artifact `13438649591` is stale and must not be sent to the user for testing.
-- Exact-current-source Android-only build run `42080294652` targets `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2` and was queued at last check. Wrapper build run `42080294724` was also queued.
+- The first exact-current-source Android-only build run `42080294652` failed at compile because `struct pan_model` has no `arch` member. The YCbCr count code was corrected to derive architecture with `pan_arch(physical_device->kmod.dev->props.gpu_id)`. The corrected source HEAD is `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`; Android-only run `42082198442` and wrapper run `42082198906` are queued.
 - No exact-current-source compile/link/package validation has passed yet. No device runtime test has been requested or performed for this descriptor-heap branch.
 
 ### User action gate
@@ -4180,3 +4180,8 @@ The capability matrix now contains an exhaustive parse of the current descriptor
 
 The matrix lists every extension initializer, every literal-false feature field, and every non-literal feature gate. It also separates likely compiler-emulatable candidates from features needing hardware/ISA confirmation and architectural limitations. This replaces older approximate counts (185/296). Matrix branch HEAD is now `82fc0e49709e170e7b669c3c62b6bc1cbbc9e722`.
 
+
+
+### Exact-head compile failure and correction
+
+Android-only run `42080294652` reached PanVK compilation and failed at the new YCbCr descriptor-count expression: `struct pan_model` intentionally has no `arch` member. The fix derives the architecture from the actual Kbase GPU ID with `pan_arch(physical_device->kmod.dev->props.gpu_id)`, matching existing PanVK physical-device code. The corrected source is `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`; exact-head Android-only run `42082198442` is queued. The intermediate run `42078972694` still validates only the older writer implementation and is not a test artifact.
