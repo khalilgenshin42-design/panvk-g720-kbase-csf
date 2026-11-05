@@ -2680,27 +2680,48 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
     */
    int direct_vs_clip_count = 0;
    int direct_vs_cull_count = 0;
-   bool direct_vs_fs = false;
-   bool has_fragment_stage = false;
-   bool direct_fs_reads_clip_cull = false;
+   uint32_t direct_vs_index = UINT32_MAX;
+   uint32_t fragment_index = UINT32_MAX;
+
    for (uint32_t j = 0; j < shader_count; j++) {
       if (infos[j].stage == MESA_SHADER_VERTEX &&
-          infos[j].next_stage_mask == VK_SHADER_STAGE_FRAGMENT_BIT) {
-         direct_vs_clip_count = infos[j].nir->info.clip_distance_array_size;
-         direct_vs_cull_count = infos[j].nir->info.cull_distance_array_size;
-         direct_vs_fs = true;
-      } else if (infos[j].stage == MESA_SHADER_FRAGMENT) {
-         has_fragment_stage = true;
-         direct_fs_reads_clip_cull =
-            panvk_nir_fs_reads_clip_cull(infos[j].nir);
-      }
+          infos[j].next_stage_mask == VK_SHADER_STAGE_FRAGMENT_BIT)
+         direct_vs_index = j;
+      else if (infos[j].stage == MESA_SHADER_FRAGMENT)
+         fragment_index = j;
    }
 
-   /* Do not rewrite cull values if there is no FS, or if the FS explicitly
-    * consumes the original distance arrays. Those paths need separate
-    * lowering that preserves the user-visible values.
+   bool direct_vs_fs = direct_vs_index != UINT32_MAX &&
+                       fragment_index != UINT32_MAX;
+   bool direct_fs_reads_clip_cull = false;
+
+   if (direct_vs_fs) {
+      nir_shader *vs_nir = infos[direct_vs_index].nir;
+      nir_shader *fs_nir = infos[fragment_index].nir;
+
+      /*
+       * The SPIR-V front-end keeps ClipDistance and CullDistance in
+       * separate locations. PanVK's direct VS -> FS lowering carries both
+       * through the clip-distance varying slots, so gather their sizes and
+       * merge the declarations before capturing counts or inspecting FS
+       * inputs. Without this, cull-only and mixed clip+cull pipelines can
+       * miss the cull stores or mismatch the synthetic FS varying layout.
+       */
+      nir_gather_clip_cull_distance_sizes_from_vars(vs_nir);
+      nir_merge_clip_cull_distance_vars(vs_nir);
+      nir_gather_clip_cull_distance_sizes_from_vars(fs_nir);
+      nir_merge_clip_cull_distance_vars(fs_nir);
+
+      direct_vs_clip_count = vs_nir->info.clip_distance_array_size;
+      direct_vs_cull_count = vs_nir->info.cull_distance_array_size;
+      direct_fs_reads_clip_cull = panvk_nir_fs_reads_clip_cull(fs_nir);
+   }
+
+   /* Do not rewrite cull values if the FS explicitly consumes the original
+    * distance arrays. Those paths need separate lowering that preserves the
+    * user-visible values.
     */
-   direct_vs_fs &= has_fragment_stage && !direct_fs_reads_clip_cull &&
+   direct_vs_fs &= !direct_fs_reads_clip_cull &&
                    direct_vs_clip_count + direct_vs_cull_count <= 8;
 
    /* Vulkan runtime passes us shaders in stage order */
