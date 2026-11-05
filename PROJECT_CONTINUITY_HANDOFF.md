@@ -3479,3 +3479,12 @@ Current NIR test coverage now includes:
 - Geometry shader arrayed input, tessellation-control arrayed output, and tessellation-evaluation arrayed input, with debug NIR validation.
 
 Next correctness gap: mixed clip+cull accesses with non-zero cull offset and scalar/partial-lane stores. Add a targeted test to verify cull index mapping into the shared packed vec4 array. No runtime PanVK feature reporting has changed.
+
+
+### Mixed clip/cull offset test added (2026-11-05 12:46 UTC)
+
+Source commit `989f931ec6af96c1e9db2c4c683b992581efe770` adds `vertex_cull_accesses_use_clip_offset_in_shared_vec4_array`.
+
+The test declares clip distance size 3 and cull distance size 2, then loads/stores `gl_CullDistance[1]`. Correct packing requires `clip[0..2]` to occupy packed lanes 0..2 and `cull[1]` to map to `gl_ClipDistanceMESA[1].x`. The test counts packed-root load/store derefs specifically at vec4 array index 1 and runs NIR validation in debug builds.
+
+This targets the remaining mixed-array offset path and scalar partial-lane write behavior. CI for the new test is pending; no runtime code has changed.
