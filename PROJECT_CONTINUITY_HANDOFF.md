@@ -3570,3 +3570,27 @@ Important qualification:
 External references checked:
 - `FristOneRR/FristOneRR-Panvk-Driver` README documents Winlator Mali 1.2+ (AdrenoTools) support and ZIP import instructions.
 - `GunaCharanTeja/WinlatorMali` README documents Wrapper selection for Mali.
+
+
+### Winlator Mali 1.2 importer source audit and package-contract CI guard (2026-11-05 14:15 UTC)
+
+Inspected the actual Winlator Mali source at branch `bionic-mali-1.2`, not just the external PanVK README:
+- `app/src/main/java/com/winlator/cmod/contents/AdrenotoolsManager.java`
+- `app/src/main/java/com/winlator/cmod/AdrenotoolsFragment.java`
+
+Confirmed importer behavior:
+- The import action opens the selected ZIP and extracts its entries directly into a temporary directory.
+- It accepts the package when root-level `meta.json` exists, reads `name` from that JSON, and renames the temporary directory to that driver name.
+- Driver list and container selection read `name`, `driverVersion`, and `libraryName` from `meta.json`.
+- `setDriverById()` exports `ADRENOTOOLS_DRIVER_PATH`, `ADRENOTOOLS_HOOKS_PATH`, and `ADRENOTOOLS_DRIVER_NAME`, where the latter is the `libraryName` field.
+- The import code does not enforce a special PanVK ZIP filename or validate `schemaVersion`; it expects the ZIP entries at root, with a valid root `meta.json`.
+
+This directly matches our flat ZIP layout and the metadata fields already emitted. Thus the package format is source-verified against Winlator Mali 1.2's Adrenotools importer, not merely inferred from the FristOneRR documentation. Remaining unverified item is actual on-device import and dynamic loading of the ICD and its private `libpanvk_drm.so` dependency.
+
+Added an explicit metadata contract guard to `.github/scripts/package-panvk-adpkg.sh` on source branch `experiment/g720-clip-cull-capabilities`:
+- Requires non-empty string `name`, `driverVersion`, and `libraryName`.
+- Requires `libraryName == libvulkan_panfrost.so`, schemaVersion 1, and safe single-component driver name.
+- Requires both the ICD and private dependency to exist in the package staging directory.
+- CI run `42033527656` (Android-only PanVK package) is building commit `9188e7bf92a032431ca16ac02d54d81be5a5e12e`; do not treat it as passed until completion.
+
+The earlier artifact remains import-format compatible by inspection, but the new build adds a regression guard against future metadata/package drift. Next gate after CI: obtain the newly built ZIP, then user imports it in Winlator Mali and confirms the installed driver entry and runtime device identity. No system Vulkan driver replacement.
