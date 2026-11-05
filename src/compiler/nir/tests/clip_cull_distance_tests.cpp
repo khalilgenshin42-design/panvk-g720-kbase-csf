@@ -26,6 +26,16 @@ protected:
       var->data.assigned = true;
       return var;
    }
+
+   nir_variable *
+   find_output_var(const char *name)
+   {
+      nir_foreach_variable_with_modes(var, b->shader, nir_var_shader_out) {
+         if (var->name && strcmp(var->name, name) == 0)
+            return var;
+      }
+      return nullptr;
+   }
 };
 
 TEST_F(nir_clip_cull_distance_test, vertex_clip_only_keeps_clip_location)
@@ -98,6 +108,56 @@ TEST_F(nir_clip_cull_distance_test, vertex_mixed_arrays_cross_vec4_boundary)
    EXPECT_EQ(cull->data.location, VARYING_SLOT_CLIP_DIST1);
    EXPECT_EQ(cull->data.location_frac, 1);
    EXPECT_EQ(clip->data.location, VARYING_SLOT_CLIP_DIST0);
+}
+
+
+TEST_F(nir_clip_cull_distance_test,
+       vertex_mixed_arrays_vec4_lowering_packs_clip_and_cull)
+{
+   create_distance_var(nir_var_shader_out, "gl_ClipDistance",
+                       VARYING_SLOT_CLIP_DIST0, 3);
+   create_distance_var(nir_var_shader_out, "gl_CullDistance",
+                       VARYING_SLOT_CULL_DIST0, 2);
+
+   EXPECT_TRUE(nir_lower_clip_cull_distance_to_vec4s(b->shader));
+
+   nir_variable *packed = find_output_var("gl_ClipDistanceMESA");
+   ASSERT_NE(packed, nullptr);
+   ASSERT_TRUE(glsl_type_is_array(packed->type));
+   EXPECT_EQ(glsl_get_length(packed->type), 2);
+   EXPECT_EQ(glsl_get_vector_elements(glsl_get_array_element(packed->type)), 4);
+}
+
+TEST_F(nir_clip_cull_distance_test,
+       vertex_cull_only_vec4_lowering_preserves_cull_count)
+{
+   create_distance_var(nir_var_shader_out, "gl_CullDistance",
+                       VARYING_SLOT_CULL_DIST0, 5);
+
+   EXPECT_TRUE(nir_lower_clip_cull_distance_to_vec4s(b->shader));
+
+   nir_variable *packed = find_output_var("gl_ClipDistanceMESA");
+   ASSERT_NE(packed, nullptr);
+   ASSERT_TRUE(glsl_type_is_array(packed->type));
+   EXPECT_EQ(glsl_get_length(packed->type), 2);
+   EXPECT_EQ(glsl_get_vector_elements(glsl_get_array_element(packed->type)), 4);
+}
+
+TEST_F(nir_clip_cull_distance_test,
+       vertex_mixed_arrays_vec4_lowering_crosses_vec4_boundary)
+{
+   create_distance_var(nir_var_shader_out, "gl_ClipDistance",
+                       VARYING_SLOT_CLIP_DIST0, 5);
+   create_distance_var(nir_var_shader_out, "gl_CullDistance",
+                       VARYING_SLOT_CULL_DIST0, 3);
+
+   EXPECT_TRUE(nir_lower_clip_cull_distance_to_vec4s(b->shader));
+
+   nir_variable *packed = find_output_var("gl_ClipDistanceMESA");
+   ASSERT_NE(packed, nullptr);
+   ASSERT_TRUE(glsl_type_is_array(packed->type));
+   EXPECT_EQ(glsl_get_length(packed->type), 2);
+   EXPECT_EQ(glsl_get_vector_elements(glsl_get_array_element(packed->type)), 4);
 }
 
 class nir_clip_cull_fragment_test : public nir_test {
