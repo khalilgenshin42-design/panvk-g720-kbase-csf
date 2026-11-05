@@ -14,6 +14,7 @@ on:
       - experiment/kbase-single-csg
       - experiment/clip-cull-distance-v12
       - experiment/g720-performance-audit
+      - experiment/g720-clip-cull-capabilities
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
