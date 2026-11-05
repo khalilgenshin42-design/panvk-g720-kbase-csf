@@ -38,7 +38,8 @@ jobs:
           test -f android.toml
           grep -n "uint64_t fn_addr" src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c
           grep -q "panvk_nir_lower_clip_cull_fs" src/panfrost/vulkan/panvk_vX_shader.c
-          grep -q "direct_vs_fs &= has_fragment_stage && !direct_fs_reads_clip_cull" src/panfrost/vulkan/panvk_vX_shader.c
+          grep -q "nir_gather_clip_cull_distance_sizes_from_vars(vs_nir)" src/panfrost/vulkan/panvk_vX_shader.c
+          grep -q "nir_merge_clip_cull_distance_vars(fs_nir)" src/panfrost/vulkan/panvk_vX_shader.c
           grep -q ".shaderClipDistance = false" src/panfrost/vulkan/panvk_vX_physical_device.c
           grep -q ".shaderCullDistance = false" src/panfrost/vulkan/panvk_vX_physical_device.c
 
