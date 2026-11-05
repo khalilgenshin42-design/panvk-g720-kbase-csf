@@ -884,3 +884,8 @@ branch. The latest workflow results are pending. These tests validate the
 shared NIR merge helper only; they do not prove PanVK GS/TCS/TES transport or
 hardware discard semantics. No runtime feature exposure or driver code has
 changed.
+
+
+## 2026-11-05 — initial clip/cull NIR tests
+
+Added `src/compiler/nir/tests/clip_cull_distance_tests.cpp` on `experiment/g720-clip-cull-capabilities`. Cases cover vertex clip-only, cull-only, mixed arrays, a mixed array crossing a vec4 slot boundary, and fragment mixed inputs. They check gather metadata and merged varying locations/components. A dedicated host CI workflow builds and runs the NIR suite; Android build workflows are enabled on this branch. Results are pending. These tests do not yet cover vec4 lowering, GS/TCS/TES transport, interpolation, or PanVK discard semantics. No runtime code or feature bits changed.
