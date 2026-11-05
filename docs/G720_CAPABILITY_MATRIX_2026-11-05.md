@@ -397,3 +397,285 @@ YCbCr count consistency fix: `VkSamplerYcbcrConversionImageFormatProperties::com
 
 
 Intermediate build evidence: Android-only run `42078972694` at source `3e4e7ee3849ebab12c114eef8c6c3a650cd14b8f` passed compile, staging, ELF/libdrm audit, and package upload. It validates the initial writer-command implementation but predates custom-border command/restriction and YCbCr count fixes. Artifact `13438649591` is not the current test package. Exact latest source `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2` still awaits run `42080294652`.
+
+
+## Exhaustive Vulkan initializer census — 2026-11-05
+
+Source of truth: `src/panfrost/vulkan/panvk_vX_physical_device.c` on `experiment/g720-descriptor-heaps` at `65ea07c485e2a9a1d936ff4fc17c9f6d6e07f249` (source branch commit `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`). These counts describe explicit C initializer assignments, not the number of extensions/features enabled at runtime on every architecture.
+
+- Extension-table assignments: **186**
+- Feature-structure assignments: **298** — 173 literal `true`, 70 literal `false`, 55 architecture/device/DRIRC-gated expressions.
+- For the Dimensity 8400 Ultra's Mali-G720 (PanVK `PAN_ARCH=12`), gates such as `PAN_ARCH >= 9/10/11` evaluate true; `PAN_ARCH >= 13` does not. Device-property and DRIRC gates still require runtime values.
+
+### All explicit extension-table assignments
+
+| Extension field (without `VK_` prefix) | Source expression |
+|---|---|
+| `KHR_8bit_storage` | `true` |
+| `KHR_16bit_storage` | `true` |
+| `KHR_shader_atomic_int64` | `PAN_ARCH >= 9` |
+| `KHR_bind_memory2` | `true` |
+| `KHR_buffer_device_address` | `true` |
+| `KHR_calibrated_timestamps` | `device->kmod.dev->props.gpu_can_query_timestamp` |
+| `KHR_compute_shader_derivatives` | `PAN_ARCH >= 9` |
+| `KHR_copy_commands2` | `true` |
+| `KHR_copy_memory_indirect` | `PAN_ARCH >= 10` |
+| `KHR_create_renderpass2` | `true` |
+| `KHR_dedicated_allocation` | `true` |
+| `KHR_descriptor_update_template` | `true` |
+| `KHR_depth_clamp_zero_one` | `true` |
+| `KHR_depth_stencil_resolve` | `true` |
+| `KHR_device_group` | `true` |
+| `KHR_draw_indirect_count` | `PAN_ARCH >= 10` |
+| `KHR_driver_properties` | `true` |
+| `KHR_dynamic_rendering` | `true` |
+| `KHR_dynamic_rendering_local_read` | `true` |
+| `KHR_external_fence` | `true` |
+| `KHR_external_fence_fd` | `true` |
+| `KHR_external_memory` | `true` |
+| `KHR_external_memory_fd` | `true` |
+| `KHR_external_semaphore` | `true` |
+| `KHR_external_semaphore_fd` | `true` |
+| `KHR_format_feature_flags2` | `true` |
+| `KHR_get_memory_requirements2` | `true` |
+| `KHR_global_priority` | `true` |
+| `KHR_image_format_list` | `true` |
+| `KHR_imageless_framebuffer` | `true` |
+| `KHR_index_type_uint8` | `true` |
+| `KHR_internally_synchronized_queues` | `true` |
+| `KHR_line_rasterization` | `true` |
+| `KHR_load_store_op_none` | `true` |
+| `KHR_maintenance1` | `true` |
+| `KHR_maintenance2` | `true` |
+| `KHR_maintenance3` | `true` |
+| `KHR_maintenance4` | `true` |
+| `KHR_maintenance5` | `true` |
+| `KHR_maintenance6` | `true` |
+| `KHR_maintenance7` | `true` |
+| `KHR_maintenance8` | `true` |
+| `KHR_maintenance9` | `true` |
+| `KHR_map_memory2` | `true` |
+| `KHR_multiview` | `true` |
+| `KHR_pipeline_binary` | `true` |
+| `KHR_pipeline_executable_properties` | `true` |
+| `KHR_pipeline_library` | `true` |
+| `KHR_push_descriptor` | `true` |
+| `KHR_relaxed_block_layout` | `true` |
+| `KHR_robustness2` | `PAN_ARCH >= 10` |
+| `KHR_sampler_mirror_clamp_to_edge` | `true` |
+| `KHR_sampler_ycbcr_conversion` | `true` |
+| `KHR_separate_depth_stencil_layouts` | `true` |
+| `KHR_shader_clock` | `device->kmod.dev->props.gpu_can_query_timestamp` |
+| `KHR_shader_draw_parameters` | `true` |
+| `KHR_shader_expect_assume` | `true` |
+| `KHR_shader_float_controls` | `true` |
+| `KHR_shader_float_controls2` | `true` |
+| `KHR_shader_float16_int8` | `true` |
+| `KHR_shader_fma` | `true` |
+| `KHR_shader_integer_dot_product` | `true` |
+| `KHR_shader_maximal_reconvergence` | `PAN_ARCH >= 9` |
+| `KHR_shader_non_semantic_info` | `true` |
+| `KHR_shader_quad_control` | `PAN_ARCH >= 9` |
+| `KHR_shader_relaxed_extended_instruction` | `true` |
+| `KHR_shader_subgroup_extended_types` | `true` |
+| `KHR_shader_subgroup_rotate` | `true` |
+| `KHR_shader_subgroup_uniform_control_flow` | `PAN_ARCH >= 9` |
+| `KHR_shader_terminate_invocation` | `true` |
+| `KHR_shader_untyped_pointers` | `PAN_ARCH >= 9` |
+| `KHR_spirv_1_4` | `true` |
+| `KHR_storage_buffer_storage_class` | `true` |
+| `KHR_present_id` | `true` |
+| `KHR_present_id2` | `true` |
+| `KHR_present_wait` | `true` |
+| `KHR_present_wait2` | `true` |
+| `KHR_swapchain` | `true` |
+| `KHR_swapchain_mutable_format` | `true` |
+| `KHR_swapchain_maintenance1` | `true` |
+| `KHR_synchronization2` | `true` |
+| `KHR_timeline_semaphore` | `true` |
+| `KHR_unified_image_layouts` | `true` |
+| `KHR_uniform_buffer_standard_layout` | `true` |
+| `KHR_variable_pointers` | `true` |
+| `KHR_vertex_attribute_divisor` | `true` |
+| `KHR_vulkan_memory_model` | `true` |
+| `KHR_workgroup_memory_explicit_layout` | `true` |
+| `KHR_zero_initialize_workgroup_memory` | `true` |
+| `EXT_4444_formats` | `true` |
+| `EXT_attachment_feedback_loop_dynamic_state` | `true` |
+| `EXT_attachment_feedback_loop_layout` | `true` |
+| `EXT_border_color_swizzle` | `true` |
+| `EXT_buffer_device_address` | `true` |
+| `EXT_calibrated_timestamps` | `device->kmod.dev->props.gpu_can_query_timestamp` |
+| `EXT_conditional_rendering` | `PAN_ARCH >= 10` |
+| `EXT_color_write_enable` | `true` |
+| `EXT_conservative_rasterization` | `PAN_ARCH >= 11` |
+| `EXT_custom_border_color` | `true` |
+| `EXT_debug_marker` | `true` |
+| `EXT_depth_bias_control` | `true` |
+| `EXT_depth_clamp_control` | `true` |
+| `EXT_depth_clamp_zero_one` | `true` |
+| `EXT_depth_clip_enable` | `true` |
+| `EXT_depth_clip_control` | `true` |
+| `EXT_device_address_binding_report` | `true` |
+| `EXT_device_memory_report` | `true` |
+| `EXT_descriptor_heap` | `PAN_ARCH >= 9` |
+| `EXT_display_control` | `true` |
+| `EXT_descriptor_indexing` | `PAN_ARCH >= 9` |
+| `EXT_dynamic_rendering_unused_attachments` | `true` |
+| `EXT_extended_dynamic_state` | `true` |
+| `EXT_extended_dynamic_state2` | `true` |
+| `EXT_extended_dynamic_state3` | `true` |
+| `EXT_external_memory_acquire_unmodified` | `true` |
+| `EXT_external_memory_dma_buf` | `true` |
+| `EXT_global_priority` | `true` |
+| `EXT_global_priority_query` | `true` |
+| `EXT_graphics_pipeline_library` | `true` |
+| `EXT_hdr_metadata` | `true` |
+| `EXT_host_image_copy` | `true` |
+| `EXT_host_query_reset` | `true` |
+| `EXT_image_2d_view_of_3d` | `true` |
+| `EXT_image_drm_format_modifier` | `true` |
+| `EXT_image_robustness` | `true` |
+| `EXT_image_sliced_view_of_3d` | `true` |
+| `EXT_image_view_min_lod` | `true` |
+| `EXT_index_type_uint8` | `true` |
+| `EXT_legacy_dithering` | `true` |
+| `EXT_line_rasterization` | `true` |
+| `EXT_load_store_op_none` | `true` |
+| `EXT_map_memory_placed` | `true` |
+| `EXT_nested_command_buffer` | `PAN_ARCH >= 10` |
+| `EXT_memory_budget` | `true` |
+| `EXT_non_seamless_cube_map` | `true` |
+| `EXT_mutable_descriptor_type` | `PAN_ARCH >= 9` |
+| `EXT_multisampled_render_to_single_sampled` | `true` |
+| `EXT_physical_device_drm` | `true` |
+| `EXT_pipeline_creation_cache_control` | `true` |
+| `EXT_pipeline_creation_feedback` | `true` |
+| `EXT_pipeline_robustness` | `true` |
+| `EXT_present_timing` | `device->kmod.dev->props.gpu_can_query_timestamp` |
+| `EXT_private_data` | `true` |
+| `EXT_primitive_topology_list_restart` | `true` |
+| `EXT_provoking_vertex` | `true` |
+| `EXT_queue_family_foreign` | `true` |
+| `EXT_rasterization_order_attachment_access` | `PAN_ARCH >= 10` |
+| `EXT_rgba10x6_formats` | `PAN_ARCH >= 11` |
+| `EXT_robustness2` | `PAN_ARCH >= 10` |
+| `EXT_sampler_filter_minmax` | `PAN_ARCH >= 10` |
+| `EXT_scalar_block_layout` | `true` |
+| `EXT_separate_stencil_usage` | `true` |
+| `EXT_shader_atomic_float` | `true` |
+| `EXT_shader_demote_to_helper_invocation` | `true` |
+| `EXT_shader_image_atomic_int64` | `PAN_ARCH >= 9` |
+| `EXT_shader_module_identifier` | `true` |
+| `EXT_shader_replicated_composites` | `true` |
+| `EXT_shader_stencil_export` | `true` |
+| `EXT_shader_subgroup_ballot` | `true` |
+| `EXT_shader_subgroup_vote` | `true` |
+| `EXT_shader_tile_image` | `PAN_ARCH >= 9` |
+| `EXT_shader_uniform_buffer_unsized_array` | `true` |
+| `EXT_subgroup_size_control` | `true` |
+| `EXT_swapchain_maintenance1` | `true` |
+| `EXT_texel_buffer_alignment` | `true` |
+| `EXT_transform_feedback` | `PAN_ARCH >= 10` |
+| `EXT_astc_decode_mode` | `PAN_ARCH >= 9` |
+| `EXT_texture_compression_astc_hdr` | `true` |
+| `EXT_tooling_info` | `true` |
+| `EXT_vertex_attribute_divisor` | `true` |
+| `EXT_vertex_input_dynamic_state` | `true` |
+| `EXT_ycbcr_2plane_444_formats` | `PAN_ARCH >= 10` |
+| `EXT_ycbcr_image_arrays` | `PAN_ARCH >= 10` |
+| `EXT_zero_initialize_device_memory` | `true` |
+| `EXT_inline_uniform_block` | `true` |
+| `ANDROID_external_memory_android_hardware_buffer` | `has_gralloc` |
+| `ANDROID_native_buffer` | `has_gralloc` |
+| `GOOGLE_decorate_string` | `true` |
+| `GOOGLE_display_timing` | `wsi_instance_supports_google_display_timing(&instance->vk, &instance->drirc.options)` |
+| `GOOGLE_hlsl_functionality1` | `true` |
+| `GOOGLE_user_type` | `true` |
+| `VALVE_mutable_descriptor_type` | `PAN_ARCH >= 9` |
+| `ARM_shader_core_builtins` | `true` |
+| `ARM_shader_core_properties` | `true` |
+| `ARM_scheduling_controls` | `true` |
+| `ARM_rasterization_order_attachment_access` | `PAN_ARCH >= 10` |
+
+### All literal-false feature fields
+
+These are disabled in the initializer. A false bit is not by itself proof of a hardware limitation; each candidate must be traced through hardware, compiler lowering, descriptor/command semantics, and CTS before enabling.
+
+`depthBounds`, `alphaToOne`, `multiViewport`, `pipelineStatisticsQuery`, `shaderTessellationAndGeometryPointSize`, `shaderStorageImageMultisample`, `shaderClipDistance`, `shaderCullDistance`, `shaderFloat64`, `shaderResourceResidency`, `shaderResourceMinLod`, `sparseResidency2Samples`, `sparseResidency4Samples`, `sparseResidency8Samples`, `sparseResidency16Samples`, `sparseResidencyAliased`, `variableMultisampleRate`, `inheritedQueries`, `multiviewGeometryShader`, `multiviewTessellationShader`, `protectedMemory`, `descriptorHeapCaptureReplay`, `bufferDeviceAddressMultiDevice`, `shaderOutputViewportIndex`, `shaderOutputLayer`, `decodeModeSharedExponent`, `smoothLines`, `stippledRectangularLines`, `stippledBresenhamLines`, `stippledSmoothLines`, `pipelineProtectedAccess`, `leastRepresentableValueForceUnormRepresentation`, `floatRepresentation`, `extendedDynamicState2PatchControlPoints`, `extendedDynamicState3TessellationDomainOrigin`, `extendedDynamicState3PolygonMode`, `extendedDynamicState3AlphaToOneEnable`, `extendedDynamicState3RasterizationStream`, `extendedDynamicState3ExtraPrimitiveOverestimationSize`, `extendedDynamicState3SampleLocationsEnable`, `extendedDynamicState3ColorBlendAdvanced`, `extendedDynamicState3ProvokingVertexMode`, `extendedDynamicState3LineStippleEnable`, `extendedDynamicState3DepthClipNegativeOneToOne`, `extendedDynamicState3ViewportWScalingEnable`, `extendedDynamicState3ViewportSwizzle`, `extendedDynamicState3CoverageToColorEnable`, `extendedDynamicState3CoverageToColorLocation`, `extendedDynamicState3CoverageModulationMode`, `extendedDynamicState3CoverageModulationTableEnable`, `extendedDynamicState3CoverageModulationTable`, `extendedDynamicState3CoverageReductionMode`, `extendedDynamicState3RepresentativeFragmentTestEnable`, `extendedDynamicState3ShadingRateImageEnable`, `geometryStreams`, `primitiveTopologyPatchListRestart`, `transformFeedbackPreservesProvokingVertex`, `robustImageAccess2`, `shaderBufferFloat32AtomicAdd`, `shaderBufferFloat64Atomics`, `shaderBufferFloat64AtomicAdd`, `shaderSharedFloat32AtomicAdd`, `shaderSharedFloat64Atomics`, `shaderSharedFloat64AtomicAdd`, `shaderImageFloat32AtomicAdd`, `sparseImageFloat32AtomicAdd`, `sparseImageInt64Atomics`, `memoryMapRangePlaced`, `unifiedImageLayoutsVideo`, `shaderFmaFloat64`
+
+### All non-literal feature gates
+
+| Feature field | Source expression |
+|---|---|
+| `multiDrawIndirect` | `PAN_ARCH >= 10` |
+| `textureCompressionETC2` | `has_texture_compression_etc2(device)` |
+| `textureCompressionASTC_LDR` | `has_texture_compression_astc_ldr(device)` |
+| `textureCompressionBC` | `has_texture_compression_bc(device)` |
+| `vertexPipelineStoresAndAtomics` | `(PAN_ARCH >= 13 && instance->drirc.misc.enable_vertex_pipeline_stores_atomics) || instance->drirc.misc.force_enable_shader_atomics` |
+| `sparseBinding` | `has_sparse` |
+| `sparseResidencyBuffer` | `has_sparse` |
+| `sparseResidencyImage2D` | `has_sparse` |
+| `sparseResidencyImage3D` | `has_sparse` |
+| `drawIndirectCount` | `PAN_ARCH >= 10` |
+| `shaderBufferInt64Atomics` | `PAN_ARCH >= 9` |
+| `shaderSharedInt64Atomics` | `PAN_ARCH >= 9` |
+| `shaderFloat16` | `PAN_ARCH >= 10` |
+| `descriptorIndexing` | `PAN_ARCH >= 9` |
+| `descriptorHeap` | `PAN_ARCH >= 9` |
+| `descriptorBindingUniformBufferUpdateAfterBind` | `PAN_ARCH >= 9` |
+| `descriptorBindingSampledImageUpdateAfterBind` | `PAN_ARCH >= 9` |
+| `descriptorBindingStorageImageUpdateAfterBind` | `PAN_ARCH >= 9` |
+| `descriptorBindingStorageBufferUpdateAfterBind` | `PAN_ARCH >= 9` |
+| `descriptorBindingUniformTexelBufferUpdateAfterBind` | `PAN_ARCH >= 9` |
+| `descriptorBindingStorageTexelBufferUpdateAfterBind` | `PAN_ARCH >= 9` |
+| `descriptorBindingUpdateUnusedWhilePending` | `PAN_ARCH >= 9` |
+| `descriptorBindingPartiallyBound` | `PAN_ARCH >= 9` |
+| `samplerFilterMinmax` | `PAN_ARCH >= 10` |
+| `bufferDeviceAddressCaptureReplay` | `(PAN_ARCH >= 10) && (device->memory.max_supported_va > (1ull << 32))` |
+| `textureCompressionASTC_HDR` | `has_texture_compression_astc_hdr(device)` |
+| `computeDerivativeGroupQuads` | `PAN_ARCH >= 9` |
+| `computeDerivativeGroupLinear` | `PAN_ARCH >= 9` |
+| `extendedDynamicState3ConservativeRasterizationMode` | `PAN_ARCH >= 11` |
+| `indirectMemoryCopy` | `PAN_ARCH >= 10` |
+| `conditionalRendering` | `PAN_ARCH >= 10` |
+| `inheritedConditionalRendering` | `PAN_ARCH >= 10` |
+| `transformFeedback` | `PAN_ARCH >= 10` |
+| `customBorderColorWithoutFormat` | `PAN_ARCH != 7` |
+| `robustBufferAccess2` | `PAN_ARCH >= 11` |
+| `nullDescriptor` | `PAN_ARCH >= 10` |
+| `shaderTileImageColorReadAccess` | `PAN_ARCH >= 9` |
+| `shaderTileImageDepthReadAccess` | `PAN_ARCH >= 9` |
+| `shaderTileImageStencilReadAccess` | `PAN_ARCH >= 9` |
+| `shaderSubgroupClock` | `device->kmod.dev->props.gpu_can_query_timestamp` |
+| `shaderDeviceClock` | `device->kmod.dev->props.timestamp_device_coherent` |
+| `shaderUntypedPointers` | `PAN_ARCH >= 9` |
+| `sparseImageFloat32Atomics` | `has_sparse` |
+| `shaderImageInt64Atomics` | `PAN_ARCH >= 9` |
+| `formatRgba10x6WithoutYCbCrSampler` | `PAN_ARCH >= 11` |
+| `ycbcr2plane444Formats` | `PAN_ARCH >= 10` |
+| `ycbcrImageArrays` | `PAN_ARCH >= 10` |
+| `nestedCommandBuffer` | `PAN_ARCH >= 10` |
+| `nestedCommandBufferRendering` | `PAN_ARCH >= 10` |
+| `nestedCommandBufferSimultaneousUse` | `PAN_ARCH >= 10` |
+| `mutableDescriptorType` | `PAN_ARCH >= 9` |
+| `shaderFmaFloat16` | `PAN_ARCH >= 10` |
+| `rasterizationOrderColorAttachmentAccess` | `PAN_ARCH >= 10` |
+| `rasterizationOrderDepthAttachmentAccess` | `PAN_ARCH >= 10` |
+| `rasterizationOrderStencilAttachmentAccess` | `PAN_ARCH >= 10` |
+
+### Prioritized false-feature audit queue
+
+The following are candidates for a deeper source/hardware audit, not instructions to force-enable them:
+
+1. **Software/compiler-emulatable candidates:** `multiViewport`, `shaderClipDistance`, `shaderCullDistance`, `pipelineStatisticsQuery`, `shaderResourceMinLod`, `shaderOutputViewportIndex`, `shaderOutputLayer`, `inheritedQueries`.
+2. **Hardware/ISA confirmation required:** `depthBounds`, `alphaToOne`, `geometryStreams`, `shaderStorageImageMultisample`, `transformFeedbackPreservesProvokingVertex`, float32 atomic-add feature bits.
+3. **Likely architectural/stack limitations unless new evidence appears:** sparse residency/binding (Kbase reports `has_sparse=false`), protected memory, float64 shader support, multisample variable-rate behavior, and unsupported line-stipple modes.
+
+Specific safety gates already established:
+- `vertexPipelineStoresAndAtomics` is only enabled on `PAN_ARCH >= 13` with the DRIRC opt-in, or with the explicit force option. G720 is v12; leave disabled because invalid-index speculative accesses remain unsafe.
+- `sparseBinding` and sparse residency feature bits depend on `has_sparse`; current Kbase path reports false, so do not expose sparse features.
+- `descriptorHeapCaptureReplay` remains false; image opaque-capture command returns `VK_ERROR_FEATURE_NOT_PRESENT`.
+- `shaderFloat64` and related float64 atomic/FMA fields remain false; do not infer support from unrelated FP16/FP32 features.
+
+This census is the baseline for the remaining "enable every genuinely supported feature" audit. It supersedes earlier approximate counts of 185 extension and 296 feature initializers.
