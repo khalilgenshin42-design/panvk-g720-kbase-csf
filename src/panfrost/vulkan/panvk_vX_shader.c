@@ -2683,6 +2683,7 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
    int direct_vs_clip_count = 0;
    int direct_vs_cull_count = 0;
    bool direct_vs_fs = false;
+   bool has_fragment_stage = false;
    bool direct_fs_reads_clip_cull = false;
    for (uint32_t j = 0; j < shader_count; j++) {
       if (infos[j].stage == MESA_SHADER_VERTEX &&
@@ -2691,16 +2692,17 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
          direct_vs_cull_count = infos[j].nir->info.cull_distance_array_size;
          direct_vs_fs = true;
       } else if (infos[j].stage == MESA_SHADER_FRAGMENT) {
+         has_fragment_stage = true;
          direct_fs_reads_clip_cull =
             panvk_nir_fs_reads_clip_cull(infos[j].nir);
       }
    }
 
-   /* Do not rewrite cull values if the FS explicitly consumes the original
-    * distance arrays. That path needs a separate lowering preserving the
-    * user-visible values.
+   /* Do not rewrite cull values if there is no FS, or if the FS explicitly
+    * consumes the original distance arrays. Those paths need separate
+    * lowering that preserves the user-visible values.
     */
-   direct_vs_fs &= !direct_fs_reads_clip_cull &&
+   direct_vs_fs &= has_fragment_stage && !direct_fs_reads_clip_cull &&
                    direct_vs_clip_count + direct_vs_cull_count <= 8;
 
    /* Vulkan runtime passes us shaders in stage order */
