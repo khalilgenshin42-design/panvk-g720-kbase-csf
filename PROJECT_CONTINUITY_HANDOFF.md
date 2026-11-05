@@ -3955,3 +3955,20 @@ Verified current project files:
 This corrects the earlier statement that PanVK itself must add the generic lowerer call to its shader compilation path. The generic runtime owns that call; the PanVK work is the backend lowering of heap-offset NIR operations, the returned embedded sampler states, resource table / heap binding state, push data command, and feature/entrypoint wiring.
 
 The immediate next inspection is the `vk_shader_ops` / `vk_pipeline` callback contract in Mesa 26.3 versus the PanVK shader creation path. Do not add a duplicate NIR pass in PanVK. Confirm whether the callback signature already returns `vk_sampler_state_array` to PanVK; if not, the narrow runtime API adaptation required must be explicit and cache-safe.
+
+
+## Addendum: shader metadata handoff audit (2026-11-05)
+
+The generic descriptor-heap path's embedded-sampler handoff is already represented in Mesa 26.3's common shader compile ABI; PanVK should consume it rather than adding a new runtime callback.
+
+Verified current project branch source:
+- `src/vulkan/runtime/vk_shader.h` (`4e0d4dc84f3ec43554154874eb6802de92fc9141`): `vk_shader_compile_info` contains `embedded_sampler_count` and `embedded_samplers`.
+- `src/vulkan/runtime/vk_shader.c` (`6354e51d364cd2f92314ac4e55143dc3b5c73d79`): shader-object compilation passes the `vk_sampler_state_array` output into `vk_shader_compile_info_init()`, which assigns those fields.
+- `src/vulkan/runtime/vk_pipeline.c` (`4c06e7db9067394192dd44f554a95f1c161e0855`): pipeline compilation passes embedded sampler data into the pipeline precompile object and finishes the temporary array after precompilation. Inspect precompile cache ownership before assuming pointer lifetime.
+- `src/panfrost/vulkan/panvk_vX_shader.c` (`65b718457ad5859e43988a9e77cc4515574a23d9`): `panvk_compile_shader()` receives this compile info but currently does not reference either embedded-sampler field.
+- `src/panfrost/vulkan/panvk_shader.h` (`963601351b4281e8750516beab4c99a643fe7b32`): Valhall shader metadata has no heap-use bit or embedded-sampler data/address fields.
+- `src/panfrost/vulkan/panvk_cmd_desc_state.h` (`9b82fc389a2513983c2ebc668b24c002b246bef4`): descriptor state has no resource/sampler heap bindings.
+- `src/panfrost/vulkan/panvk_vX_cmd_desc_state.c` (`6beab5f62c70de7b7e1aeac587bd805126b84654`): Valhall resource-table allocation currently covers the driver set and ordinary descriptor sets only.
+- `src/panfrost/vulkan/panvk_vX_cmd_push_constant.c` (`cefd287bd323eb0decd81f45c484a13cc0e1a610`): existing push-constant storage and dirty-state logic can be reused for `CmdPushDataEXT`, but all-stage semantics and bounds validation are separate requirements.
+
+Implementation consequences: PanVK must upload embedded sampler descriptors, retain their GPU address/count, serialize and restore them in its own shader binary/cache, and free the allocation on shader destruction. Add a `uses_heaps` bit independent of sampler count. Extend graphics and compute descriptor state with heap bindings, reserve/populate aligned resource-table entries, and implement secondary-command-buffer inheritance. Generic pipeline precompile caching and PanVK final shader binary caching are separate ownership layers; verify both before changing the binary layout and bump PanVK cache/binary version if needed. No code or feature exposure has changed yet.
