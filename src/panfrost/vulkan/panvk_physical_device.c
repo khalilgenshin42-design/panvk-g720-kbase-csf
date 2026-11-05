@@ -2494,8 +2494,8 @@ panvk_GetPhysicalDeviceImageFormatProperties2(
 
    if (ycbcr_props)
       ycbcr_props->combinedImageSamplerDescriptorCount =
-         panvk_image_get_tex_count(physical_device->model->arch,
-                                   base_info->format);
+         panvk_image_get_tex_count(
+            pan_arch(physical_device->kmod.dev->props.gpu_id), base_info->format);
 
    return VK_SUCCESS;
 
