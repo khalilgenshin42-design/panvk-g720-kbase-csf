@@ -42,6 +42,8 @@
 struct panvk_desc_profile_stats {
    uint64_t pool_creates, pool_create_bytes, pool_create_failures;
    uint64_t pool_max_bytes, set_allocs, set_alloc_bytes, set_alloc_failures;
+   uint64_t set_alloc_overflow_failures, set_alloc_capacity_failures;
+   uint64_t set_alloc_vma_failures;
 };
 static struct panvk_desc_profile_stats panvk_desc_profile;
 
@@ -74,7 +76,8 @@ panvk_desc_profile_dump(void)
 
    mesa_logi("descriptor profile: pools=%" PRIu64
              " requested_MiB=%.2f max_pool_MiB=%.2f pool_failures=%" PRIu64
-             " set_allocs=%" PRIu64 " set_alloc_MiB=%.2f set_failures=%" PRIu64,
+             " set_allocs=%" PRIu64 " set_alloc_MiB=%.2f set_failures=%" PRIu64
+             " (overflow=%" PRIu64 " capacity=%" PRIu64 " vma=%" PRIu64 "),"
              panvk_desc_profile_read(&panvk_desc_profile.pool_creates),
              panvk_desc_profile_read(&panvk_desc_profile.pool_create_bytes) /
                 (1024.0 * 1024.0),
@@ -84,7 +87,10 @@ panvk_desc_profile_dump(void)
              panvk_desc_profile_read(&panvk_desc_profile.set_allocs),
              panvk_desc_profile_read(&panvk_desc_profile.set_alloc_bytes) /
                 (1024.0 * 1024.0),
-             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_failures));
+             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_failures),
+             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_overflow_failures),
+             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_capacity_failures),
+             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_vma_failures));
 }
 
 static const void *
@@ -632,16 +638,27 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
 
          assert(base_descs <= num_descs);
          uint64_t adjusted_descs = num_descs - base_descs;
-         if (variable_descs > UINT32_MAX - adjusted_descs)
+         if (variable_descs > UINT32_MAX - adjusted_descs) {
+            if (panvk_desc_profile_enabled()) {
+               panvk_desc_profile_add(&panvk_desc_profile.set_alloc_failures, 1);
+               panvk_desc_profile_add(
+                  &panvk_desc_profile.set_alloc_overflow_failures, 1);
+               panvk_desc_profile_dump();
+            }
             return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
+         }
 
          num_descs = adjusted_descs + variable_descs;
       }
    }
 
    if (num_descs > UINT32_MAX) {
-      if (panvk_desc_profile_enabled())
+      if (panvk_desc_profile_enabled()) {
          panvk_desc_profile_add(&panvk_desc_profile.set_alloc_failures, 1);
+         panvk_desc_profile_add(
+            &panvk_desc_profile.set_alloc_overflow_failures, 1);
+         panvk_desc_profile_dump();
+      }
       return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
    }
 
@@ -656,6 +673,8 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
    if (first_free_set == 0 || pool->desc_heap.free_size < descs_size) {
       if (panvk_desc_profile_enabled()) {
          panvk_desc_profile_add(&panvk_desc_profile.set_alloc_failures, 1);
+         panvk_desc_profile_add(
+            &panvk_desc_profile.set_alloc_capacity_failures, 1);
          panvk_desc_profile_dump();
       }
       return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
@@ -668,6 +687,8 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
       if (!descs_dev_addr) {
          if (panvk_desc_profile_enabled()) {
             panvk_desc_profile_add(&panvk_desc_profile.set_alloc_failures, 1);
+            panvk_desc_profile_add(
+               &panvk_desc_profile.set_alloc_vma_failures, 1);
             panvk_desc_profile_dump();
          }
          return panvk_error(pool, VK_ERROR_FRAGMENTED_POOL);
