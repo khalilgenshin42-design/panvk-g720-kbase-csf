@@ -4237,3 +4237,8 @@ The package can be downloaded from the GitHub Actions run:
 https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42082198442
 
 Next engineering work after the user supplies runtime evidence: diagnose any loader/WSI/CSF fault, add descriptor-heap targeted tests (especially buffer/image/sampler descriptor writes, YCbCr image descriptor counts, secondary inheritance, and shader-cache round trips), and only then consider broader capability enablement or performance tuning. Do not claim descriptor heaps are Vulkan-conformant based on compilation alone.
+
+
+### Repository inventory correction (2026-11-05)
+
+A fresh branch search after the descriptor-heap work found 26 branches in the repository. The canonical root handoff remains only on `docs/project-continuity-handoff-2026-11-03`; the isolated implementation remains `experiment/g720-descriptor-heaps` at `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. No branch was deleted or merged during this pass.
