@@ -830,3 +830,18 @@ The next source task is a dedicated clip/cull completion comparison against
 JimVulkan's later implementation. Do not flip feature bits before completing
 stage propagation, explicit fragment-input semantics, properties, and tests.
 No runtime source change was made in this audit step.
+
+
+## 2026-11-05 — additional clip/cull stage-transport findings
+
+The follow-up audit found shared NIR helpers and a more nuanced libpoly
+transport picture. The complete details and source blob identifiers are in
+`docs/G720_CAPABILITY_MATRIX_2026-11-05.md` on the performance branch and in
+the continuity handoff. In brief: NIR provides gather/merge/vec4-normalization
+passes; software VS/TES and TCS paths transport outputs through varying-slot
+masks; passthrough GS has explicit compact clip/cull support; PanVK's active
+custom GS lowering is a separate path whose per-slot output collection still
+needs verification. Explicit FS reads and stage propagation remain incomplete.
+No runtime changes or feature exposure were made. The dedicated source branch
+is `experiment/g720-clip-cull-capabilities`, starting at
+`2fb0c3c792a193d0bed9d6eafda5cee606546150`.
