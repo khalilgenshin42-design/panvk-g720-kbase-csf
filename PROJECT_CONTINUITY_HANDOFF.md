@@ -4009,7 +4009,7 @@ Repository-wide branch reconciliation was performed before continuing. The repos
 
 - Branch: `experiment/g720-descriptor-heaps`
 - Base: latest source branch `experiment/g720-clip-cull-capabilities` at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`
-- Current branch HEAD after descriptor heap writer restrictions and embedded-sampler validation: `0bf2e527c42fe06733d5c0b1557c9d2cec0c1412`
+- Current branch HEAD after YCbCr descriptor-count property correction: `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`
 - The existing source and audit branches remain unchanged.
 
 ### Implemented in the experimental branch (not yet build-validated)
@@ -4127,3 +4127,10 @@ The current Khronos proposal was checked for descriptor-writing constraints:
 - PanVK does not expose `VK_EXT_fragment_density_map`, QCOM image-processing descriptor types, `VK_KHR_acceleration_structure`, or `VK_ARM_tensors`; corresponding subsampled/QCOM/AS/tensor descriptor types remain unsupported.
 
 These restrictions are now reflected in source HEAD `0bf2e527c42fe06733d5c0b1557c9d2cec0c1412`. Exact-head Android-only build run `42079746341` is queued. No compile/link or runtime validation has passed yet.
+
+
+### YCbCr image descriptor count consistency
+
+The descriptor writer uses `panvk_image_get_tex_count(PAN_ARCH, view_format)`, which is also the count used by PanVK's ordinary descriptor-set layout. The shared `vkGetPhysicalDeviceImageFormatProperties2` path previously hardcoded `combinedImageSamplerDescriptorCount = 1`. This could disagree with the number of texture descriptors required for multi-plane formats. It now reports `panvk_image_get_tex_count(physical_device->model->arch, base_info->format)`, so the queried count and the heap writer's output-size requirement use the same architecture/format rule.
+
+Source HEAD: `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`. Exact-head Android-only build run `42080294652` is queued; no compile/runtime validation yet.
