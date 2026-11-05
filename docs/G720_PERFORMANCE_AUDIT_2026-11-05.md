@@ -190,3 +190,27 @@ only workflow result must also be checked independently.
 
 No allocator semantics, descriptor heap layout, cache maintenance, queue
 synchronization, or shader behavior has been changed.
+
+
+## 2026-11-05 implementation checkpoint — CSF ring telemetry
+
+Commit `842ac70aa83575b15757b869137ba598824c044e` extends the existing
+`PANVK_KBASE_PROFILE=1` counters with:
+- total ring bytes written and cache-cleaned;
+- ring-wrap event count;
+- occupancy sample count;
+- aggregate high-water mark of outstanding ring bytes across subqueues.
+
+The occupancy sample reads the firmware's CS_EXTRACT value only when profiling
+is enabled, after the new insert offset is published in userspace memory. The
+high-water mark uses relaxed atomic compare/exchange. Normal operation has no
+new extract-page reads or counters beyond the already-existing profile gate.
+This instrumentation is intended to determine whether ring pressure or wrap/
+reclaim waits are significant; it does not alter ring capacity, wrap handling,
+cache cleaning, barriers, doorbells, or scheduler kicks.
+
+Android-only and wrapper CI runs for this latest source commit
+`842ac70aa83575b15757b869137ba598824c044e` have started; compile results are
+pending. Earlier CI runs from intermediate commits are also in flight. Runtime
+testing is still required to ensure the telemetry output is useful on the
+actual Mali-G720 MC7.
