@@ -3941,3 +3941,17 @@ Further source-level inspection of JimVulkan/mali-panvk at `58f2c55854bd48b18df7
 5. Port embedded sampler compilation and cache serialization as a single lifecycle (create, upload, serialize/deserialize, destroy).
 6. Audit reference descriptor-heap code for Mesa 27-only fields/functions and adapt to Mesa 26.3 APIs; no whole-file replacement.
 7. Only after generated API + all execution paths compile, enable the extension/feature and run Vulkan CTS plus VKD3D-Proton D3D12. No new package or device test is ready yet.
+
+
+## Addendum: correction — generic descriptor-heap lowering is already wired (2026-11-05)
+
+A search of the *current project branch* `experiment/g720-clip-cull-capabilities` found that the generic descriptor-heap lowering is not merely present as a source file: Mesa 26.3's common Vulkan runtime already invokes it in both shader-module and pipeline shader compilation paths.
+
+Verified current project files:
+- `src/vulkan/runtime/vk_shader.c`, blob `6354e51d364cd2f92314ac4e55143dc3b5c73d79`: includes `vk_nir_lower_descriptor_heaps.h`, extracts `VkShaderDescriptorSetAndBindingMappingInfoEXT` from shader create info `pNext`, calls `vk_nir_lower_descriptor_heaps(nir, desc_map, NULL, embedded_samplers_out)`, then removes dead uniform/image variables and runs DCE when lowering made progress.
+- `src/vulkan/runtime/vk_pipeline.c`, blob `4c06e7db9067394192dd44f554a95f1c161e0855`: same generic lowering in pipeline NIR compilation; it also hashes descriptor heap mappings into the shader stage cache key. This avoids reusing compiled shaders for incompatible heap mappings.
+- The runtime API therefore already has an `embedded_samplers_out` output contract. PanVK must consume that output through its shader compile callback and preserve it through shader binary/cache serialization.
+
+This corrects the earlier statement that PanVK itself must add the generic lowerer call to its shader compilation path. The generic runtime owns that call; the PanVK work is the backend lowering of heap-offset NIR operations, the returned embedded sampler states, resource table / heap binding state, push data command, and feature/entrypoint wiring.
+
+The immediate next inspection is the `vk_shader_ops` / `vk_pipeline` callback contract in Mesa 26.3 versus the PanVK shader creation path. Do not add a duplicate NIR pass in PanVK. Confirm whether the callback signature already returns `vk_sampler_state_array` to PanVK; if not, the narrow runtime API adaptation required must be explicit and cache-safe.
