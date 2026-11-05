@@ -223,3 +223,6 @@ that sequence; it changes the representation and needs its own test.
 ## 6. Initial automated NIR coverage
 
 The dedicated clip/cull branch now includes `src/compiler/nir/tests/clip_cull_distance_tests.cpp`, covering clip-only, cull-only, mixed VS arrays, a mixed array crossing a vec4 slot boundary, and mixed FS inputs for the generic gather/merge helpers. A host CI workflow runs the NIR suite; Android build workflows are also enabled. Results are pending. This does not yet validate vec4 lowering or PanVK stage transport and discard behavior. Feature exposure remains disabled.
+
+
+CI note: the first NIR workflow reached Meson configuration successfully but failed at the build step because the requested Ninja target path was invalid (`src/compiler/nir/nir_tests`). The workflow was corrected to target `nir_tests`; a rerun is queued. This is not a compiler/test failure, and no successful test run is claimed yet.
