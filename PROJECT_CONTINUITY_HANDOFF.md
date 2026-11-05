@@ -3290,3 +3290,19 @@ Latest build observations from older commits:
 - Run `42025422711` failed because swrast/Lavapipe requires LLVM while the workflow had LLVM disabled; this prompted the `llvm-22-dev` + `-Dllvm=enabled` correction in SHA `171a78a...`.
 
 No runtime driver code has changed. The next validation gate is test registration assertion success followed by actual NIR test execution with visible counts.
+
+
+
+### NIR CI failure: glslang executable missing; dependency added (2026-11-05 12:18 UTC)
+
+The guarded NIR workflow on SHA `3f75710571607ba4a109c376b596f7cb685fc1ce` correctly failed during Meson configuration before test registration. Exact error from run `42025718281`: `meson.build:754:15: ERROR: Program 'glslangValidator' not found or not executable`. The same failure occurred in the preceding candidate run `42025564838`. This is a host build dependency issue; the test-registration guard was skipped because configure did not finish.
+
+Added Ubuntu package `glslang-tools` to the workflow's apt dependencies. Commit: `ed8db2bd27bba9dfe8f142de37eb2eeda313a9fc` (`ci: install glslang for NIR host configuration`). New NIR run should trigger from this SHA; no run ID was visible at last poll.
+
+Current validation state:
+- No NIR compiler tests have run yet. Run `42025063854` was a false green with `No suitable tests defined`; run `42025422711` failed because swrast requires LLVM; runs `42025564838` and `42025718281` failed because `glslangValidator` was missing.
+- The workflow now selects swrast + LLVM 22, checks that `nir_tests` and `nir_algebraic_parser` are registered, then invokes `meson test -C build --suite nir --print-errorlogs`.
+- Next step is to resolve any remaining Meson host dependency errors from actual logs, then verify nonzero NIR test counts and successful test execution.
+- No runtime PanVK changes or clip/cull feature exposure have been made.
+
+Older Android-only / wrapper build jobs from SHAs `9f8faa1...`, `2102a0a...`, `171a78a...`, and `3f75710...` were still queued/in progress at the last poll; do not interpret these as successful until their full package audits and artifact uploads complete.
