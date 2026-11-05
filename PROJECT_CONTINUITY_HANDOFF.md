@@ -2828,3 +2828,8 @@ On `experiment/g720-clip-cull-capabilities`, added `src/compiler/nir/tests/clip_
 ### CI correction — 2026-11-05
 
 The first dedicated NIR workflow configured Meson successfully but failed before compilation because its Ninja target was specified as `src/compiler/nir/nir_tests`, which is not a valid target name in this build graph. This is a workflow target-selection error, not a C++ compile or test failure. Corrected the workflow to build `nir_tests` (`1d64f878f15366f912b48c885858e89b199de841`). A new run is queued; no NIR test result is available yet. Android build jobs for the source branch are also still pending.
+
+
+### NIR CI configuration refinement — 2026-11-05
+
+The initial host-test configuration disabled all Vulkan drivers. Mesa then selected its `with_nir_headers_only` mode (`with_gfx_compute` was false), which omits the full NIR implementation and therefore does not generate the `nir_tests` target. The workflow was corrected to enable the Panfrost Vulkan driver with the Kbase backend while keeping the build otherwise minimal; this makes `with_any_vk` true and should select the full NIR implementation. The build target is now `nir_tests`. Commit: `80aea973fed1324c8a53582299ca77c68cc0aba0`. A new CI run is expected; test result remains pending.
