@@ -4009,7 +4009,7 @@ Repository-wide branch reconciliation was performed before continuing. The repos
 
 - Branch: `experiment/g720-descriptor-heaps`
 - Base: latest source branch `experiment/g720-clip-cull-capabilities` at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`
-- Current branch HEAD after descriptor heap writer-command implementation and CI guards: `c3f9a776cb59215a42e4c6c5579a1a90f1ae8312`
+- Current branch HEAD after descriptor heap writer-command and custom-border registration implementation: `c9377fc98595de9b873fcba5a6997c5bf514ab4c`
 - The existing source and audit branches remain unchanged.
 
 ### Implemented in the experimental branch (not yet build-validated)
@@ -4101,3 +4101,16 @@ Current source HEAD: `c3f9a776cb59215a42e4c6c5579a1a90f1ae8312`.
 Exact-head Android-only build: run `42079149912` (queued at last check). Wrapper build: run `42079150104` (queued at last check). The earlier Android run `42077180170` targets the pre-writer implementation and is not final validation.
 
 Next: compile/link the new writer entrypoints; inspect all warnings and API dispatch generation; add descriptor-writer-specific validation; then package only after full Android ARM64 build and audit pass. No device test is requested yet.
+
+
+### Custom border-color registration for descriptor heaps
+
+The current `VK_EXT_descriptor_heap` registry also conditionally requires `vkRegisterCustomBorderColorEXT` and `vkUnregisterCustomBorderColorEXT` when `VK_EXT_custom_border_color` is supported. PanVK advertises custom border colors. The implementation was added to the Valhall-only descriptor-heap path:
+
+- Registration is a no-op because the Mali sampler descriptor embeds the full custom border-color value rather than referencing a fixed hardware palette.
+- If `requestIndex` is true, in-range indices are accepted unchanged; out-of-range indices return `VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS`.
+- If `requestIndex` is false, index 0 is returned. Multiple registrations of the same index are valid for implementations that do not need registration.
+- Unregistration is a no-op.
+- The sampler descriptor writer packs the actual custom border color value; it does not rely on the opaque registration index.
+
+CI now checks that both conditional custom-border commands are present. Current source HEAD is `c9377fc98595de9b873fcba5a6997c5bf514ab4c`; exact-head Android-only run `42079497576` is queued. No build or runtime validation of the descriptor writer path has passed yet.
