@@ -3683,8 +3683,8 @@ VkResult panvk_per_arch(create_shader)(
    panvk_preprocess_nir(dev->vk.physical, nir, &rs);
 
    struct vk_shader *vk_shader;
-   VkResult result = panvk_compile_shader(dev, &info, NULL, 0, 0, NULL, NULL,
-                                          &vk_shader);
+   VkResult result = panvk_compile_shader(dev, &info, NULL, NULL, 0, 0,
+                                          NULL, NULL, &vk_shader);
    if (result != VK_SUCCESS)
       return result;
 
