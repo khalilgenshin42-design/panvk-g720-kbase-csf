@@ -3385,3 +3385,19 @@ Correction commit: `92e631280b36a4abadbc427093e97d6ecac837b0` (`nir: use pointer
 A static review of `nir_build_write_masked_stores()` showed that dynamic scalar stores are expanded into four guarded component stores (one per vec4 lane), not one dynamic store intrinsic. Corrected the test's expected packed store count from 2 to 5: one constant-index store plus four guarded dynamic-index stores.
 
 Commit: `ccc0fbdece659ea8c49c4570f107327100c92033` (`nir: account for guarded stores in dynamic clip index test`). Test-only correction; no runtime changes. It triggers a fresh NIR run. Previous run `42026950603` compiles the earlier revision and must not be treated as validation for this final expected count.
+
+
+### First real NIR CI pass (2026-11-05 12:28 UTC)
+
+The corrected workflow on source SHA `4a9c4159780ad27cc64b8ad043ec0c451852e8f0` completed successfully: run `42026345910`, job `127241399440`.
+
+Evidence from the job log:
+- Meson configured successfully.
+- The explicit registration guard passed (both `nir_tests` and `nir_algebraic_parser` were registered).
+- NIR target compiled and linked successfully (424 Ninja steps).
+- Meson executed exactly 2 suite tests: `mesa:nir_algebraic_parser` and `mesa:nir_tests`.
+- Result: `Ok: 2; Fail: 0`.
+
+This confirms the glslang dependency correction fixed the prior false-green/no-tests problem and the real NIR test suite is running. Important scope: this passing run predates the new constant/dynamic dereference test (added in `b4b073d...`), so it validates the NIR suite baseline and registration, not the new test itself. Newer NIR runs `42026950603`, `42027059205`, and `42027207795` are queued/in progress for the dereference test and its subsequent test-only corrections.
+
+Android-only run `42026346036` remained in dependency installation; wrapper run `42026345779` had both Release and Debugoptimized variants compiling. No Android artifact/package success or device runtime result yet.
