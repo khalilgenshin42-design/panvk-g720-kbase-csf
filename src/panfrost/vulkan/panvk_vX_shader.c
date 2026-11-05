@@ -2023,9 +2023,7 @@ panvk_compile_shader(struct panvk_device *dev,
          /* Cull-distance indicators are needed only for a direct VS -> FS
           * pipeline. Keep the XFB variant's original values intact.
           */
-         if (v == PANVK_VS_VARIANT_HW &&
-             info->next_stage_mask == VK_SHADER_STAGE_FRAGMENT_BIT &&
-             nir->info.cull_distance_array_size) {
+         if (v == PANVK_VS_VARIANT_HW && prev_cull_count > 0) {
             NIR_PASS(_, nir, nir_lower_var_copies);
             NIR_PASS(_, nir, panvk_nir_lower_cull_vs,
                      nir->info.clip_distance_array_size);
@@ -2732,11 +2730,9 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
       }
 
       const int prev_clip_count =
-         infos[i].stage == MESA_SHADER_FRAGMENT && direct_vs_fs
-            ? direct_vs_clip_count : 0;
+         direct_vs_fs ? direct_vs_clip_count : 0;
       const int prev_cull_count =
-         infos[i].stage == MESA_SHADER_FRAGMENT && direct_vs_fs
-            ? direct_vs_cull_count : 0;
+         direct_vs_fs ? direct_vs_cull_count : 0;
 
       result = panvk_compile_shader(dev, &infos[i], state, vs_varying_layout,
                                     prev_clip_count, prev_cull_count,
