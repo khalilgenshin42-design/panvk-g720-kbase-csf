@@ -3227,3 +3227,17 @@ The run `42024927571` on SHA `6f965eaa43b8149ece37a189a839dc44b53562ff` again co
 Removed the standalone Ninja invocation. The NIR CI now uses `meson test -C build --suite nir --print-errorlogs` directly; Meson will build the registered test executable as part of running the suite. This keeps the pipeline focused on the real Meson test target and avoids hardcoding generated Ninja target names.
 
 Workflow commit: `9f8faa18c126ae6110ae004f9ab969b62104992f` (`ci: let Meson build NIR test executable`). Await the new run and confirm the Meson test output reports actual test counts/results. Neither prior run reached NIR test execution; no NIR test assertion has failed yet.
+
+
+
+### Meson-managed NIR test build (2026-11-05 12:12 UTC)
+
+The explicit Ninja target path remained incorrect: run `42024927571` on `6f965eaa...` reported `unknown target 'src/compiler/nir/nir_tests'`. The Meson test declaration in `src/compiler/nir/meson.build` owns the executable target, and Meson can build it when the test suite is invoked. To avoid further guessed target names, removed the explicit Ninja step and now invoke only:
+
+```sh
+meson test -C build --suite nir --print-errorlogs
+```
+
+This is the authoritative test invocation and should trigger build plus execution of the registered `nir_tests` binary and other tests in the NIR suite. Workflow commit: `9f8faa18c126ae6110ae004f9ab969b62104992f`.
+
+New NIR run `42025063854` on this commit was queued at the last poll. Android-only run `42025063812` and wrapper run `42025063844` were also queued. Older Android-only run `42024927627` was still installing dependencies; wrapper run `42024802404` was installing dependencies in Release and generating host tools in Debugoptimized. No new NIR tests have yet executed. The previously successful Android package run `42023056179` remains the only fully verified package build on this line of work.
