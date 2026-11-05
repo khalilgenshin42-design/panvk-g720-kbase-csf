@@ -3241,3 +3241,15 @@ meson test -C build --suite nir --print-errorlogs
 This is the authoritative test invocation and should trigger build plus execution of the registered `nir_tests` binary and other tests in the NIR suite. Workflow commit: `9f8faa18c126ae6110ae004f9ab969b62104992f`.
 
 New NIR run `42025063854` on this commit was queued at the last poll. Android-only run `42025063812` and wrapper run `42025063844` were also queued. Older Android-only run `42024927627` was still installing dependencies; wrapper run `42024802404` was installing dependencies in Release and generating host tools in Debugoptimized. No new NIR tests have yet executed. The previously successful Android package run `42023056179` remains the only fully verified package build on this line of work.
+
+
+
+### NIR CI false-green diagnosis and full-NIR correction (2026-11-05 12:14 UTC)
+
+Run `42025063854` on SHA `9f8faa18c126ae6110ae004f9ab969b62104992f` was marked success by GitHub Actions, but inspecting its full job log showed the decisive line: `No suitable tests defined.` Therefore this was **not** a successful NIR test execution. Meson configured a headers-only NIR build because `with_gfx_compute` was false: the workflow selected no Vulkan or OpenGL drivers, disabled CLC and LLVM, and therefore `with_nir_headers_only = not with_gfx_compute` evaluated true. The NIR test registration is guarded by `if with_tests and not with_nir_headers_only`, so no NIR tests were registered.
+
+Corrected the NIR workflow to select the software Vulkan driver `swrast` instead of `vulkan-drivers=[]`. This makes `with_any_vk` / `with_gfx_compute` true and should force the full NIR implementation and test registration, without enabling Panfrost/PanVK CLC or requiring LLVM. The actual NIR suite is still invoked via `meson test -C build --suite nir --print-errorlogs`.
+
+Commit: `2102a0a2109c54438243dacd03934c7815a8e009` (`ci: enable full NIR sources in test build`). New runs triggered: NIR `42025422711`, Android-only `42025422741`, wrapper `42025422738`; all were queued at last poll. Need verify Meson summary includes NIR tests and job logs show actual test counts; a green job alone is insufficient.
+
+This correction changes only the CI configuration. No runtime PanVK code, clip/cull feature flags, or device package contents were changed by this commit. Existing Android package run `42023056179` remains a confirmed successful build/package, but current SHA `2102a0a...` Android validation is pending.
