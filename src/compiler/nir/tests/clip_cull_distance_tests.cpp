@@ -408,3 +408,71 @@ TEST_F(nir_clip_cull_tess_eval_test,
    nir_validate_shader(b->shader, "tess-eval arrayed clip input test");
 #endif
 }
+
+
+static void
+count_packed_distance_accesses_at_index(nir_shader *shader,
+                                        nir_variable *packed,
+                                        unsigned array_index,
+                                        unsigned *loads, unsigned *stores)
+{
+   *loads = 0;
+   *stores = 0;
+
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            if (intr->intrinsic != nir_intrinsic_load_deref &&
+                intr->intrinsic != nir_intrinsic_store_deref)
+               continue;
+
+            nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+            if (nir_deref_instr_get_variable(deref) != packed ||
+                deref->deref_type != nir_deref_type_array ||
+                !nir_src_is_const(deref->arr.index) ||
+                nir_src_as_uint(deref->arr.index) != array_index)
+               continue;
+
+            if (intr->intrinsic == nir_intrinsic_load_deref)
+               (*loads)++;
+            else
+               (*stores)++;
+         }
+      }
+   }
+}
+
+TEST_F(nir_clip_cull_distance_test,
+       vertex_cull_accesses_use_clip_offset_in_shared_vec4_array)
+{
+   create_distance_var(nir_var_shader_out, "gl_ClipDistance",
+                       VARYING_SLOT_CLIP_DIST0, 3);
+   nir_variable *cull =
+      create_distance_var(nir_var_shader_out, "gl_CullDistance",
+                          VARYING_SLOT_CULL_DIST0, 2);
+
+   nir_deref_instr *cull_deref = nir_build_deref_var(b, cull);
+   cull_deref = nir_build_deref_array_imm(b, cull_deref, 1);
+   nir_load_deref(b, cull_deref);
+   nir_store_deref(b, cull_deref, nir_imm_float(b, 3.0), 1);
+
+   EXPECT_TRUE(nir_lower_clip_cull_distance_to_vec4s(b->shader));
+
+   nir_variable *packed = find_output_var("gl_ClipDistanceMESA");
+   ASSERT_NE(packed, nullptr);
+
+   /* clip[0..2] occupy lanes 0..2; cull[1] maps to packed vec4[1].x. */
+   unsigned loads, stores;
+   count_packed_distance_accesses_at_index(b->shader, packed, 1,
+                                           &loads, &stores);
+   EXPECT_EQ(loads, 1);
+   EXPECT_EQ(stores, 1);
+
+#ifndef NDEBUG
+   nir_validate_shader(b->shader, "clip/cull shared vec4 offset test");
+#endif
+}
