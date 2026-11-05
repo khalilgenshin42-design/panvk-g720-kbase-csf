@@ -4134,3 +4134,12 @@ These restrictions are now reflected in source HEAD `0bf2e527c42fe06733d5c0b1557
 The descriptor writer uses `panvk_image_get_tex_count(PAN_ARCH, view_format)`, which is also the count used by PanVK's ordinary descriptor-set layout. The shared `vkGetPhysicalDeviceImageFormatProperties2` path previously hardcoded `combinedImageSamplerDescriptorCount = 1`. This could disagree with the number of texture descriptors required for multi-plane formats. It now reports `panvk_image_get_tex_count(physical_device->model->arch, base_info->format)`, so the queried count and the heap writer's output-size requirement use the same architecture/format rule.
 
 Source HEAD: `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`. Exact-head Android-only build run `42080294652` is queued; no compile/runtime validation yet.
+
+
+### Intermediate Android package validation
+
+Android-only run `42078972694` completed successfully on source commit `3e4e7ee3849ebab12c114eef8c6c3a650cd14b8f`. It passed Android ARM64 compile/stage, the ELF and libdrm dependency audit, flat Winlator/Adrenotools package creation, and artifact upload. Artifact `13438649591` (`panvk-g720-android-only-experimental-package`, 16,804,388 bytes) was produced.
+
+This is an intermediate validation only: that commit includes the first descriptor writer implementation but predates the later custom-border registration commands/restrictions and the YCbCr descriptor-count property correction. **Do not ask the user to test or import this intermediate artifact.**
+
+Current source HEAD remains `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`; exact-head Android-only run `42080294652` is queued and must pass before packaging/testing is considered current.
