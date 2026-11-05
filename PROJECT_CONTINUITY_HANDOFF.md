@@ -3815,3 +3815,40 @@ Interpretation and safety contract:
 - Next deliverable: a machine-checkable exhaustive matrix of every extension, every feature struct bit and relevant property, classified as (A) already enabled and implemented, (B) hardware-capable but missing PanVK code, (C) possible with software emulation, (D) blocked by Kbase/Android, or (E) not supported by G720. Include exact source files and required ports. Then create a dedicated capability branch and implement the highest-value coherent missing features, starting with descriptor heaps for D3D12. Build and test the custom Winlator-importable ZIP; never replace the Android system driver.
 
 The user requested no more tiny-FPS optimization loops until this capability phase has materially expanded the driver's usable feature set.
+
+
+## Addendum: exhaustive v12 capability-table census and descriptor-heap port target (2026-11-05)
+
+The current source branch was re-read directly before this addendum:
+- Source branch: `experiment/g720-clip-cull-capabilities`
+- `src/panfrost/vulkan/panvk_vX_physical_device.c` blob SHA: `6f8062ef02dd8b7707b2a16d4868aa7d84f4a4fb`
+- `get_physical_device_extensions()` initializes 185 extension-table fields in this source file (some are platform-conditional and some architecture-gated; this is not a count of extensions guaranteed enabled on the target device).
+- `get_physical_device_features()` initializes 296 feature fields in `struct vk_features` (includes core and extension feature bits; many are conditional or explicitly false).
+- Properties are initialized in the same file and must be audited separately from feature booleans.
+
+The extension census includes KHR, EXT, ANDROID, GOOGLE, VALVE, and ARM entries, plus platform-conditional WSI/display entries. The source has Vulkan 1.4-era capabilities including KHR maintenance5-9, map_memory2, pipeline_binary, shader_float_controls2, shader_expect_assume, shader_subgroup_rotate, dynamic_rendering_local_read, and EXT host_image_copy, graphics_pipeline_library, nested_command_buffer, map_memory_placed, and related features. Therefore the previous abbreviated matrix must not be treated as a complete extension inventory.
+
+### Highest-value D3D12 capability gap
+
+`VK_EXT_descriptor_heap` is absent from this source branch's extension table and feature assignments. A later reference implementation exists in `JimVulkan/mali-panvk` at commit `58f2c55854bd48b18df756edb11f187af9cd2fde`:
+- Its physical-device extension table enables `.EXT_descriptor_heap = PAN_ARCH >= 9`.
+- Its feature query sets `.descriptorHeap = PAN_ARCH >= 9` and `.descriptorHeapCaptureReplay = false`.
+- It adds descriptor-heap state handling in `panvk_vX_cmd_desc_state.c`, push data handling in `panvk_vX_cmd_push_constant.c`, descriptor layout/resource table definitions in `panvk_descriptor_set_layout.h`, shader heap usage tracking/lowering, SPIR-V `DescriptorHeapEXT` support, and shared Vulkan runtime lowering in `src/vulkan/runtime/vk_nir_lower_descriptor_heaps.c` (1,146 lines at the referenced commit).
+- Its PanVK README identifies descriptor heaps as part of its Valhall VKD3D-Proton D3D12 capability.
+
+This is a genuine multi-layer port, not an extension-table toggle. Before exposing it on this Kbase branch, compare Mesa base revisions and port the full ABI/entrypoint/SPIR-V/NIR/runtime/descriptor-state path, then build and run targeted Vulkan CTS and VKD3D-Proton tests. Keep the feature disabled until that is complete.
+
+### Additional gaps that need complete per-feature audit
+
+- `multiViewport`, `shaderClipDistance`, `shaderCullDistance`, `pipelineStatisticsQuery`, `geometryStreams`, and float atomic subfeatures remain disabled or partial in the current v12 query path.
+- `VK_KHR_ray_query` and acceleration-structure extensions are not advertised or implemented here. Do not infer hardware RT capability from Mali branding or enable these features without confirming the G720 IP block and implementing AS objects, build/update, traversal, synchronization, shader lowering, and memory semantics.
+- Sparse residency remains unavailable on Kbase because the bind queue is a stub and no Kbase GPU-VA sparse remapping path exists.
+- Several advertised extension entries depend on Kbase properties, WSI build options, Android gralloc, or architecture gates; the 185-field census is not equivalent to 185 extensions enabled on this phone.
+
+### Next engineering sequence
+
+1. Produce a machine-readable audit of all 185 extension table entries, all 296 core/extension feature assignments, and every `VkPhysicalDeviceProperties2` property. For each, record exact gate, implementation/entrypoint, compiler/SPIR-V requirements, Kbase dependency, and test coverage.
+2. Compare the complete JimVulkan descriptor-heap implementation against this branch's Mesa base. Identify all required files and generated registry changes; do not cherry-pick blindly across divergent Mesa revisions.
+3. Port descriptor heaps as a coherent feature series on a dedicated branch. Keep extension/feature exposure off until all layers compile and tests pass.
+4. In parallel, audit existing advertised capabilities for false-positive exposure (notably extensions whose properties/features are false or whose WSI/backend path is conditional). Correct unsafe over-advertising before adding more.
+5. Update this handoff and the capability matrix after each completed port milestone. The user wants the next device test to validate substantial capability expansion, not another tiny FPS tweak.
