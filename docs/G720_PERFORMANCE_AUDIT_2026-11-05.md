@@ -506,3 +506,38 @@ reached compilation. Those runs therefore do not validate the prior source.
 The fix commit triggers fresh CI and must pass both build paths before any
 artifact is considered releasable. Continue to inspect the actual compiler
 steps/logs, not only the workflow's queued/running status.
+
+
+### 2026-11-05 continuation — handoff re-read, descriptor audit, CI check
+
+At the user's request, re-read this handoff and
+`docs/G720_PERFORMANCE_AUDIT_2026-11-05.md` before continuing. Confirmed
+that the current source branch contains the descriptor-profile log-call fix
+(commit `a2e5ac142b4f0df71cb28204ece4337bace046de`); the corrected call now
+has a comma after its final format-string fragment and all variadic counter
+arguments remain inside `mesa_logi()`.
+
+Reviewed all descriptor failure-counter sites in the current source. The
+three classifications cover the two count-overflow paths, the combined
+no-free-set/insufficient-descriptor-heap-capacity path, and the VMA allocation
+failure path. Each classified failure increments the aggregate failure
+counter exactly once in the inspected code paths. No allocator policy or
+runtime behavior change was made in this review.
+
+CI for source commit `a2e5ac142b4f0df71cb28204ece4337bace046de` remains
+in progress at this checkpoint:
+- Android-only run `41947103034`, job `126981927839`: host-tool generation
+  in progress; Android libdrm/configure/compile/package steps not yet reached.
+- Android wrapper run `41947103085`, release job `126981927876`: queued.
+- Android wrapper run `41947103085`, debugoptimized job `126981927609`:
+  host-tool generation in progress; Meson configure and compile not yet
+  reached.
+
+Therefore no artifact is approved and no ZIP is ready. Next action is to
+recheck these exact jobs and inspect compiler logs after compile starts. Only
+if Android-only and required wrapper builds succeed should the produced
+artifact be downloaded, package contents and hashes audited, and a Winlator
+ZIP offered. The device benchmark plan remains unchanged: uninstrumented
+baseline with default threshold (expected log 65,536), then one-variable
+experiment with `PANVK_KBASE_HEAP_RENEW_WORK=262144`, verified by the new
+threshold log. No FPS improvement is claimed.
