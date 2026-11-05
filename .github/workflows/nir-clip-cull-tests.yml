@@ -39,7 +39,7 @@ jobs:
           meson setup build \
             -Dplatforms=[] \
             -Dgallium-drivers=[] \
-            -Dvulkan-drivers=[] \
+            -Dvulkan-drivers=swrast \
             -Dtools=[] \
             -Dbuild-tests=true \
             -Dllvm=disabled \
