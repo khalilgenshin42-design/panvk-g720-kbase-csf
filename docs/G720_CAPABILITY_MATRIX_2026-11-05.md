@@ -1,0 +1,139 @@
+# Mali-G720 v12 PanVK capability matrix — 2026-11-05
+
+Target: Mali-G720 MC7 (PAN_ARCH=12), Android Kbase CSF backend.
+Source under audit: `experiment/g720-performance-audit`, physical-device
+source blob `6f8062ef02dd8b7707b2a16d4868aa7d84f4a4fb`,
+shader source blob `4a163dcbf74a10c48caea79801318da48f4affcc`,
+query-pool source blob `65db1d4ef1a111bd731b4b57180116b7beebbc31`.
+
+This is an implementation audit, not a claim of Vulkan conformance. A
+hardware capability, architecture gate, extension bit, feature bit, property
+limit, and working end-to-end Vulkan implementation are separate things.
+Do not enable a feature by changing only its advertised boolean.
+
+## 1. Already exposed on v12
+
+The current physical-device extension table uses `PAN_ARCH >= 10` for
+several v12 capabilities, including:
+
+- `VK_KHR_draw_indirect_count` / `VK_KHR_copy_memory_indirect`
+- `VK_KHR_robustness2` and `VK_EXT_robustness2`
+- `VK_EXT_conditional_rendering`
+- `VK_EXT_transform_feedback`
+- `VK_EXT_nested_command_buffer`
+- `VK_EXT_rasterization_order_attachment_access`
+- `VK_EXT_sampler_filter_minmax`
+- `VK_EXT_ycbcr_2plane_444_formats` and `VK_EXT_ycbcr_image_arrays`
+- `VK_KHR_dynamic_rendering`, synchronization2, timeline semaphores,
+  buffer device address, descriptor indexing, mutable descriptors, and
+  Vulkan memory model.
+- ARM shader-core builtins/properties and scheduling controls are advertised.
+
+The v12 core/extension feature structure already sets true for descriptor
+indexing and its update-after-bind variants, runtime descriptor arrays,
+non-uniform descriptor indexing, 8/16-bit storage, shader int8/int16/int64,
+float16, buffer device address, Vulkan memory model, dynamic rendering,
+subgroup operations, conditional rendering, transform feedback, and many
+modern dynamic-state features. These are not missing toggles to flip again.
+Their exact limits and Kbase runtime behavior still need validation.
+
+## 2. Deliberately unavailable or only partially implemented
+
+| Capability | Current source evidence | Classification / action |
+|---|---|---|
+| `multiViewport` | Feature false; `maxViewports=1`; draw state uploads viewport 0. | Not native in current path. Software emulation exists in JimVulkan's later PanVK fork via GS viewport-index transform + FS scissor discard. Port is a multi-file feature, not a boolean flip. |
+| `shaderClipDistance` / `shaderCullDistance` | Feature bits false; max clip/cull distances are all 0. Existing NIR lowering converts direct VS->FS distance values to generic varyings and FS discard, but explicitly excludes FS reads of the arrays and geometry/tessellation propagation. | Partial software implementation. Candidate to complete and test; do not expose until all legal stage/link paths and properties are implemented. |
+| `pipelineStatisticsQuery` | Feature false; query pool supports occlusion/timestamp/primitives-generated, not pipeline-statistics. Shader sysval `load_stat_query_address_poly` returns the safe OOB sink. | Not implemented in this branch. JimVulkan counts selected pipeline stats from draw/dispatch parameters on CPU, with documented approximation for geometry/tessellation. This is compatibility/diagnostic functionality, not a GPU speed feature. |
+| `vertexPipelineStoresAndAtomics` | v12 false unless explicit force-atomics debug option. Source documents speculative references to invalid indices on pre-v13. | Keep disabled on v12 pending proof of safe semantics. JimVulkan also keeps this false for v10-v12 and enables natively only on v13+. |
+| `geometryStreams` | Feature false; NIR lowering maps rasterization stream to constant stream 0. | Multi-stream transform feedback is not implemented. |
+| Sparse binding/residency | Kbase path forces `has_sparse=false`; sparse bind queue is absent. | Backend-limited. Keep disabled; Kbase cannot provide the required GPU virtual-page remapping path in this integration. |
+| Float atomic add | Float32 atomics are exposed, but buffer/shared/image float32 atomic-add bits are false. | Distinct atomic-add operation support must be audited in compiler/ISA before exposure. |
+| `VK_KHR_ray_query` | No ray-query extension or acceleration-structure implementation in this source branch's device extension table. | Not implemented here. Requires acceleration-structure objects/build/update, traversal lowering, SPIR-V/NIR support, memory/sync semantics, and feature/property reporting. |
+
+### Why clip/cull is not a one-line enable
+
+In `panvk_vX_shader.c`, the current implementation:
+- only captures clip/cull counts for a direct VS -> FS link;
+- limits the combined count to eight;
+- converts cull-distance values to discard indicators in the vertex shader;
+- adds fragment-shader discard based on generic varying values;
+- refuses the fragment lowering when the application fragment shader declares
+  its own clip/cull inputs;
+- does not propagate distances through geometry/tessellation stages.
+
+The feature bits remain false in the same source. The properties report zero
+maximum clip/cull distances. Enabling either feature now would let applications
+submit legal shaders for which the current path does not preserve semantics.
+
+### Why pipeline statistics are not a one-line enable
+
+The query-pool implementation has no `VK_QUERY_TYPE_PIPELINE_STATISTICS`
+case, and the compiler lowering redirects its internal statistics address to
+`PAN_SHADER_OOB_ADDRESS`. Setting `pipelineStatisticsQuery=true` would expose
+a path with no real result writer. A CPU-counted implementation is possible,
+but must define and test each statistic across direct/indirect draws,
+dispatches, software geometry/tessellation, and conditional rendering.
+
+## 3. High-value comparison with later PanVK work
+
+The later `JimVulkan/mali-panvk` tree (Mesa 27.0.0-devel; its README reports
+G720 testing) has working software paths for:
+- multiple viewports: geometry-shader viewport-index output, vertex position
+  remapping, and fragment discard against the selected viewport rectangle;
+- clip/cull distances: generic varying transport and fragment discard;
+- pipeline statistics: CPU accounting from command parameters;
+- BCn texture emulation for formats not natively decoded by a Mali GPU;
+- `VK_EXT_descriptor_heap`, with descriptor heap tables, push-data handling,
+  shader lowering and device feature/property support.
+
+This is a valuable implementation reference, not proof that its changes can
+be copied directly into this Mesa 26.3-derived branch. The later tree has
+additional files, generated Vulkan registry support, and API changes. Each
+feature needs a source-level port, build, CTS/focused tests, and runtime tests.
+
+Useful references:
+- https://github.com/JimVulkan/mali-panvk
+- https://github.com/JimVulkan/mali-panvk/blob/main/src/panfrost/vulkan/panvk_vX_physical_device.c
+- https://github.com/JimVulkan/mali-panvk/blob/main/src/panfrost/vulkan/panvk_vX_shader.c
+- https://github.com/JimVulkan/mali-panvk/blob/main/src/panfrost/vulkan/panvk_vX_query_pool.c
+- https://github.com/JimVulkan/mali-panvk/blob/main/README.md
+
+## 4. Priority order for this project
+
+1. **Capability inventory at runtime:** collect complete `vkEnumerateDeviceExtensionProperties`,
+   `vkGetPhysicalDeviceFeatures2`, and `vkGetPhysicalDeviceProperties2`
+   output from the imported driver, not just DXVK's enabled-extension log.
+2. **DX11 compatibility:** audit and port the completed clip/cull and
+   multi-viewport software paths if the source and tests show value; complete
+   geometry-stream support only if a real workload requires it.
+3. **D3D12 compatibility:** evaluate `VK_EXT_descriptor_heap` porting as a
+   substantial Mesa-registry + driver + compiler change. Do not confuse it
+   with core descriptor indexing, which is already exposed.
+4. **BCn texture path:** query the actual G720 format bits first. If BCn is
+   unavailable, compare the JimVulkan GPU decode/emulation path and its
+   memory/performance cost against current DXVK fallback behavior.
+5. **Pipeline statistics:** useful for validation and diagnosis, but lower
+   priority than rendering and descriptor capabilities; CPU estimates must
+   be labelled and validated.
+6. **Ray query:** long-term research only. The G925 experimental path is a
+   different architecture and does not establish a safe G720 v12 port.
+7. **Keep unsafe paths disabled:** sparse Kbase binding, v12 vertex-pipeline
+   stores/atomics, and unsupported geometry streams stay off until complete
+   implementations and evidence exist.
+
+## 5. Immediate next source task
+
+Do not edit the feature table yet. First compare the current branch against
+JimVulkan's clip/cull and multi-viewport implementations and map every
+required helper, state field, shader variant, and test. Start with clip/cull
+because the current branch already has a partial implementation; it is the
+smallest coherent feature-completion candidate. Keep this feature on a
+dedicated branch until build and focused runtime correctness tests pass.
+
+## 6. Benchmark correction
+
+The 65,536-threshold run was min 9.0 / max 17.6 / average 13.5 FPS.
+The 262,144-threshold run was min 7.8 / max 18.9 / average **13.9 FPS**
+(corrected by the user; earlier 3.9 was a transcription omission). This is a
++0.4 FPS average change with lower minimum FPS. It is not enough evidence to
+promote the candidate or continue threshold tuning as the main project.
