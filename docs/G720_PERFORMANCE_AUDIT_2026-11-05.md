@@ -274,3 +274,43 @@ lifetime-aware accounting and are intentionally not inferred from request
 counters.
 
 CI for this new source commit is pending. No runtime test has been run.
+
+
+## 2026-11-05 CI result — transient BO telemetry commit
+
+The latest source commit `396c924ccccb07b15b429b5cdc82fd9318374664`
+is now build-validated:
+- Android-only workflow run `41942926968`: SUCCESS. All steps passed,
+  including Android ARM64 libdrm, configure, compile/stage, dependency and
+  manifest audit, flat package creation, and artifact upload.
+  Artifact `13376674548` (`panvk-g720-android-only-experimental-package`),
+  16,749,203 bytes.
+- Android NDK Wrapper workflow run `41942927008`: SUCCESS for both
+  `debugoptimized` and `release`; configure, compile, and upload passed.
+
+The documentation commit `8ed8d5cdaef2be2974459d552a6b838b3d2d3e65`
+also passed both workflows: Android-only run `41942958976` and wrapper run
+`41942958980` (both wrapper variants successful).
+
+**Interpretation:** the source compiles for Android ARM64 and the experimental
+package is generated and statically audited. This is not runtime validation:
+there is still no evidence of the PanVK driver loading in Winlator on the
+Mali-G720, successful kbase operation, Vulkan conformance, game compatibility,
+or FPS improvement.
+
+### Next controlled experiment
+
+First inspect the artifact manifest/audit and compare its shared-library
+hashes and metadata against the previous package. Then, only if Winlator
+supports forwarding driver environment variables, collect one diagnostic
+run with all three options enabled:
+- `PANVK_DESCRIPTOR_PROFILE=1`
+- `PANVK_KBASE_PROFILE=1`
+- `PANVK_MEMPOOL_PROFILE=1`
+
+Capture driver logs and the exact game/workload. Repeat the same workload with
+all profile variables disabled for performance measurement. Do not compare
+instrumented FPS against baseline and do not change ring capacity, BO reuse
+policy, descriptor heap topology, or synchronization until the counters
+identify a measured bottleneck. The BO counters currently do not measure
+retained/free-list bytes or exact live BO totals.
