@@ -3917,3 +3917,27 @@ No descriptor-heap feature has been exposed or code changed yet. The extension r
 The Meson source confirms `vk_api_xml = files('registry/vk.xml')` in `src/vulkan/meson.build`, and PanVK generates its entrypoint source/header from `vk_api_xml` via `src/panfrost/vulkan/meson.build`. GitHub Contents API returns zero-byte blobs for `src/vulkan/registry/vk.xml` and `include/vulkan/vulkan_core.h` on this branch, while `src/vulkan/meson.build` and `src/panfrost/vulkan/meson.build` are readable. Treat these as unavailable/submodule or pointer-backed inputs through this connector, not as proof that the Vulkan registry or headers are empty or missing. Do not attempt a registry edit until the exact checkout inputs and generated Vulkan headers are inspected in the build workspace.
 
 The descriptor heap port remains at source-audit stage; no PanVK code or feature exposure has been changed. Latest docs commits before this note: handoff `4ed87bd0b3e96fc0706b1db2fa7e81487625abca`; capability matrix `0b6888d10f5c0d373a62a5c47e537cbbf6e698d5`.
+
+
+## Addendum: descriptor-heap reference semantics extracted (2026-11-05)
+
+Further source-level inspection of JimVulkan/mali-panvk at `58f2c55854bd48b18df756edb11f187af9cd2fde` established the exact Valhall lowering contract. This is reference behavior only; it has not been ported or built in this repository.
+
+- Heap byte offsets become Mali resource handles by shifting right `log2(PANVK_DESCRIPTOR_SIZE)` (32-byte descriptor stride) and adding a resource-table handle whose table index is `PANVK_HEAP_RESOURCE_TABLE` or `PANVK_HEAP_SAMPLER_TABLE`.
+- Texture NIR sources `nir_tex_src_texture_heap_offset` and `nir_tex_src_sampler_heap_offset` are rewritten to Mali texture/sampler handles. If no sampler heap handle is supplied, the shader uses a per-shader embedded-sampler table; entry 0 is a default sampler and embedded samplers are indexed from entry 1.
+- `load_heap_descriptor` becomes a three-component buffer resource tuple `(handle, 0, 0)`; `load_resource_heap_data` reads the heap memory itself through the resource-table buffer descriptor. Image heap load/store/atomic/size/sample intrinsics are rewritten through the normal image intrinsic lowering path.
+- Resource table layout reserves entries after driver set 0 and normal descriptor sets: resource heap at `MAX_SETS+1`, sampler heap at `MAX_SETS+2`, embedded sampler table at `MAX_SETS+3`; table end is `MAX_SETS+4`. On shader variants marked `uses_heaps`, table allocation must extend to that end, and the three entries must be populated for every repeated table.
+- Heap binding updates both graphics and compute descriptor states because heaps are global to both bind points. Secondary command buffers inherit heap bindings through `VkCommandBufferInheritanceDescriptorHeapInfoEXT`.
+- `CmdPushDataEXT` copies the provided byte range into the existing push-constant storage and dirties VS, FS, and compute push-uniform state. It asserts the range fits `MAX_PUSH_CONSTANTS_SIZE`; production implementation must rely on validated API ranges and avoid overflow in offset+size arithmetic.
+- Shader creation with `VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT` uploads a default sampler plus embedded samplers into RW pool memory aligned to descriptor size. Shader binary serialization also records the embedded sampler count/data, and shader destruction frees that allocation.
+- Reference properties are 64-byte heap alignment, 32-byte descriptor size/alignment, max heap size `PANVK_DESCRIPTOR_SIZE << 24`, 256-byte max push data, 2,048 embedded samplers, capture/replay false, sparse/protected heaps false. Reference also reports `minStorageBufferOffsetAlignment=4` on Valhall; this is a separate measured hardware/compiler guarantee and must be independently validated against our exact 26.3 NIR lowering before adopting.
+
+### Port blockers / next exact work
+
+1. Confirm the 26.3 generated Vulkan headers/registry and entrypoint generator contain `VK_EXT_descriptor_heap` types, structures, and commands. Do not infer from the GitHub zero-byte contents response.
+2. Inspect `vk_nir_lower_descriptor_heaps()` API and its required `VkPipelineLayout`/shader compile metadata, then find the correct call point in our 26.3 `panvk_vX_shader.c`. The generic lowerer existing in the tree does not imply it is invoked.
+3. Port heap binding storage into `panvk_descriptor_state` and command-buffer inheritance state, then implement checked push-data range handling.
+4. Port NIR heap texture/intrinsic lowering and resource table layout together; they form one ABI and must not be enabled separately.
+5. Port embedded sampler compilation and cache serialization as a single lifecycle (create, upload, serialize/deserialize, destroy).
+6. Audit reference descriptor-heap code for Mesa 27-only fields/functions and adapt to Mesa 26.3 APIs; no whole-file replacement.
+7. Only after generated API + all execution paths compile, enable the extension/feature and run Vulkan CTS plus VKD3D-Proton D3D12. No new package or device test is ready yet.
