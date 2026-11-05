@@ -54,7 +54,7 @@ jobs:
             -Dzstd=disabled
 
       - name: Build NIR tests
-        run: ninja -C build src/compiler/nir/nir_tests
+        run: ninja -C build nir_tests
 
       - name: Run NIR compiler tests
         run: meson test -C build --suite nir --print-errorlogs
