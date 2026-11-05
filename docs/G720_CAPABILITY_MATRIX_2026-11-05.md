@@ -218,3 +218,8 @@ RADV's pipeline source confirms the interface-linking sequence
 `nir_merge_clip_cull_distance_vars()`. The separate
 `nir_lower_clip_cull_distance_to_vec4s()` helper must not be assumed to follow
 that sequence; it changes the representation and needs its own test.
+
+
+## 6. Initial automated NIR coverage
+
+The dedicated clip/cull branch now includes `src/compiler/nir/tests/clip_cull_distance_tests.cpp`, covering clip-only, cull-only, mixed VS arrays, a mixed array crossing a vec4 slot boundary, and mixed FS inputs for the generic gather/merge helpers. A host CI workflow runs the NIR suite; Android build workflows are also enabled. Results are pending. This does not yet validate vec4 lowering or PanVK stage transport and discard behavior. Feature exposure remains disabled.
