@@ -7,15 +7,15 @@
 
 class nir_clip_cull_distance_test : public nir_test {
 public:
-   nir_clip_cull_distance_test(const char *name, mesa_shader_stage stage)
-      : nir_test(name, stage)
+   nir_clip_cull_distance_test()
+      : nir_test("clip_cull_distance", MESA_SHADER_VERTEX)
    {
    }
 
 protected:
    nir_variable *
    create_distance_var(nir_variable_mode mode, const char *name,
-                       gl_varying_slot location, unsigned size)
+                       unsigned location, unsigned size)
    {
       nir_variable *var =
          nir_variable_create(b->shader, mode,
@@ -70,7 +70,26 @@ TEST_F(nir_clip_cull_distance_test, vertex_mixed_arrays_cross_vec4_boundary)
    EXPECT_EQ(clip->data.location, VARYING_SLOT_CLIP_DIST0);
 }
 
-TEST_F(nir_clip_cull_distance_test, fragment_mixed_input_arrays_share_location)
+class nir_clip_cull_fragment_test : public nir_test {
+public:
+   nir_clip_cull_fragment_test()
+      : nir_test("clip_cull_fragment", MESA_SHADER_FRAGMENT)
+   {
+   }
+
+   nir_variable *create_distance_var(nir_variable_mode mode, const char *name,
+                                     unsigned location, unsigned size)
+   {
+      nir_variable *var = nir_variable_create(
+         b->shader, mode, glsl_array_type(glsl_float_type(), size, 0), name);
+      var->data.location = location;
+      var->data.location_frac = 0;
+      var->data.assigned = true;
+      return var;
+   }
+};
+
+TEST_F(nir_clip_cull_fragment_test, fragment_mixed_input_arrays_share_location)
 {
    nir_variable *clip =
       create_distance_var(nir_var_shader_in, "gl_ClipDistance",
