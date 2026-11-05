@@ -13,6 +13,7 @@ on:
       - experiment/kbase-live-profile
       - experiment/kbase-single-csg
       - experiment/clip-cull-distance-v12
+      - experiment/g720-performance-audit
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
