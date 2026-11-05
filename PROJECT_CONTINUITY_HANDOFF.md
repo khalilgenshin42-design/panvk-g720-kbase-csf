@@ -3270,3 +3270,23 @@ Additional build status:
 - Newer runs from `2102a0a...` are queued/in progress and are superseded by the current source workflow commit for CI config only.
 
 Important CI interpretation: run `42025063854` was technically green but logged `No suitable tests defined`, so it must be recorded as a false-green/no-test run, not test success. Run `42025422711` failed at Meson setup due Lavapipe's LLVM requirement; it did not compile or run tests. The next acceptable result requires a Meson summary showing `nir_tests` and actual gtest/meson test counts, not just exit code zero.
+
+
+
+### NIR workflow now asserts test registration (2026-11-05 12:16 UTC)
+
+Added a guard before test execution:
+```sh
+meson introspect --tests build > build-tests.json
+python3 -c '... assert "nir_tests" in names; assert "nir_algebraic_parser" in names'
+```
+This prevents a repeat of the false-green case where Meson exited zero with `No suitable tests defined`. The workflow must now demonstrate that both the C++ NIR gtest binary and Python algebraic parser test are registered before the Meson suite is run.
+
+Commit: `3f75710571607ba4a109c376b596f7cb685fc1ce` (`ci: fail if NIR tests are not registered`). New run expected; previous current candidate `42025564838` on SHA `171a78a...` was queued when last checked. Its config should use swrast + LLVM 22; it is now superseded by the guarded workflow commit, though its outcome can still diagnose configuration.
+
+Latest build observations from older commits:
+- Android-only run `42025063812` on `9f8faa1...`: host tools, ARM64 libdrm and configure passed; compile/stage still in progress.
+- Wrapper run `42025063844` on `9f8faa1...`: host tools and both Meson configure steps passed; Release and Debugoptimized compilation in progress.
+- Run `42025422711` failed because swrast/Lavapipe requires LLVM while the workflow had LLVM disabled; this prompted the `llvm-22-dev` + `-Dllvm=enabled` correction in SHA `171a78a...`.
+
+No runtime driver code has changed. The next validation gate is test registration assertion success followed by actual NIR test execution with visible counts.
