@@ -845,3 +845,17 @@ needs verification. Explicit FS reads and stage propagation remain incomplete.
 No runtime changes or feature exposure were made. The dedicated source branch
 is `experiment/g720-clip-cull-capabilities`, starting at
 `2fb0c3c792a193d0bed9d6eafda5cee606546150`.
+
+
+### Cull semantic and NIR pass-order checks added to the gate
+
+The current direct-path cull emulation uses a per-vertex 0/1 indicator and
+fragment discard at `>= 0.9999` to approximate primitive-level culling. The
+epsilon can create a narrow false-discard region when only a subset of
+vertices has a negative cull distance. This requires reference-based tests;
+it must not be generalized to other stage chains without proof.
+
+Also, do not assume the order of NIR's clip/cull merge and vec4-normalization
+helpers. Merge rewrites cull locations, while vec4 normalization discovers
+sizes from variable locations. A dedicated NIR test matrix must establish the
+correct ordering and mixed-array behavior before runtime integration.
