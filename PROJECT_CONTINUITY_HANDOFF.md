@@ -3997,3 +3997,60 @@ The project code tree has `src/panfrost/vulkan/meson.build` blob `35b447a33f49ee
 A direct GitHub code-search for `VK_EXT_descriptor_heap`, `VkPhysicalDeviceDescriptorHeapFeaturesEXT`, `CmdPushDataEXT`, and the feature structure type returned no indexed matches for this branch. Code search indexes the default branch, so this is not authoritative evidence of absence on the experiment branch. Treat as unresolved until a local checkout or a small generated-file inspection is available.
 
 The reference implementation is a later Mesa 27 snapshot while this branch is Mesa 26.3-devel. Its descriptor heap code cannot safely be copied wholesale. No code changes made; descriptor heap remains unexposed. To resolve registry/API definitively, inspect local checkout `src/vulkan/registry/vk.xml` for `VK_EXT_descriptor_heap`, plus generated `vk_device_dispatch_table.h`, `vk_device_entrypoints.h`, and `vk_physical_device_features.h` / feature struct definitions. If present, proceed with PanVK backend port; if absent, first update Vulkan-Headers/registry and generated code consistently using Mesa's normal generation scripts.
+
+
+---
+
+## 2026-11-05 — Descriptor heap backend port started (Mesa 26.3 / Valhall)
+
+Repository-wide branch reconciliation was performed before continuing. The repository currently has 23 branches. The canonical handoff exists on `docs/project-continuity-handoff-2026-11-03`; the other branches do not contain divergent copies. The latest handoff blob was fetched before this update.
+
+### New isolated implementation branch
+
+- Branch: `experiment/g720-descriptor-heaps`
+- Base: latest source branch `experiment/g720-clip-cull-capabilities` at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`
+- Current branch HEAD after initial port: `4edd96ec9bb936dc29b86e7f2b1f814f9f9922c3`
+- The existing source and audit branches remain unchanged.
+
+### Implemented in the experimental branch (not yet build-validated)
+
+1. Reserved Valhall resource-table entries after driver set 0 and the seven application descriptor sets:
+   - resource heap: `MAX_SETS + 1`
+   - sampler heap: `MAX_SETS + 2`
+   - embedded sampler table: `MAX_SETS + 3`
+   - table end: `MAX_SETS + 4`
+2. Added explicit `uses_heaps` state and embedded-sampler backing allocation to the per-variant `panvk_shader_desc_info`.
+3. Ported Valhall NIR heap lowering from the Mesa 27 reference:
+   - byte offsets become 32-byte descriptor handles in the resource/sampler tables;
+   - heap buffer descriptors become resource handles;
+   - resource heap data loads lower through the resource-table UBO;
+   - heap image operations lower through the ordinary Mali image path;
+   - already-lowered texture handles bypass normal descriptor-set texture lowering.
+4. Extended resource-table construction to append resource heap, sampler heap, and embedded-sampler entries; implemented `CmdBindSamplerHeapEXT`, `CmdBindResourceHeapEXT`, and secondary-command-buffer heap inheritance.
+5. Implemented `CmdPushDataEXT`, including overflow-safe bounds checking against the push-constant backing store and dirtying VS/TCS/TES/FS/compute push-uniform state.
+6. Added per-variant default/embedded sampler packing, allocation cleanup, serialization, and deserialization. The binary format now stores an explicit heap-use flag and validates the sampler count; shader binary version was raised from 0 to 1.
+7. Added Valhall-only extension, feature, and property exposure for `VK_EXT_descriptor_heap`. Sparse and protected descriptor heaps remain false; capture/replay remains false.
+8. Added the new branch to the Android-only CI workflow and added source-presence guards.
+
+### Important porting difference and review item
+
+The Mesa 27 reference has a shader-level descriptor-info object, whereas this Mesa 26.3-derived branch stores descriptor metadata per physical shader variant. The initial port preserves this branch's existing ownership model and allocates embedded sampler backing per variant. This is functionally straightforward but duplicates sampler backing for multi-variant VS/GS shaders. Before declaring the port complete, review whether to consolidate the immutable embedded-sampler allocation at API-shader scope while keeping per-variant descriptor metadata separate.
+
+### Build/validation status
+
+The extension exposure and implementation are provisional until CI proves that this branch's Vulkan registry/generated API declarations include all descriptor-heap structures and commands and that the Android ARM64 driver compiles. Do not package or ask for a Winlator test yet.
+
+Initial workflow runs triggered by the latest source commits:
+- Android-only build: run `42076030943` (queued at last check).
+- Android wrapper build: run `42076031093` (debugoptimized and release jobs queued at last check).
+- Earlier wrapper builds were also triggered by intermediate commits; use the final-head runs for validation.
+
+Next steps:
+1. Read the final-head Android-only and wrapper build logs; fix API-generation, C compilation, linker, and packaging issues.
+2. Audit descriptor heap command coverage against the extension registry and reference implementation.
+3. Add targeted NIR/compiler validation and descriptor-heap runtime/CTS checks where the available CI supports them.
+4. Review per-variant embedded-sampler allocation and cache serialization/versioning.
+5. Only after successful build and validation, produce the inner Winlator-importable `PanVK-G720-experimental.zip`. Keep it separate from Android's vendor/system driver.
+6. Do not ask the user to test until that package is ready.
+
+No new device benchmark was run. The last user-reported Tomb Raider Definitive Edition baseline remains Min 9.4 / Max 19.4 / Avg 14.0 FPS; no performance claim is made for this unbuilt branch.
