@@ -1,12 +1,12 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-03 (UTC)
+Last updated: 2026-11-05 (UTC)
 
 ## Authoritative current state — 2026-11-05
 
 This section supersedes older "next steps" and "no code changed" statements in the historical addenda below. Keep the historical record; do not treat its older status as current.
 
 - Repository branch inventory was checked across all 25 branches. The only branch containing the root `PROJECT_CONTINUITY_HANDOFF.md` is `docs/project-continuity-handoff-2026-11-03`; no other branch has a divergent copy.
-- Canonical handoff branch HEAD at this update: `37d2633e71269644ceb72d1566a7d136ae780cee`.
+- Canonical handoff branch HEAD immediately before this authoritative-state commit: `37d2633e71269644ceb72d1566a7d136ae780cee`; current handoff commit: `8748342c934c9f0c897ee92e31085bab914bfe92`.
 - Current isolated implementation branch: `experiment/g720-descriptor-heaps`, source HEAD `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`.
 - Existing primary source branch `experiment/g720-clip-cull-capabilities` remains at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`; it has not been merged with the descriptor-heap branch.
 - Capability matrix branch: `experiment/g720-performance-audit`, HEAD `a41b5f22bdc60cedb6bce783df192ac5031a7fde`.
