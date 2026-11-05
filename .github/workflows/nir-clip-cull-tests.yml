@@ -31,7 +31,9 @@ jobs:
             libdrm-dev \
             libelf-dev \
             libzstd-dev \
-            libexpat1-dev
+            libexpat1-dev \
+            llvm-dev \
+            clang
 
       - name: Configure minimal host build with NIR tests
         run: |
@@ -42,7 +44,7 @@ jobs:
             -Dpanfrost-kmds=kbase \
             -Dtools=[] \
             -Dbuild-tests=true \
-            -Dllvm=disabled \
+            -Dllvm=enabled \
             -Dglx=disabled \
             -Degl=disabled \
             -Dgbm=disabled \
