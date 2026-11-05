@@ -346,3 +346,23 @@ The current 26.3 project branch already calls `vk_nir_lower_descriptor_heaps()` 
 ## Registry / dispatch integration remains a hard blocker
 
 The experiment branch tracks `src/vulkan/registry/vk.xml` as a 3,258,412-byte blob (`4d66622efa2937668bc35cfcc114a302813828d9`). The GitHub connector cannot return its contents because it is oversized; previous empty file responses were transport limitations, not proof of an empty registry. The PanVK Meson file generates entrypoints from this registry. Exact descriptor-heap declaration presence therefore remains unverified. Current PanVK command state has no `CmdBindSamplerHeapEXT`, `CmdBindResourceHeapEXT`, `CmdPushDataEXT`, or heap inheritance implementation. A code-search no-match is non-authoritative because search indexes the default branch. Before any feature exposure, verify the local registry and generated dispatch/header files; if declarations are absent, update Vulkan-Headers/registry and generated code as a coherent Mesa change. No code change or package is ready.
+
+
+## Descriptor heap status — 2026-11-05 follow-up
+
+A separate implementation branch, `experiment/g720-descriptor-heaps`, now contains an initial Valhall-only `VK_EXT_descriptor_heap` backend port. This is a development status update, not yet a validated capability.
+
+| Area | Initial implementation | Validation state |
+|---|---|---|
+| API exposure | `VK_EXT_descriptor_heap`, `descriptorHeap=true` on PAN_ARCH >= 9 | Pending Android compile |
+| NIR lowering | Heap byte offsets to 32-byte Mali descriptor handles; buffer/image heap operations | Pending compiler validation |
+| Resource table | Resource, sampler, embedded-sampler table entries after MAX_SETS | Pending compile/runtime tests |
+| Commands | Bind sampler heap, bind resource heap, push data | Pending generated-entrypoint/link validation |
+| Secondary buffers | Heap binding inheritance | Pending CTS/runtime validation |
+| Embedded samplers | Default sampler + shader embedded samplers, per-variant storage | Pending cache and lifetime validation |
+| Shader binary | Explicit uses-heaps bit + packed sampler data; binary version 1 | Pending serialization round-trip tests |
+| Properties | 64-byte heap alignment, 32-byte descriptor size/alignment, 24-bit handle space, 256-byte push data; sparse/protected/capture-replay false | Pending compile and spec/CTS validation |
+
+The port intentionally does not enable descriptor-heap sparse residency, protected heaps, or capture/replay. The source branch has a per-variant descriptor-info layout, unlike the Mesa 27 reference's per-shader layout; the first implementation duplicates embedded-sampler backing for variants. Consolidating immutable sampler backing is a review item before finalizing.
+
+**Do not mark this extension production-ready or package it for Winlator until the Android ARM64 build, generated Vulkan API/entrypoint checks, NIR validation, and descriptor-heap runtime tests pass.** The stock Android driver remains untouched.
