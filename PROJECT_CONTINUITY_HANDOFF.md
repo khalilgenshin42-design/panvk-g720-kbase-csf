@@ -3450,3 +3450,17 @@ Authoritative NIR run for source SHA `c6dfaabc0ba69c2a863c54b55eb67a8ac07d6b1c`:
 This is the first successful validation of the genuinely dynamic dereference path. The prior `ccc0fbde...` run failed the test because the index was still constant-foldable, validating that the strengthened test catches the distinction.
 
 Next compiler test target: arrayed 2D clip-distance dereferences for GS/TES inputs and TCS outputs, to validate that the per-vertex array dimension is preserved while the inner distance array is packed into vec4s. Runtime PanVK clip/cull exposure remains unchanged pending complete stage transport.
+
+
+### Arrayed clip/cull interface tests added (2026-11-05 12:40 UTC)
+
+Added three stage-specific NIR tests in source commit `7bb1a1bbecf8b8358bdb14383cd7c6999db9ece3`, with a follow-up correction `ab0e7e13e0088e0202d6925a51347c0f3828c317` fixing the tests to build dereferences from the original interface variables before lowering.
+
+Coverage added:
+- Geometry shader arrayed clip-distance input: preserves per-vertex index while packing the inner distance array.
+- Tessellation-control shader arrayed clip-distance output: preserves per-vertex output deref and emits packed stores.
+- Tessellation-evaluation shader arrayed clip-distance input: preserves per-vertex input deref and emits packed loads.
+
+Each test checks that accesses are retargeted to the generated `gl_ClipDistanceMESA` variable and invokes `nir_validate_shader()` in debug builds. These tests are newly added and not yet validated by CI. The next NIR run on the corrected latest source commit is required before treating them as valid.
+
+Prior result: genuinely dynamic vertex dereference test passed on `c6dfaabc...`, run `42027837669`, job `127246403106` (2/2 Meson tests, zero failures). No runtime PanVK code changed.
