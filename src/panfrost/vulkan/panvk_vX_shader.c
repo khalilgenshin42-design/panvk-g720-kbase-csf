@@ -1623,9 +1623,14 @@ panvk_init_heap_desc_info(struct panvk_device *dev,
    pan_pack(&descs[0], SAMPLER, cfg) {
       cfg.clamp_integer_array_indices = false;
    }
-   for (uint32_t i = 0; i < info->embedded_sampler_count; i++)
-      panvk_per_arch(sampler_state_fill_desc)(&info->embedded_samplers[i],
-                                              &descs[i + 1]);
+   for (uint32_t i = 0; i < info->embedded_sampler_count; i++) {
+      const struct vk_sampler_state *sampler = &info->embedded_samplers[i];
+      if (vk_border_color_is_custom(sampler->border_color)) {
+         free(descs);
+         return panvk_error(dev, VK_ERROR_FEATURE_NOT_PRESENT);
+      }
+      panvk_per_arch(sampler_state_fill_desc)(sampler, &descs[i + 1]);
+   }
 
    VkResult result =
       panvk_upload_embedded_samplers(dev, desc_info, descs, count);
