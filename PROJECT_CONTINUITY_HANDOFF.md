@@ -2072,3 +2072,38 @@ claimed.
 
 Detailed audit:
 [docs/G720_PERFORMANCE_AUDIT_2026-11-05.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-performance-audit/docs/G720_PERFORMANCE_AUDIT_2026-11-05.md).
+
+
+## 2026-11-05 follow-up — transient BO telemetry CI confirmed
+
+The CI cycle for source commit `396c924ccccb07b15b429b5cdc82fd9318374664`
+has completed successfully:
+- Android-only PanVK G720 Experiment run `41942926968`: SUCCESS.
+  Job `build-android-only` passed host-tool generation, Android ARM64
+  libdrm build, Android-only configure/compile/stage, driver/manifest/
+  dependency audit, flat Winlator/Adrenotools package creation, and upload.
+  Artifact ID `13376674548`, name
+  `panvk-g720-android-only-experimental-package`, size 16,749,203 bytes.
+- Android NDK Build (Wrapper Variant) run `41942927008`: SUCCESS.
+  Both `debugoptimized` and `release` jobs passed configure, compile,
+  and artifact upload.
+
+Documentation-only follow-up runs for commit
+`8ed8d5cdaef2be2974459d552a6b838b3d2d3e65` also completed successfully:
+Android-only run `41942958976`; wrapper run `41942958980` (both wrapper
+configurations passed). These repeat the same source tree with the audit
+documentation update.
+
+This confirms Android ARM64 compilation and static package generation for the
+descriptor, CSF ring, and transient BO telemetry source. It still does not
+prove device runtime, kbase ABI compatibility, Vulkan conformance, Winlator
+loading, game stability, or FPS improvement. The artifact must be imported
+only as a separate experimental Winlator driver; never replace the system
+driver.
+
+Next step: inspect the new artifact's audit/manifest and compare it with the
+previous known-good package, then arrange a device diagnostic run with
+`PANVK_DESCRIPTOR_PROFILE=1`, `PANVK_KBASE_PROFILE=1`, and
+`PANVK_MEMPOOL_PROFILE=1` if Winlator can pass these variables. Follow with
+an identical uninstrumented benchmark. Do not tune pool retention or ring
+sizes until actual telemetry identifies a bottleneck.
