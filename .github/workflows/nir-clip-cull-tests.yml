@@ -33,7 +33,8 @@ jobs:
             llvm-22-dev \
             libzstd-dev \
             libexpat1-dev \
-            clang
+            clang \
+            glslang-tools
 
       - name: Configure minimal host build with NIR tests
         run: |
