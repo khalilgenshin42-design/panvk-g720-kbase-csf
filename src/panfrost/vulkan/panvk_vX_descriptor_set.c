@@ -1165,7 +1165,8 @@ panvk_write_heap_buffer(struct panvk_device *device,
       return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
    if (range->address == 0 && range->size == 0)
       return panvk_write_heap_null_descriptor(device, dst);
-   if (range->address == 0 || range->size > UINT32_MAX - align_mask)
+   if (range->address == 0 || range->size == 0 ||
+       range->size > UINT32_MAX - align_mask)
       return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
 
    struct mali_buffer_packed desc;
@@ -1189,6 +1190,8 @@ panvk_write_heap_texel_buffer(struct panvk_device *device,
       return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
    if (info->addressRange.address == 0 && info->addressRange.size == 0)
       return panvk_write_heap_null_descriptor(device, dst);
+   if (info->addressRange.address == 0 || info->addressRange.size == 0)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
 
    enum pipe_format pfmt = vk_format_to_pipe_format(info->format);
    uint32_t block_size = util_format_get_blocksize(pfmt);
