@@ -1223,13 +1223,10 @@ panvk_write_heap_image(struct panvk_device *device,
              sizeof(*desc));
    }
 
-   /* The packed texture descriptors can point at the view's auxiliary
-    * payload. Keep that pool allocation alive for the device lifetime, but
-    * release the temporary VkImageView object and its auxiliary MS views. */
-   for (uint32_t i = 0; i < ARRAY_SIZE(view->ms_views); i++)
-      panvk_per_arch(DestroyImageView)(panvk_device_to_handle(device),
-                                       view->ms_views[i], NULL);
-   vk_image_view_destroy(&device->vk, NULL, &view->vk);
+   /* Valhall image descriptors are self-contained; the auxiliary
+    * attribute-buffer allocation is only used on pre-Valhall architectures. */
+   panvk_per_arch(DestroyImageView)(panvk_device_to_handle(device),
+                                    image_view, NULL);
    return VK_SUCCESS;
 }
 
