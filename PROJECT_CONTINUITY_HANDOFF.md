@@ -2205,3 +2205,57 @@ Previous comparable user-reported run: 8.7 / 18.0 / 13.5 FPS. Current average
 is +0.1 FPS (effectively flat); current minimum is lower. Treat benchmark
 variance and instrumentation overhead as unresolved until an uninstrumented
 repeat is captured.
+
+
+## 2026-11-05 follow-up — classify descriptor-set allocation failures
+
+Re-read the handoff and audit branches and inspected the full supplied
+`TombRaider_logs_2026-11-05_02-03-50.zip`. It confirms PanVK on
+`Wrapper(Mali-G720 MC7)`, DXVK 1.7.2, with all three profiling streams
+active. Final descriptor snapshot: 596,561 set allocation attempts,
+85.30 MiB requested, 299 failures. Final kbase snapshot: 16,160 queue
+submits, zero submit errors; 68,077 waits, zero timeouts/errors; 41,704 ring
+jobs, zero wraps, 1.8 KiB sampled occupancy high-water; 4,068 heap renewals
+(4,066 work-triggered), 52,804.121 ms aggregate renewal wait. The final
+mempool snapshot reports zero allocation and BO creation failures. The exact
+WSI teardown tail remains `VK_ERROR_SURFACE_LOST_KHR` followed by Wine's
+`vkWaitForFences` assertion.
+
+The supplied log contains no evidence that
+`PANVK_KBASE_HEAP_RENEW_WORK=262144` was applied. The 4,068 renewals are
+therefore the baseline/default-threshold observation; do not treat this as an
+override test. The profile-enabled 13.6 FPS run is not a clean performance
+measurement.
+
+Source change on `experiment/g720-performance-audit` adds three opt-in
+subcounters to `panvk_vX_descriptor_set.c` under the existing
+`PANVK_DESCRIPTOR_PROFILE=1` gate:
+- `overflow`: both variable-descriptor adjusted-count overflow and final
+  descriptor-count overflow, which return `VK_ERROR_OUT_OF_POOL_MEMORY`;
+- `capacity`: no free descriptor-set slot or insufficient descriptor heap
+  free bytes, also returning `VK_ERROR_OUT_OF_POOL_MEMORY`;
+- `vma`: `util_vma_heap_alloc()` returning zero, which returns
+  `VK_ERROR_FRAGMENTED_POOL`.
+
+The existing aggregate `set_failures` remains and should equal the sum of
+these categories for failures passing through this function. Overflow
+failures are counted even though they occur before the normal set-allocation
+attempt/byte counters. Counters are relaxed atomics and only execute when the
+profile option is enabled; no allocation policy, return code, heap layout,
+VMA behavior, or Vulkan semantics changed. Final source commits:
+`788d34b622ce6cf51aa410c6366a06b86a6a4988` (classification) and
+`751fddd64efc201c103ffa496b29608d315a55e6` (format-string correction).
+
+CI for final source commit `751fddd64efc201c103ffa496b29608d315a55e6`
+is pending at documentation time; check both Android-only and wrapper
+workflows before packaging. No new driver ZIP is ready yet.
+
+Next device experiment: first run the same scene with all profile options
+unset to obtain an uninstrumented baseline. Then, if Winlator can demonstrably
+pass Mesa environment variables, set only
+`PANVK_KBASE_HEAP_RENEW_WORK=262144`, keep profiling options unset, and
+repeat the exact scene/settings. Compare average/minimum FPS, frame pacing,
+visual correctness, hangs, and teardown. Do not infer that the override took
+effect from the FPS alone; obtain a diagnostic log or another reliable
+confirmation of the parsed threshold. Do not change ring sizes, BO retention,
+descriptor heap topology, or kbase kernel/system driver.
