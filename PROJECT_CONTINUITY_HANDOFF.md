@@ -3217,3 +3217,13 @@ Inspected `src/compiler/nir/meson.build`: the `nir_tests` executable is declared
 Workflow commit: `6f965eaa43b8149ece37a189a839dc44b53562ff` (`ci: use Meson path for NIR test executable`). New run `42024927571` was in progress at the last poll, with checkout just starting; its build and test result are pending.
 
 This is a CI target-path correction, not a code/test failure. The NIR workflow now avoids unrelated Panfrost CLC dependencies and targets the actual executable path. Do not count this as passing until both the executable build and suite finish.
+
+
+
+### NIR test invocation simplified after Ninja target-path mismatch (2026-11-05 12:11 UTC)
+
+The run `42024927571` on SHA `6f965eaa43b8149ece37a189a839dc44b53562ff` again configured Meson successfully, but the explicit Ninja target `src/compiler/nir/nir_tests` was also not a valid target. The earlier bare target `nir_tests` was invalid too. The test declaration is wrapped by Meson's `test()` helper, so relying on a guessed Ninja path is brittle.
+
+Removed the standalone Ninja invocation. The NIR CI now uses `meson test -C build --suite nir --print-errorlogs` directly; Meson will build the registered test executable as part of running the suite. This keeps the pipeline focused on the real Meson test target and avoids hardcoding generated Ninja target names.
+
+Workflow commit: `9f8faa18c126ae6110ae004f9ab969b62104992f` (`ci: let Meson build NIR test executable`). Await the new run and confirm the Meson test output reports actual test counts/results. Neither prior run reached NIR test execution; no NIR test assertion has failed yet.
