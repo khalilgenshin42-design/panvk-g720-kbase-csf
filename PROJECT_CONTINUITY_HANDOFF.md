@@ -2910,3 +2910,20 @@ Ninja build, and test result must all be inspected. No NIR test pass is
 claimed yet. Android-only build and wrapper runs on earlier commits remain
 separate checks; inspect their terminal conclusions before claiming current
 source validation. No PanVK runtime source or Vulkan feature exposure changed.
+
+
+## 2026-11-05 — NIR CI follow-up: libclc dependency
+
+The LLVM-enabled Meson configure for run `42022089165` progressed beyond the
+previous CLC/LLVM guard, then failed because the host package
+`libclc` was not installed (`Dependency "libclc" not found`). This is
+another CI environment dependency failure before the NIR target compiles.
+
+Added `libclc-dev` to the NIR workflow's apt dependencies:
+- Workflow commit: `43bc2ca59b3f5adbc804161f662e9d55617dd5fe`
+- Branch: `experiment/g720-clip-cull-capabilities`
+
+The next run must confirm whether Ubuntu's package supplies the libclc
+development metadata expected by this Mesa revision. NIR compilation and
+tests remain unverified. No runtime source, feature bits, or device limits
+were modified.
