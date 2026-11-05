@@ -3708,3 +3708,46 @@ User explicitly requested a more aggressive, evidence-led optimization effort af
 Reported result for this run: Min 9.4 / Max 19.4 / Avg 14.0 FPS. Compare cautiously with prior 13.9 average because the game edition, wrapper selection and likely environment differ. The 0.1 FPS average change is not a demonstrated improvement.
 
 The user asked the assistant to continue independently and return only when user action is needed. Next assistant work should be source-level audit of the exact GameNative wrapper and WSI path, then commit a reproducible audit/experiment and update this handoff. Do not ask user to re-run the same benchmark before the source audit is done.
+
+
+
+### GameNative wrapper source audit — high-value allocation experiment (2026-11-05)
+
+The uploaded logcat environment line identifies the actual selected wrapper path:
+- `VK_ICD_FILENAMES=.../wrapper_icd.aarch64.json`
+- `ADRENOTOOLS_DRIVER_PATH=.../PanVK Mali G720 (experimental)/`
+- `ADRENOTOOLS_DRIVER_NAME=libvulkan_panfrost.so`
+- `WRAPPER_VK_VERSION=1.3.354`
+- `WRAPPER_RESOURCE_TYPE=auto`
+- `WRAPPER_EMULATE_BCN=3`, `WRAPPER_USE_BCN_CACHE=1`, `ENABLE_BCN_COMPUTE=1`
+- `WRAPPER_MAX_IMAGE_COUNT=0`
+- `MESA_VK_WSI_PRESENT_MODE=mailbox`
+- `WRAPPER_DISABLE_PRESENT_WAIT=0`
+- No `WRAPPER_DISABLE_PLACED`, `WRAPPER_BLIT`, or `WRAPPER_BYPASS_SWAPCHAIN_PLACED` value is present in the captured environment (default code paths therefore apply).
+
+The exact GameNative Mesa wrapper source is publicly available in `GameNative/mesa`, branch `wrapper-25`. Its relevant code was inspected:
+- `src/vulkan/wrapper/wrapper_physical_device.c` saves raw driver features into `base_supported_features`, then advertises wrapper-level `multiViewport=true`, `shaderClipDistance=true`, `shaderCullDistance=true`, plus other compatibility flags.
+- `src/vulkan/wrapper/wrapper_device.c` later masks some requested core features back against `base_supported_features` before calling the base driver. Therefore DXVK's feature log is the wrapper-advertised feature surface, not a reliable statement of the actual enabled PanVK features. PanVK feature bits must not be force-enabled to match that log.
+- In particular, wrapper source sets multiViewport/clip/cull to true, then `DISABLE_FEATURE` masks them to raw PanVK values at device creation. This can produce a mismatch between what an application believes it enabled and what the underlying PanVK device actually enabled. Audit actual DXVK shader usage before changing either side.
+- `geometryStreams` was not found in the wrapper's physical-device forced feature list. DXVK's printed value should be treated as wrapper log/chain semantics until the exact extension feature chain is traced.
+
+#### Direct-vs-blit WSI path
+- GameNative `src/vulkan/wsi/wsi_common_android.c` contains a runtime AHB probe. Unless `WRAPPER_BLIT=1` or Mesa WSI debug forces blit, it tests an Android hardware buffer format and asks the base ICD for external image import support.
+- On success, it selects `WSI_SWAPCHAIN_NO_BLIT` and imports AHB memory directly as the swapchain image. On failure it creates a local primary plus an AHB secondary and uses an image copy at present.
+- The test log has successful AHB imports for 900x506 buffers and DRI3 pixmap handoff with modifier 1255, but the captured log does not contain the wrapper's explicit `WSI_SWAPCHAIN_NO_BLIT` or `Creating blit context` diagnostic. Therefore direct rendering is plausible but not proven. Do not assume the generic Mali extra-copy issue applies to this PanVK run.
+- Source references:
+  - https://github.com/GameNative/mesa/blob/wrapper-25/src/vulkan/wsi/wsi_common_android.c
+  - https://github.com/GameNative/mesa/blob/wrapper-25/src/vulkan/wsi/wsi_common.c
+  - https://github.com/GameNative/mesa/blob/wrapper-25/src/vulkan/wrapper/wrapper_device_memory.c
+  - https://github.com/GameNative/mesa/blob/wrapper-25/src/vulkan/wrapper/wrapper_physical_device.c
+
+#### First controlled performance experiment: disable placed-memory emulation for this 64-bit game
+- Wrapper `wrapper_physical_device.c` enables `VK_EXT_map_memory_placed` emulation by default unless `WRAPPER_DISABLE_PLACED=1`.
+- `wrapper_device_memory.c::wrapper_AllocateMemory` intercepts each host-visible allocation when `memoryMapPlaced` is enabled, and in `WRAPPER_RESOURCE_TYPE=auto` mode tries DMA-heap, AHB, or opaque-FD external memory backends before falling back to the base ICD.
+- This test is Tomb Raider Definitive Edition running under the 64-bit ARM64EC Wine path. It does not need 32-bit low-address mapping for the guest process. Avoiding wrapper external-memory emulation for host-visible allocations is therefore a plausible way to reduce allocation overhead and avoid extra dma-buf/AHB work for this specific x64 game.
+- Proposed isolated test: add environment variable `WRAPPER_DISABLE_PLACED=1` to this container only; do not change any other setting. This disables the wrapper extension/feature emulation and routes host-visible allocations directly to PanVK. It is not a universal setting for 32-bit x86 games; those may require the wrapper's placed mapping emulation.
+- Keep `dxvk.memoryTrack=True` unchanged for this first A/B comparison. It is a separate likely overhead candidate to test later.
+- Baseline for this exact test configuration: Tomb Raider Definitive Edition, Winlator Mali 1.2.1, `wrapper-gamenative`, DXVK 1.7.2, 900x506, Min 9.4 / Max 19.4 / Avg 14.0 FPS. The test also had a swapchain recreation error and Wine vkQueueSubmit assertion in the log.
+- This experiment is expected to test CPU/allocator overhead, not promise a fixed FPS gain. Compare same benchmark route, resolution, quality, wrapper, DXVK, and thermal state. If the game fails to launch or memory mapping fails, remove the variable and return to baseline.
+
+Next action needed from the user after this source audit: add `WRAPPER_DISABLE_PLACED=1` as a container environment variable for Tomb Raider Definitive Edition only, run the same benchmark once, and send min/max/average FPS plus logs. Do not apply it globally to other games.
