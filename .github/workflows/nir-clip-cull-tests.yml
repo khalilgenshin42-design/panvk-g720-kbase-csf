@@ -32,8 +32,10 @@ jobs:
             libelf-dev \
             libzstd-dev \
             libexpat1-dev \
-            llvm-dev \
+            libudev-dev \
+            llvm-22-dev \
             libclc-22-dev \
+            libllvmspirvlib-22-dev \
             clang
 
       - name: Configure minimal host build with NIR tests
