@@ -2927,3 +2927,25 @@ The next run must confirm whether Ubuntu's package supplies the libclc
 development metadata expected by this Mesa revision. NIR compilation and
 tests remain unverified. No runtime source, feature bits, or device limits
 were modified.
+
+
+## 2026-11-05 — first vec4 representation tests
+
+Extended `src/compiler/nir/tests/clip_cull_distance_tests.cpp` with three
+declaration-layout tests for `nir_lower_clip_cull_distance_to_vec4s()`:
+- mixed clip=3/cull=2: packed vec4 array should contain two vec4 slots;
+- cull-only size=5: packed representation should preserve a two-slot array;
+- mixed clip=5/cull=3: packed representation should span two vec4 slots.
+
+These tests assert the generated `gl_ClipDistanceMESA` output declaration,
+array length, and vec4 component count. They do not yet exercise dereference
+rewriting, constant/indirect indices, stores/loads, or GS/TCS/TES interfaces.
+They test vec4 normalization separately from gather/merge and do not settle
+the helper pass ordering. Source commit:
+`cec14bb825176cb714e0a6d2e4dab3c7dd44de0e`.
+
+CI workflow dependency follow-up: after the LLVM setting was corrected,
+Meson reported missing `libclc`; added `libclc-dev` in workflow commit
+`43bc2ca59b3f5adbc804161f662e9d55617dd5fe`. Its NIR workflow run was queued
+at the last check. The new test-source commit also queues a newer run. No
+compile/test pass is claimed until the latest run completes.
