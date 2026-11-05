@@ -1703,6 +1703,7 @@ panvk_nir_lower_cull_vs(nir_shader *nir, unsigned clip_count)
    bool progress = false;
 
    nir_foreach_function_impl(impl, nir) {
+      bool impl_progress = false;
       nir_builder b = nir_builder_create(impl);
       nir_foreach_block(block, impl) {
          nir_foreach_instr_safe(instr, block) {
@@ -1735,10 +1736,11 @@ panvk_nir_lower_cull_vs(nir_shader *nir, unsigned clip_count)
             nir_def *out =
                nir_bcsel(&b, nir_uge_imm(&b, index, clip_count), cull, value);
             nir_src_rewrite(&intr->src[1], out);
-            progress = true;
+            impl_progress = true;
          }
       }
-      nir_progress(progress, impl, nir_metadata_control_flow);
+      nir_progress(impl_progress, impl, nir_metadata_control_flow);
+      progress |= impl_progress;
    }
 
    return progress;
