@@ -3526,3 +3526,25 @@ CI-only correction commit: `4f4d02e01723d61f1ff19713951be6bcbfa8d08d`. This does
 The NIR test workflow on runtime source SHA `197a5303131d1759e88df534fa1cd17331ba6988` passed: run `42031120675`, job `127257527564`. The fresh CI-only workflow-guard correction SHA `4f4d02e01723d61f1ff19713951be6bcbfa8d08d` also passed NIR: run `42031227168`, job `127257885748`. Both report `nir_algebraic_parser` OK, `nir_tests` OK, 2/2 Meson suite tests, zero failures.
 
 The new PanVK direct VS -> FS prepass is therefore syntactically compatible with the NIR helper API; full Android driver compilation remains pending. Android-only run `42031227285` has passed dependency install and host-tool generation and is building Android libdrm/driver. Wrapper run `42031227198` has Debugoptimized complete and Release compiling. Older wrapper run `42031120736` is still compiling both variants. No runtime install/performance test has been done.
+
+
+### Android PanVK package built with direct VS -> FS clip/cull merge fix (2026-11-05 13:04 UTC)
+
+The corrected Android-only workflow on source SHA `4f4d02e01723d61f1ff19713951be6bcbfa8d08d` completed successfully: run `42031227285`, job `127257885739`.
+
+All gates passed:
+- Source checkout and updated source guard.
+- Host tool generation.
+- Android ARM64 libdrm build.
+- Android-only Meson configuration.
+- Android install compilation/staging.
+- Driver, manifest, dependency and staged-file audit.
+- Flat Winlator/Adrenotools package build and upload.
+
+Artifact: `13417170405`, `panvk-g720-android-only-experimental-package`, 16,751,280 bytes, SHA-256 `f537ae8904145696483644dd50cbe6928f6d46fe01393734530bb92da584d288`, expires 2027-02-03. This package includes the PanVK direct VS -> FS clip/cull merge integration from `197a530...` and the corrected CI guard; it does not enable `shaderClipDistance` or `shaderCullDistance` feature bits. It has not yet been installed/run on the user's phone.
+
+Wrapper workflow on source SHA `4f4d02e...` also completed Release and Debugoptimized successfully (run `42031227198`). Artifacts: Release `13416766825`, Debugoptimized `13416243040`. These are separate wrapper outputs, not the PanVK driver package.
+
+NIR run `42031227168` on `4f4d02e...` passed 2/2 Meson suite tests. The test coverage includes dynamic accesses, arrayed GS/TCS/TES interfaces and mixed clip/cull offset.
+
+Next user-dependent gate: import the Android-only package into Winlator's custom driver path (do not replace the Android system/vendor Vulkan driver), launch a test workload that uses clip/cull distance, and provide the log or crash report. Prefer a known DXVK game benchmark with a fixed scene and capture PanVK shader/NIR debug output if available. Compare stability and FPS against the immediately preceding package with the same Winlator settings. Until this device validation, do not enable Vulkan clip/cull feature bits or claim performance improvement.
