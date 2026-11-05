@@ -487,3 +487,22 @@ log (65,536); then set only
 `PANVK_KBASE_HEAP_RENEW_WORK=262144`, repeat the exact benchmark, and
 confirm the log says 262,144. If the log remains 65,536 or is absent, the
 override is not verified and the run is not a valid threshold experiment.
+
+
+### 2026-11-05 follow-up — fix descriptor-profile format call
+
+A fresh source audit found that the descriptor-profile `mesa_logi()` format
+string in `src/panfrost/vulkan/panvk_vX_descriptor_set.c` had a semicolon
+immediately after the final format-string fragment, leaving the variadic
+arguments outside the call. This was a compile-breaking syntax error despite
+the earlier format-string correction commit. Fixed the terminator to a comma
+so all counters remain arguments to the same `mesa_logi()` invocation.
+No runtime behavior or profiling semantics changed. Fix commit:
+`a2e5ac142b4f0df71cb28204ece4337bace046de`.
+
+The Android-only and Android wrapper workflows for the prior threshold-log
+commit were still in host-tool generation when inspected; they had not yet
+reached compilation. Those runs therefore do not validate the prior source.
+The fix commit triggers fresh CI and must pass both build paths before any
+artifact is considered releasable. Continue to inspect the actual compiler
+steps/logs, not only the workflow's queued/running status.
