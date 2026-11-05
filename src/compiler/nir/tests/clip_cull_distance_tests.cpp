@@ -259,7 +259,8 @@ TEST_F(nir_clip_cull_distance_test,
    unsigned loads, stores;
    count_packed_distance_accesses(b->shader, packed, &loads, &stores);
    EXPECT_EQ(loads, 2);
-   EXPECT_EQ(stores, 2);
+   /* The dynamic store is expanded into four guarded component stores. */
+   EXPECT_EQ(stores, 5);
 
 #ifndef NDEBUG
    nir_validate_shader(b->shader, "clip/cull constant and dynamic access test");
