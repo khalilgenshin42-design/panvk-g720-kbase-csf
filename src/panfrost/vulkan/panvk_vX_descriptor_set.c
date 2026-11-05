@@ -1115,6 +1115,21 @@ void panvk_per_arch(descriptor_set_flush)(struct panvk_descriptor_set *set)
 
 #if PAN_ARCH >= 9
 static VkResult
+panvk_write_heap_null_descriptor(struct panvk_device *device,
+                                 const VkHostAddressRangeEXT *dst)
+{
+   if (!dst || !dst->address || dst->size < PANVK_DESCRIPTOR_SIZE)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+
+   struct mali_null_descriptor_packed desc;
+   pan_pack(&desc, NULL_DESCRIPTOR, cfg)
+      ;
+   memset(dst->address, 0, PANVK_DESCRIPTOR_SIZE);
+   memcpy(dst->address, &desc, sizeof(desc));
+   return VK_SUCCESS;
+}
+
+static VkResult
 panvk_write_heap_sampler(struct panvk_device *device,
                          const VkSamplerCreateInfo *sampler_info,
                          const VkHostAddressRangeEXT *dst)
@@ -1144,8 +1159,13 @@ panvk_write_heap_buffer(struct panvk_device *device,
                         const VkHostAddressRangeEXT *dst)
 {
    const uint64_t align_mask = storage ? 3 : 15;
-   if (!range || !dst->address || dst->size < PANVK_DESCRIPTOR_SIZE ||
-       range->size > UINT32_MAX - align_mask)
+   if (!range)
+      return panvk_write_heap_null_descriptor(device, dst);
+   if (!dst->address || dst->size < PANVK_DESCRIPTOR_SIZE)
+      return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+   if (range->address == 0 && range->size == 0)
+      return panvk_write_heap_null_descriptor(device, dst);
+   if (range->address == 0 || range->size > UINT32_MAX - align_mask)
       return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
 
    struct mali_buffer_packed desc;
@@ -1163,12 +1183,17 @@ panvk_write_heap_texel_buffer(struct panvk_device *device,
                               const VkTexelBufferDescriptorInfoEXT *info,
                               const VkHostAddressRangeEXT *dst)
 {
-   if (!info || !dst->address || dst->size < PANVK_DESCRIPTOR_SIZE)
+   if (!info)
+      return panvk_write_heap_null_descriptor(device, dst);
+   if (!dst->address || dst->size < PANVK_DESCRIPTOR_SIZE)
       return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
+   if (info->addressRange.address == 0 && info->addressRange.size == 0)
+      return panvk_write_heap_null_descriptor(device, dst);
 
    enum pipe_format pfmt = vk_format_to_pipe_format(info->format);
    uint32_t block_size = util_format_get_blocksize(pfmt);
    if (pfmt == PIPE_FORMAT_NONE || block_size == 0 ||
+       info->addressRange.address % block_size != 0 ||
        info->addressRange.size == 0 ||
        info->addressRange.size % block_size != 0 ||
        info->addressRange.size / block_size > UINT32_MAX)
@@ -1192,7 +1217,9 @@ panvk_write_heap_image(struct panvk_device *device,
                        VkDescriptorType type,
                        const VkHostAddressRangeEXT *dst)
 {
-   if (!info || !info->pView || !dst->address)
+   if (!info || !info->pView)
+      return panvk_write_heap_null_descriptor(device, dst);
+   if (!dst->address)
       return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
 
    VkImageView image_view = VK_NULL_HANDLE;
@@ -1237,7 +1264,9 @@ panvk_per_arch(WriteSamplerDescriptorsEXT)(
    const VkHostAddressRangeEXT *pDescriptors)
 {
    VK_FROM_HANDLE(panvk_device, device, _device);
-   if (samplerCount == 0 || !pSamplers || !pDescriptors)
+   if (samplerCount == 0)
+      return VK_SUCCESS;
+   if (!pSamplers || !pDescriptors)
       return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
 
    for (uint32_t i = 0; i < samplerCount; i++) {
@@ -1257,7 +1286,9 @@ panvk_per_arch(WriteResourceDescriptorsEXT)(
    const VkHostAddressRangeEXT *pDescriptors)
 {
    VK_FROM_HANDLE(panvk_device, device, _device);
-   if (resourceCount == 0 || !pResources || !pDescriptors)
+   if (resourceCount == 0)
+      return VK_SUCCESS;
+   if (!pResources || !pDescriptors)
       return panvk_error(device, VK_ERROR_VALIDATION_FAILED_EXT);
 
    for (uint32_t i = 0; i < resourceCount; i++) {
