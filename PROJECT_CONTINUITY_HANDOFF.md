@@ -2833,3 +2833,33 @@ The first dedicated NIR workflow configured Meson successfully but failed before
 ### NIR CI configuration refinement — 2026-11-05
 
 The initial host-test configuration disabled all Vulkan drivers. Mesa then selected its `with_nir_headers_only` mode (`with_gfx_compute` was false), which omits the full NIR implementation and therefore does not generate the `nir_tests` target. The workflow was corrected to enable the Panfrost Vulkan driver with the Kbase backend while keeping the build otherwise minimal; this makes `with_any_vk` true and should select the full NIR implementation. The build target is now `nir_tests`. Commit: `80aea973fed1324c8a53582299ca77c68cc0aba0`. A new CI run is expected; test result remains pending.
+
+
+## 2026-11-05 — NIR CI shell-continuation fix
+
+Continued validation of `experiment/g720-clip-cull-capabilities`.
+Inspected the failed host NIR workflow runs:
+- Run `42020382423` used the earlier invalid Ninja target
+  `src/compiler/nir/nir_tests`.
+- Run `42020553054` used target `nir_tests`, but its Meson summary still
+  showed `vulkan-drivers: []`; the target was therefore absent. This run
+  predates the latest workflow correction and is not a NIR compile/test
+  failure.
+
+Inspection of `.github/workflows/nir-clip-cull-tests.yml` at the latest
+source revision found the actual remaining cause: the shell command was
+missing a trailing continuation after `-Dvulkan-drivers=panfrost`, so the
+subsequent `-Dpanfrost-kmds=kbase` and other options were not arguments to
+the same `meson setup` invocation. Fixed the line continuation and committed
+the workflow-only correction:
+- Commit: `3ef7647a44c5cd804c1c8e9fba40d96502b29c83`
+- Branch: `experiment/g720-clip-cull-capabilities`
+- No PanVK runtime source or feature flags changed.
+
+A new NIR workflow run is expected from this commit. Its result must be
+checked before claiming the test suite passes. The Android ARM64 build and
+wrapper workflows from source commit `80aea973fed1324c8a53582299ca77c68cc0aba0`
+were queued/in progress at the time of this note; their final results are
+also pending. Next: inspect the new NIR run, verify the Meson summary actually
+contains Panfrost/Kbase and the `nir_tests` target, then fix any genuine
+compile/test failures. Continue to keep clip/cull feature bits disabled.
