@@ -1901,3 +1901,12 @@ An important architecture correction was made during the port:
 - The PanVK GS compile path calls `poly_nir_lower_gs()` and serializes `shader->gs.poly.multistream`; this is substantive implementation work, not just a feature bit.
 - Nevertheless `panvk_vX_physical_device.c` currently exposes `geometryStreams=false`, `maxTransformFeedbackStreams=1`, and `transformFeedbackRasterizationStreamSelect=false`. The extension feature/property combination must be validated as a whole before changing any of these.
 - This makes geometry streams a plausible later capability-audit target, but it is not part of the current clip/cull prototype. Do not raise the stream limits or set `geometryStreams=true` until GS/XFB stream routing, stream-0 rasterization, nonzero streams, and the advertised property interactions pass Vulkan CTS.
+
+### Android-only build result — first successful compile/package
+
+- Android-only run `41938609257` completed **success** on source commit `e9857947b2ee2f244fe07c782cf4166bf06a34de`.
+- Successful steps included checkout verification, host-tool generation, real Android ARM64 libdrm build, Android-only Meson configuration, full compile/staging, driver/manifest/dependency audit, flat Winlator/Adrenotools package creation, and artifact upload.
+- Artifact: `panvk-g720-android-only-experimental-package`, ID `13375054239`, size 16,733,405 bytes, outer ZIP SHA256 `8a7ba3fb3adbcd0a212285876e7a27c8d4e4ceb12747602cf6968eb48892474c`.
+- This validates the prototype's source compilation and packaging on Android ARM64. It does **not** validate shader semantics, Vulkan CTS, or runtime on the actual Dimensity 8400 Ultra/Mali-G720 MC7.
+- The artifact predates the final direct-path safety refinements in `027589f...` and workflow assertion update `f843a225...`; do not import it as a qualified build. Latest-source Android-only run `41938817775` (head `f843a225...`) is still in progress at last check.
+- No FPS benchmark was run and no feature bits were enabled.
