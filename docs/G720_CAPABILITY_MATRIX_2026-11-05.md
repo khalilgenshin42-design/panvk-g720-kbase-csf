@@ -394,3 +394,6 @@ Descriptor writer constraints checked against the current Khronos proposal: YCbC
 
 
 YCbCr count consistency fix: `VkSamplerYcbcrConversionImageFormatProperties::combinedImageSamplerDescriptorCount` is now derived from `panvk_image_get_tex_count(model->arch, format)`, matching the descriptor writer and PanVK descriptor-set layout. Source HEAD `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2`; Android build pending.
+
+
+Intermediate build evidence: Android-only run `42078972694` at source `3e4e7ee3849ebab12c114eef8c6c3a650cd14b8f` passed compile, staging, ELF/libdrm audit, and package upload. It validates the initial writer-command implementation but predates custom-border command/restriction and YCbCr count fixes. Artifact `13438649591` is not the current test package. Exact latest source `c0c8ffa837bb85aa67b2217dbd7b61fb51d796f2` still awaits run `42080294652`.
