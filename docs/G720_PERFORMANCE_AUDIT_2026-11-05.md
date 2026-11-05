@@ -926,3 +926,15 @@ After enabling LLVM, Meson configuration advanced but stopped because
 `libclc` was not installed. Added Ubuntu package `libclc-dev` to the host
 workflow (commit `43bc2ca59b3f5adbc804161f662e9d55617dd5fe`). This is still
 a host CI dependency issue before compilation; no NIR test result exists yet.
+
+
+### Initial vec4 representation regression tests
+
+Added three tests to `src/compiler/nir/tests/clip_cull_distance_tests.cpp`
+for `nir_lower_clip_cull_distance_to_vec4s()`: mixed clip=3/cull=2,
+cull-only size 5, and mixed clip=5/cull=3. They assert the packed
+`gl_ClipDistanceMESA` declaration is an array of vec4s with the expected
+two-slot length. This is declaration-level coverage only; it does not yet
+test dereference rewrites, indirect indexing, or arrayed stage interfaces.
+The tests are separate from gather/merge and do not prove pass order.
+Commit `cec14bb825176cb714e0a6d2e4dab3c7dd44de0e`.
