@@ -4393,3 +4393,10 @@ To avoid relying on Tomb Raider/DXVK 1.7.2 (which does not enable or exercise `V
 - A dedicated `build-vrs-probe` job was added to the existing push workflow to produce artifact `panvk-vrs-probe-win64`.
 
 This is an API/dispatch/device-create smoke test, not a rendering correctness or performance test. It does not submit a draw, so hardware FSR execution still needs a proper CTS/render test. The probe build is queued with the latest workflow update.
+
+
+### Probe follow-up update
+
+The Winlator probe now also creates a graphics command pool/buffer, records `vkCmdSetFragmentShadingRateKHR` at 2x2 with KEEP/KEEP combiners, and ends the command buffer. It still does not submit a draw; it verifies extension dispatch and command recording only.
+
+Latest feature branch head including probe and workflow wiring: `1ec6d129897d7362e2c7b5eafd9d0c73be060924`. Its Android wrapper and Android-only workflows are queued, as is the Windows x64 probe build. Driver source itself remains unchanged from VRS source head `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`.
