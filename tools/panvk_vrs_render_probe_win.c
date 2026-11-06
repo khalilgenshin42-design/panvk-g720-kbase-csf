@@ -501,7 +501,8 @@ main(void)
       get_features2(pds[d], &features);
       LOG("pipelineFragmentShadingRate=%u\n", fsr_features.pipelineFragmentShadingRate);
       LOG("nonTrivialCombinerOps=%u strictMultiplyCombiner=%u\n",
-          fsr_props.fragmentShadingRateNonTrivialCombinerOps,\n          fsr_props.fragmentShadingRateStrictMultiplyCombiner);
+          fsr_props.fragmentShadingRateNonTrivialCombinerOps,
+          fsr_props.fragmentShadingRateStrictMultiplyCombiner);
       if (!fsr_features.pipelineFragmentShadingRate) continue;
 
       VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
