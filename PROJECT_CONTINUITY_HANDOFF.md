@@ -4998,3 +4998,26 @@ Next engineering gate:
 4. Keep primitive and attachment FSR disabled until independently implemented and validated. Do not expose additional unimplemented extensions just to match the stock MediaTek extension list.
 
 No system/vendor driver replacement and no wrapper replacement were performed. The tested driver remains the separately imported custom PanVK package.
+
+
+### VRS source audit and real-render probe implementation started (2026-11-06)
+
+After the user's successful Winlator extension/device/command-recording probe, the VRS branch source was audited directly:
+
+- `src/panfrost/genxml/v12.xml` defines `VRS Draw Rate` as `(log2(width) << 2) | log2(height)`, with 1x1=0, 1x2=1, 2x1=4, 2x2=5, 4x4=10. Its `VRS Combiner` values are Keep=0, Replace=1, Min=2, Max=3, Mul=4.
+- Vulkan's `VkFragmentShadingRateCombinerOpKHR` values are exactly 0..4 in the same order. The current direct enum cast is therefore consistent with the v12 GenXML enum.
+- `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c` writes the encoded draw rate and both combiner values to `PRIMITIVE_FLAGS_2` through the CSF IDVS `TILER_FLAGS2` register when FSR state is dirty. It forces 1x1/KEEP/KEEP when sample shading is active.
+- `src/panfrost/vulkan/panvk_vX_shader.c` decodes the fragment shading-rate system value using width bits [3:2] and height bits [1:0], consistent with the Vulkan SPIR-V fragment-rate encoding; it lowers the fragment-center/sample-position-or-center intrinsic when a pipeline may use VRS.
+- `src/panfrost/vulkan/panvk_vX_physical_device.c` gates `VK_KHR_fragment_shading_rate` and `pipelineFragmentShadingRate` at `PAN_ARCH >= 12`, with primitive and attachment features disabled. Its advertised rates fit the declared 4x4 maximum, 16 coverage-sample limit and 4x rasterization-sample limit.
+- No VRS register-encoding mismatch was found in this pass. The earlier idea of reversing width/height decode is explicitly not supported by the Vulkan SPIR-V encoding; do not change those bit positions.
+
+A new Windows/Winlator offscreen render probe is being developed on `experiment/g720-fragment-shading-rate`:
+- Added `tools/vrs_probe.vert` and `tools/vrs_probe.frag`. The fragment shader emits a coordinate-dependent color pattern based on `gl_FragCoord`, designed to distinguish per-pixel shading from 2x2 shared fragment shading.
+- Added `tools/panvk_vrs_render_probe_win.c`. It dynamically loads the Winlator Vulkan loader, enables pipeline FSR, creates an offscreen RGBA8 target, builds two static graphics pipelines (1x1 control and 2x2 test), submits each draw, waits on a fence, copies the output to coherent host-visible memory, and compares checksums / equal-neighbor counts for the expected 2x2 block signature.
+- Added `.github/workflows/build-vrs-render-probe.yml` to compile GLSL to SPIR-V, embed the SPIR-V arrays, cross-compile the Windows executable with MinGW, and upload a standalone diagnostic artifact.
+- The source was refined to use a per-render framebuffer/target, require coherent host readback memory, explicitly set `basePipelineIndex=-1`, and wait for device idle before cleaning up after a failed post-submit fence wait.
+- Latest VRS experiment branch commit at this point: `d7ff112be106941a7bb10d45b513b0f011d8cc2a`.
+- **Build status is not yet verified.** Do not ask the user to run or import this probe until CI succeeds, the executable is inspected, and the artifact is downloaded and hashed.
+- The probe's pass criterion is intentionally stronger than command recording: both 1x1 and 2x2 draws must submit, complete, and read back; the 2x2 output must differ from 1x1 and show a substantial increase in equal adjacent pixel pairs. A failure is diagnostic, not automatically proof that the GPU lacks VRS; first inspect the exact Vulkan result and readback signatures.
+
+Next work: finish static review and compile the new probe in CI. Then inspect the artifact and only request one controlled Winlator run if it is valid. No PanVK runtime code was changed in this probe-harness step, and no driver or wrapper package needs replacing.
