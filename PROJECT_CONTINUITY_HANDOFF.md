@@ -4839,3 +4839,61 @@ The first user test is now unblocked; the expanded probe job is optional for thi
 - The expanded probe job in run `42218076595` remains stuck/in progress at the MinGW-w64 install step; it adds vendor/device IDs and full extension-list output. Keep monitoring, but do not block the first test on it.
 - Ask the user to import the corrected custom driver into Winlator Mali 1.2, run the existing probe again, and send the new log. Do not replace the system/vendor driver.
 - Do not start a game benchmark or claim FSR performance benefit until the probe passes. If the extension still appears missing, compare the PanVK startup capability-audit line (raw GPU ID, decoded arch, extension-table bit) with the wrapper-visible probe result; the installed wrapper's Android strict setting is still an open possibility.
+
+
+---
+
+## 2026-11-06 continuation — canonical handoff re-read and wrapper-side VRS filter identified
+
+### Canonical continuity source verified
+
+- Re-read the entire canonical `PROJECT_CONTINUITY_HANDOFF.md` on `docs/project-continuity-handoff-2026-11-03` from line 1 through the then-current final line 4842. The file remains the only canonical handoff; no experiment-branch copies were created.
+- Canonical docs branch HEAD before this update: `b0ab753f7ae0da68245bbd110c3acc0effae2f46`.
+- Re-read the related performance audit (`docs/G720_PERFORMANCE_AUDIT_2026-11-05.md`, 1,022 lines) and capability matrix (`docs/G720_CAPABILITY_MATRIX_2026-11-05.md`, 687 lines) on `experiment/g720-performance-audit`.
+- Performance-audit branch HEAD at this check: `d9394de49dc560fe2212a92b71280c372e66b0e6`; this is documentation-only, with driver-source commit still `a2e5ac142b4f0df71cb28204ece4337bace046de`.
+- The VRS work remains isolated on `experiment/g720-fragment-shading-rate`. Do not conflate its PanVK package with the performance-audit branch's 65K heap-threshold package or with the descriptor-heap branch.
+
+### New source-confirmed second VRS enumeration filter
+
+The corrected PanVK package has `-Dandroid-strict=false`, but the selected GameNative wrapper can independently filter the extension after querying the ICD. The public GameNative Mesa `wrapper-25` build path was audited at pinned branch commit `6bcfbaa701a8d1efa7f6c54145495eda5329f767`:
+
+- `meson_options.txt` blob `5a452dad3c02b72b11ef89ac3a736cb3ef8de903` defaults `android-strict=true` and `platform-sdk-version=25`.
+- `.github/scripts/build-wrapper-gamenative.sh` blob `1531d51b223ae276e1d58d6d832d41b4a84a5b52` sets `ANDROID_API=24` for NDK compilation and invokes Meson with `-Dvulkan-drivers=wrapper`, but does not override `android-strict` or `platform-sdk-version`. Thus its default Meson values apply.
+- `meson.build` in that source sets `ANDROID_API_LEVEL` from `platform-sdk-version` and defines `ANDROID_STRICT` when `android-strict` is true.
+- `src/vulkan/util/vk_extensions.py` blob on this pinned source sets `VK_KHR_fragment_shading_rate` minimum allowed Android API to 31.
+- `src/vulkan/wrapper/wrapper_physical_device.c::wrapper_setup_device_extensions()` copies extensions reported by the underlying ICD into the wrapper's supported-extension table. Its `wrapper_EnumerateDeviceExtensionProperties()` then calls `vk_common_EnumerateDeviceExtensionProperties()`.
+- `src/vulkan/runtime/vk_physical_device.c::vk_common_EnumerateDeviceExtensionProperties()` filters supported extensions through `vk_android_allowed_device_extensions` under `#ifdef ANDROID_STRICT`. Therefore a wrapper built with the public defaults (strict=true, SDK 25) will hide FSR even if PanVK advertises it and is itself built strict=false.
+- The Winlator Mali 1.2 source branch `bionic-mali-1.2` confirms `ManageGraphicsDriversFragment.java` lists `wrapper-gamenative.tzst` as a separately updateable wrapper package. Its update flow requires the selected file's basename to match exactly and stores it in the app's private `graphics_driver` directory; the Remove/Reset action restores the bundled wrapper. This is separate from the Adrenotools PanVK ICD import and does not replace Android's system/vendor Vulkan driver.
+- Qualification: this proves the behavior of the public GameNative `wrapper-25` build configuration and common runtime code. The exact provenance/build options of the binary currently bundled in the user's installed app have not been independently extracted. Treat this as the likely second gate, to be resolved by a controlled wrapper package build and runtime probe rather than claiming the installed binary's exact build flags are known.
+
+### Dedicated custom GameNative wrapper build
+
+Added a separate wrapper-only workflow to the VRS branch; no PanVK runtime source or feature bit changed:
+- Workflow file: `.github/workflows/build-wrapper-gamenative-vrs.yml`.
+- Commit: `0b3ac80e49fb6e594d91de9f72a8fa48407fc961`.
+- It checks out GameNative Mesa at pinned commit `6bcfbaa701a8d1efa7f6c54145495eda5329f767`, patches only the wrapper build's Meson invocation with `-Dandroid-strict=false`, preserves the existing Android SDK target (Meson SDK 25; NDK API 24), and packages the result under the exact Winlator Mali update filename `wrapper-gamenative.tzst`.
+- The package adds a `version.txt` label identifying the strict-filter-disabled custom build. The workflow checks Meson reports `android-strict=false`, `platform-sdk-version=25`, verifies `-DANDROID_STRICT` is absent from the wrapper compile commands, checks the archive, and uploads the package plus SHA-256 and Meson configuration report.
+- New wrapper build run: `42220780814`, job `127901980165`. At the latest poll it was still checking out the pinned GameNative source; no wrapper artifact or build success is claimed.
+- The workflow-only commit also triggered unrelated PanVK Android-only and wrapper CI runs `42220781009` and `42220780797`; these do not validate the GameNative custom wrapper.
+
+### VRS probe CI install correction
+
+The expanded Windows probe workflow in run `42218076595` remains stuck at the broad `mingw-w64` meta-package install. To reduce the install set, `.github/workflows/build.yml` now installs only `gcc-mingw-w64-x86-64-posix`, which supplies the x86-64 Windows compiler needed by this probe:
+- Workflow-only commit: `bfd2e522f52986024c7a8fc5eef2ec6ee89da12d`.
+- New probe run: `42220312994`, job `127900417338`; at the latest poll it had not yet reached the MinGW install step.
+- New Android-only run `42220313021` was also triggered by the workflow change. No new probe artifact is available yet.
+- The earlier probe job's MinGW install is still running; do not count it as a completed probe build.
+
+### Corrected device-test gate
+
+The earlier instruction to test the corrected PanVK package immediately is superseded by the wrapper-side finding. Do not ask the user to rerun the probe against the unchanged GameNative wrapper yet.
+
+Next sequence:
+1. Finish and inspect the custom `wrapper-gamenative.tzst` build; require Meson strict=false proof, absence of `ANDROID_STRICT`, archive integrity, AArch64 ELF validation, and SHA-256.
+2. Finish and inspect the expanded Windows probe artifact (full extension list, vendor/device/driver identity).
+3. Only then ask the user to update the wrapper through Winlator Mali's Manage Graphics Drivers screen using the exact file `wrapper-gamenative.tzst`; explain that the app's Remove/Reset action restores its bundled wrapper.
+4. Import the corrected PanVK nested `PanVK-G720-experimental.zip` from Android-only artifact `13502283504` if it is not already installed. Never replace the Android system/vendor Vulkan driver.
+5. Run the probe and correlate its full extension list with the PanVK startup diagnostic `gpu_id`, decoded `arch`, and `KHR_fragment_shading_rate` extension-table bit. Expected G720 result is v12 and bit 1. Require extension presence, `pipelineFragmentShadingRate=true`, successful device creation, and successful dynamic command recording before attempting a rendering test.
+6. Do not claim VRS rendering correctness or performance until a draw is submitted and validated. Tomb Raider/DXVK 1.7.2 remains a regression test only.
+
+No new PanVK runtime source changes, no system-driver replacement, and no VRS performance claims were made in this continuation.
