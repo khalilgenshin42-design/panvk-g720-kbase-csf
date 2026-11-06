@@ -4915,3 +4915,26 @@ The minimal MinGW package correction worked:
 - The dedicated GameNative strict-filter-disabled wrapper workflow is run `42220780814`, job `127901980165`, on source/workflow commit `0b3ac80e49fb6e594d91de9f72a8fa48407fc961`.
 - Pinned GameNative source checkout and dependency installation completed. At the latest poll, the job had advanced to **Build and package GameNative wrapper**; strict=false Meson verification and artifact upload were still pending.
 - No custom `wrapper-gamenative.tzst` artifact exists yet. Do not ask the user to replace the wrapper until this job passes and the package is downloaded/verified.
+
+
+### Correction: GameNative wrapper does not apply Android strict extension filtering
+
+A deeper check of the actual Meson platform-selection logic invalidates the preceding wrapper-side allowlist hypothesis. This correction supersedes the section above that described the GameNative wrapper as a likely second Android-strict filter.
+
+- GameNative `meson.build` on pinned commit `6bcfbaa701a8d1efa7f6c54145495eda5329f767` defines `with_platform_android = _platforms.contains('android')` (line 411).
+- The actual `build-wrapper-gamenative.sh` Meson invocation explicitly uses `-Dplatforms=x11` (line 93), not `-Dplatforms=android`.
+- The `ANDROID_API_LEVEL` and `ANDROID_STRICT` preprocessor definitions are emitted only inside `if with_platform_android` (Meson lines 870-896). Since this wrapper build has only X11 platform support, `ANDROID_STRICT` is **not defined** in its compilation, regardless of the option default `android-strict=true` or default `platform-sdk-version=25`.
+- The wrapper's `vk_common_EnumerateDeviceExtensionProperties()` contains the Android allowlist filter only under `#ifdef ANDROID_STRICT`; the GameNative wrapper build described above therefore does not execute that filter. `wrapper_setup_device_extensions()` copies the underlying ICD extension table, then the common enumerator returns it without Android strict filtering.
+- Thus the public GameNative `wrapper-25` build configuration does not explain a missing FSR extension. The earlier concern was based on the option defaults without following the `with_platform_android` gate. Do not rebuild or replace the wrapper for this reason.
+- The temporary wrapper-only workflow `.github/workflows/build-wrapper-gamenative-vrs.yml` was removed from the VRS branch in commit `aedf0cabc17f4a9ed1febd8d93300e1f17751282`. Its already-started run `42220780814` may continue in GitHub Actions, but any resulting artifact is irrelevant and must **not** be imported. No wrapper replacement is part of the test plan.
+- The prior handoff statement that the wrapper-side allowlist was an unverified possible second gate is now narrowed: it is not present in the audited public GameNative wrapper build path. The exact bundled binary's provenance remains unknown, but the source configuration does not support the proposed filter hypothesis.
+
+### Updated immediate VRS validation plan
+
+The corrected PanVK package and expanded probe are now the only artifacts needed:
+- PanVK package: Android-only artifact `13502283504` from run `42218076513`; nested `PanVK-G720-experimental.zip`, SHA-256 `ba54e040ed1dcd2c9f8148c74a2618f395085f477fc44d7806e67e01b67482b6`. Meson confirmed `android-strict=false`, API 30 retained.
+- Expanded Windows probe: artifact `13503216545` from run `42220312994`; PE32+ x86-64 executable, extracted SHA-256 `4f8462e3d70b960b4a36cc16717a16ba57d7994088b09e712e359b29ec4fb1ca`. It logs vendor/device IDs, driver version, complete device extension list, FSR feature/property/rate data, device creation and dynamic command recording.
+- Keep the user's existing Winlator Mali 1.2 wrapper selection unchanged. Update only the custom PanVK driver through the app's custom-driver importer; do not replace the system/vendor Vulkan driver or the wrapper.
+- Re-run the expanded probe and provide its `panvk_vrs_probe.log`. Correlate the full extension list with PanVK's startup `gpu_id`, decoded architecture, and `KHR_fragment_shading_rate` extension-table bit.
+- If FSR remains missing, the probe's device/vendor/driver identity and PanVK startup diagnostic now let us isolate driver architecture detection, extension table state, loader/ICD selection, or a different wrapper binary without changing more components speculatively.
+
