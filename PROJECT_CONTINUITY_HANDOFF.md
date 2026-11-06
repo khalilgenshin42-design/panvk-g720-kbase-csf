@@ -4430,3 +4430,41 @@ The previously in-progress wrapper workflow `42137715709` has now completed succ
 ### Exact-source wrapper validation progress
 
 For the driver-source head `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`, wrapper release compile and artifact upload have passed in run `42138343235`; debugoptimized compile is still in progress. The exact-head Android-only package workflow `42138343360` has passed checkout/source verification and is installing build dependencies. The Windows probe workflow is queued behind the wrapper jobs.
+
+
+## 2026-11-06 continuation — exact-head VRS wrapper builds passed; Android package pending
+
+### Exact source revision
+
+- Feature branch: `experiment/g720-fragment-shading-rate`
+- Driver source HEAD: `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`
+- The exact-head wrapper workflow is run `42138343235`.
+
+### Wrapper build result
+
+Both Android ARM64 wrapper configurations completed successfully against the exact source HEAD:
+- Release job: SUCCESS; Meson configure, full project compile, and artifact upload passed.
+- Debugoptimized job: SUCCESS; Meson configure, full project compile, and artifact upload passed.
+
+Artifacts:
+- Release wrapper artifact ID: `13467245575`, SHA-256 digest: `1d6d68693f1f22e5be685c50421e6bb68267eeef103449bd3e6e52dd61621143`.
+- Debugoptimized wrapper artifact ID: `13468145780`, SHA-256 digest: `63e9901f3849bd8d2128b9eab4374cc2b7cf7230bbb7abf3d4843991b8af7d6f`.
+- Both artifacts are tied by GitHub metadata to branch `experiment/g720-fragment-shading-rate` and exact SHA `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`.
+
+These are wrapper build artifacts, not the flat Android-only Winlator driver-import package. They establish compile success for the wrapper build path only.
+
+### Android-only package workflow
+
+- Exact-head Android-only workflow run: `42138343360`.
+- At the time of this update, checkout and source verification passed; dependency installation was still in progress. Host-tool generation, Android ARM64 libdrm, Android-only configure/compile, ELF/dependency audit, flat package creation and upload had not yet completed.
+- No exact-head Android-only package artifact exists yet. Do not send an older VRS package to the user.
+
+### Winlator probe workflow
+
+- Probe workflow run: `42138721988`.
+- At the time of this update, the workflow jobs were queued. No Windows probe artifact is available yet.
+- The probe source records extension/feature/property enumeration, device creation with pipeline FSR enabled, and a 2x2 KEEP/KEEP command-buffer recording. It does not submit a draw and is not a rendering correctness test.
+
+### User action gate
+
+Do not request device testing until the exact-head Android-only package passes all compile, ELF/libdrm, dependency and flat-package audits. The wrapper builds passing do not replace that gate. Keep the Android vendor/system Vulkan driver untouched; eventual device testing must use Winlator Mali 1.2's custom driver importer only. Tomb Raider/DXVK 1.7.2 remains a regression check, not a VRS performance test, because its captured enabled extension list did not include `VK_KHR_fragment_shading_rate`.
