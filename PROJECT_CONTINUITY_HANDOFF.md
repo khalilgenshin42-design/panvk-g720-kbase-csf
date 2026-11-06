@@ -4242,3 +4242,61 @@ Next engineering work after the user supplies runtime evidence: diagnose any loa
 ### Repository inventory correction (2026-11-05)
 
 A fresh branch search after the descriptor-heap work found 26 branches in the repository. The canonical root handoff remains only on `docs/project-continuity-handoff-2026-11-03`; the isolated implementation remains `experiment/g720-descriptor-heaps` at `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. No branch was deleted or merged during this pass.
+
+
+---
+
+## 2026-11-06 — Tomb Raider descriptor-heap runtime benchmark and next capability investigation
+
+### User test result
+
+User imported the exact-head descriptor-heap package and ran Tomb Raider. Reported:
+- Minimum: 7.9 FPS
+- Maximum: 18.0 FPS
+- Average: 13.6 FPS
+
+This proves the package can be loaded far enough to run the workload and produce a benchmark, but does not prove the descriptor-heap path is exercised or correct for real descriptor-heap API consumers.
+
+### Uploaded diagnostic archive reviewed
+
+Archive: `TombRaider_logs_2026-11-06_01-24-09.zip`
+Files: `wine_debug.log`, `TombRaider_d3d11.log`, `TombRaider_dxgi.log`, `TombRaider_d3d9.log`.
+
+Observations:
+- DXVK is **v1.7.2**, a legacy version.
+- D3D11 feature level 11_0 is selected.
+- DXVK logs 4 compiler threads.
+- Reported Vulkan API is 1.3.354; reported device string is `Wrapper(Mali-G720 MC7)`; driver version string is `26.2.149`.
+- DXVK's enabled device-extension list does not include `VK_EXT_descriptor_heap`; therefore the previous descriptor-heap work is not expected to directly improve this DX11 workload. Do not attribute the 13.6 FPS result to descriptor heaps or infer that heap writes are exercised.
+- Swapchain is 900x506, with immediate and FIFO modes reported at different setup points.
+- Effective DXVK configuration includes `d3d11.maxQueuedFrames=1`, `d3d11.allowMapFlagNoWait=True`, `d3d11.relaxedBarriers=True`, `d3d11.ignoreGraphicsBarriers=True`, `dxvk.useEarlyDiscard=True`, `dxvk.memoryTrack=True`, and 4 compiler threads. These are material test variables; preserve the current test as a recorded baseline and do not change them silently in the next comparison.
+- Wine log ends with an assertion in `winevulkan/loader_thunks.c` at `vkCreateImage`, followed by X display teardown. This archive excerpt does not contain a clear Kbase GPU fault status comparable to the earlier 0x88 shareability fault. Do not assume the old fault recurred.
+
+### Next capability candidate: VK_KHR_fragment_shading_rate (VRS)
+
+A fresh capability review identified VRS as a better hardware-backed feature candidate than ray query for the **Mali-G720** variant:
+- Arm's Mali-G720 product support page lists variable rate shading, including pipeline, primitive, and attachment rates up to 4x4.
+- The Khronos extension exposes independent `pipelineFragmentShadingRate`, `primitiveFragmentShadingRate`, and `attachmentFragmentShadingRate` feature bits.
+- Current PanVK branch does not advertise `VK_KHR_fragment_shading_rate`; physical-device properties explicitly state that fragment shading rate is not implemented, and the property `fragmentShadingRateClampCombinerInputs` is false.
+- This is real driver work, not a feature-table-only change. At minimum, audit hardware packet/register encoding, dynamic pipeline state, pipeline create-info handling, per-primitive shader output lowering, attachment image layout/usage and format support, query commands, limits/combiners, and Vulkan validation. Implement a narrowly scoped first tier (pipeline FSR only) only if the Mali G720 hardware path and spec requirements can be established; do not advertise primitive/attachment bits prematurely.
+- VRS is a performance-oriented capability, but it only improves a workload if the application/API translation layer actually requests non-1x1 shading rates. The current DXVK 1.7.2 Tomb Raider run is not known to use VRS. A new extension alone cannot be expected to raise this benchmark.
+
+### Branch created
+
+- New isolated research branch: `experiment/g720-fragment-shading-rate`
+- Base: exact descriptor-heap source HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`
+- No driver source changes have been made on this branch yet.
+- Keep descriptor-heap branch intact as the benchmarked package baseline.
+
+### Important correction about ray tracing
+
+Do not equate Mali-G720 with Immortalis-G720. Hardware ray tracing is associated with Immortalis variants; the ordinary Mali-G720 MC7 target must not be assumed to have a ray-tracing unit. Do not add `VK_KHR_ray_query` merely because the architecture family name is similar. Any software ray-query implementation would be a major feature project and is not a sensible FPS optimization for this DX11 benchmark.
+
+### Next engineering gates
+
+1. Continue auditing the G720 VRS command/register path and PanVK pipeline/dynamic-state architecture on `experiment/g720-fragment-shading-rate`.
+2. Determine which FSR modes the actual Xiaomi 15T stock Vulkan driver exposes; use the user's device report if available, but do not block source research waiting for it.
+3. Implement and test only the subset that can be backed by hardware and complete Vulkan semantics. Keep all other feature bits false.
+4. Add targeted unit/CTS coverage for reported rates, pipeline state, dynamic state, combiners, and validation.
+5. Build Android ARM64, run ELF/package audits, then issue a new isolated Winlator package with checksums.
+6. For performance comparisons, record DXVK version/config, resolution, game settings, thermal state, and same benchmark segment. The current 13.6 FPS baseline is not directly comparable to tests with different wrapper or DXVK versions.
