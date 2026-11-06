@@ -5295,3 +5295,11 @@ After correcting the prior source-audit miss, a diagnostic-only source change wa
 - CI triggered by feature branch update: Android NDK Wrapper Variant run `42269851892` and Android-only PanVK run `42269851869`. At handoff update time both were in progress; inspect their results/artifacts before asking the user to install anything.
 - Once the diagnostic Android package is built, the next test should run the same Winlator probe unchanged. Collect both the normal probe log and Android/Mesa driver logs containing `PANVK_VRS_DIAG`. The critical outcome is the last checkpoint printed before the 2x2 pipeline create stall.
 - Do not modify the extension advertisement or disable VRS yet: the CSF v12 draw-state implementation exists and the 2x2 hardware enum mapping is consistent with the GenXML. The pipeline-create hang remains localized to an earlier stage and needs instrumentation evidence.
+
+
+### Independent Arm confirmation of Mali-G720 VRS capability (2026-11-06)
+
+Checked Arm's official Mali-G720 product support page. Arm lists Variable Rate Shading support on Mali-G720 for pipeline, primitive, and attachment shading rates, up to 4x4:
+- https://support.arm.com/compute-ip/mali-g720
+
+This confirms the GPU family has VRS capability in hardware; it does not by itself prove every PanVK path or every Vulkan feature/property is correctly implemented. The current PanVK branch intentionally exposes only pipeline FSR, and the CSF v12 draw backend packs the pipeline rate and combiner state. Keep primitive and attachment FSR disabled until those separate paths are implemented and validated.
