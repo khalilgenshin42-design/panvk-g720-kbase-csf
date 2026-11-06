@@ -4600,3 +4600,18 @@ Interpretation:
 - Possible causes to discriminate: wrong/old Android custom-driver package actually imported; runtime PanVK architecture macro/compiled vX path not >=12; extension table registration/dispatch generation or build configuration; probe loading a different ICD/library than expected. The driver string alone does not prove the exact Android package artifact was imported.
 - Next audit: verify which Android package is installed in Winlator and its hash/build identity; inspect the exact VRS build's generated extension/entrypoint registration and per-arch compilation; add probe diagnostics for physical-device properties (vendorID, deviceID, driverID, driverVersion, deviceName, API version) and enumerate the full extension list. Do not change extension exposure to unconditional true as a workaround.
 - User is not yet asked for another test. First resolve the source/build/runtime discrepancy and produce a corrected Android package plus probe.
+
+## VRS missing-extension follow-up — 2026-11-06
+
+Further source/build audit after the first failed Winlator probe:
+
+- The VRS source branch's `src/panfrost/vulkan/meson.build` explicitly generates device entrypoints with `--device-prefix panvk_v12` and builds the `panvk_v12` static library with `-DPAN_ARCH=12`. The Android-only CI log for run `42140194412` confirms compilation of `src/panfrost/vulkan/libpanvk_v12.a` objects. Therefore the v12 backend is present in the package build; this rules out the simple "v12 backend omitted from Meson" explanation.
+- `panvk_macros.h` dispatches arch 12 to `panvk_v12_*`; arch 11 dispatches to `panvk_v10_*`. The physical-device kbase init accepts arch 11 and 12. If the kernel-reported GPU ID unexpectedly decodes as arch 11, the FSR gate will be false even if the marketing/device label says G720. This is a hypothesis only; Mali-G720 is documented as v12, and the device's actual `gpu_id` has not yet been logged.
+- The initial Windows probe was too sparse: it logged only deviceName, API version, driverName/driverInfo, and whether the one extension was found. It did not log vendorID/deviceID, driverVersion, extension count, full extension list, or raw kernel GPU ID/decoded PanVK arch.
+- Diagnostic commits on `experiment/g720-fragment-shading-rate`:
+  - `9aa4bdcc1201d5cd2de08d68df104652bb6ca346`: kbase initialization logs raw `gpu_id`, decoded `arch`, and the supported-extension-table `KHR_fragment_shading_rate` bit immediately after architecture dispatch.
+  - `5df8d3fb0243e1e3691b5b10ccaa1e73c180ab80`: expands `tools/panvk_vrs_probe_win.c` to log Vulkan vendorID/deviceID, driverVersion, extension count, and every enumerated device extension with specVersion.
+  - The second commit is branch HEAD and has the first diagnostic commit as its parent (both changes are present).
+- CI push run `42217026859` for diagnostic HEAD `5df8d3fb0243e1e3691b5b10ccaa1e73c180ab80` was observed in progress. Do not call it successful or ask for testing until the Android wrapper and relevant Android-only package jobs finish and artifacts are inspected.
+- Next: inspect run `42217026859` and any paired Android-only workflow run. If only wrapper/probe artifacts are built, trigger the Android-only package workflow for the same exact HEAD. Once a new Android package is successfully built, user must import that exact package (not the previous artifact) and rerun the expanded probe. Correlate its full Vulkan extension list with the startup log's `gpu_id`, `arch`, and extension-table bit.
+- Do not force the extension on, and do not change FSR feature semantics until this correlation identifies the fault.
