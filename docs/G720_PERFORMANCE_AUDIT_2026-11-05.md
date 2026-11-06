@@ -990,3 +990,32 @@ Use the verified 65K-default package from workflow artifact `13442371778`. It ha
 4. Leave `PANVK_KBASE_PROFILE`, `PANVK_DESCRIPTOR_PROFILE`, `PANVK_MEMPOOL_PROFILE`, `PANVK_KBASE_DIAG_MEM_FLAGS`, and `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` unset in both performance runs. Keep DXVK 1.7.2, wrapper, resolution, quality, scene, and thermal conditions matched. Record min/max/average and visual/stability observations; ideally repeat each value.
 
 No driver source was changed in this continuation. No FPS improvement is claimed.
+
+## 2026-11-06 12:25 UTC — exact-head CI and artifact monitoring
+
+Active branch HEAD: `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`. The HEAD commit is documentation-only; latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`.
+
+### Exact-head runs
+
+- Android-only [run 42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218), job `127885224447`: completed SUCCESS. Checkout, verification, Python/dependencies, host tools, real Android ARM64 libdrm, Android-only configure, compile/stage, driver/manifest/dependency audit, flat package, and artifact upload all passed. No pending/failed steps.
+- Android wrapper [run 42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167):
+  - Release job `127885224388`: completed SUCCESS; checkout, memfd_create patch, Python/dependencies, host tools, Meson configure, compile, and artifact upload passed.
+  - Debugoptimized job `127885224836`: completed SUCCESS; the same substantive steps passed.
+- No failed job exists on the latest exact HEAD; there is no actionable CI failure to diagnose.
+
+### Artifact verification
+
+Android-only artifact `13501237590`:
+- Outer ZIP: 16,753,940 bytes; SHA-256 `f5e58163b3caf3f9fa5791dedf56ade82fd87d17dcfdb42722cd846e51ed825a`; ZIP test passed.
+- Inner `PanVK-G720-experimental.zip`: SHA-256 `14f7b13ab1735daffd31a0723c1f6d949155e5c6570f1980f98291cb54383e86`; ZIP test passed.
+- Exactly four flat-root files: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, `SHA256SUMS`. Member hashes pass: driver `362ad05b978c673b82bf1e66b4ab553f8ea79154c8c5a0a6731b65648359bfb1`, private libdrm `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`, metadata `064c52b79a1d0dc14aab89fa98857d4a905c2167c41d7ee28536b81337b82e81`.
+- Metadata version `26.3.0-devel-android-kbase-b17b98cef92f`, minimum API 30. Both libraries are ELF64 AArch64/Android API 30. Driver RUNPATH `$ORIGIN`, NEEDED private `libpanvk_drm.so`; private libdrm needs only `libc.so`. The workflow's missing-DRM-symbol report is empty. Staged ICD manifest reports API version `1.4.354`.
+- Classification: **static/package validated**, not device/runtime validated or Vulkan conformant.
+
+Wrapper artifacts from run `42215758167`:
+- Release artifact `13502135385`: outer SHA-256 `5647fe999a9225123116118eb26ef91f277eef38d4ea2c2a29e98e965d3b0f04`; extracted library SHA-256 `edce8b3dd4fea68ffda7e44622d4c778cdaf0a22fc219cc2b4368335060aa80a`.
+- Debugoptimized artifact `13502061037`: outer SHA-256 `fcd0b4d2dcba93c67f3c09dedb6cdc4ab843cd7eef45f34813e90916adbd4159`; extracted library SHA-256 `eebdc6229236e4c91204bd01148409c2b91c71977d1cf71a44a25181b3617477`.
+- Both ZIPs contain only `libvulkan_panfrost.so`; both extracted files are ELF64 AArch64/Android API 30. RUNPATH is `$ORIGIN/../../android_stub`; dependencies include `libdrm.so` and X11/XCB libraries. The artifacts do not bundle a manifest, checksum file, `android_stub/libdrm.so`, or X11 dependency closure.
+- Classification: **build passed / raw ELF checked**, not independently package-validated or proven self-contained. External dependency resolution must be validated in the intended wrapper runtime.
+
+No source or workflow changes were made. This monitoring addendum is documentation-only; commit message uses `[skip ci]` to avoid triggering another build. Keep the Android-only package separate in Winlator; never replace the phone's system/vendor Vulkan driver or modify the live kernel.
