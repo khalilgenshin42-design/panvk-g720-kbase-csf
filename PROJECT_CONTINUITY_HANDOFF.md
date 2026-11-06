@@ -4747,3 +4747,12 @@ The workflow edit was verified in the committed file: `-Dplatform-sdk-version=30
 - Run the expanded probe and confirm `VK_KHR_fragment_shading_rate` appears in the complete extension list, `pipelineFragmentShadingRate=true`, device creation succeeds, and dynamic command recording succeeds.
 
 Do not yet claim VRS is device-validated. No FSR rendering draw has been submitted by the current probe. Keep the custom ICD isolated from the Android system/vendor Vulkan driver.
+
+
+
+### Follow-up architecture cross-check
+
+- `src/panfrost/model/pan_model.c` maps the G720 product family through `FIFTHGEN_MODEL(PAN_PROD_ID(12, 8, 0), ... "G720" ...)`, confirming the model-table architecture expected for a real G720 is v12.
+- `src/panfrost/vulkan/panvk_macros.h::panvk_arch_dispatch` routes architecture 11 to the v10 implementation and architecture 12 to the v12 implementation. Therefore, if the Kbase diagnostic reports arch 11, the driver is not dispatching the G720 v12 implementation; investigate the raw GPU ID/model decoding rather than weakening the VRS gate.
+- Mesa's public Panfrost driver documentation independently classifies G720 as 5th Gen (v12). This supports the expected classification but does not replace the device's raw Kbase diagnostic.
+- The Android strict-filter diagnosis remains the primary explanation for the extension's absence because the build's API-30 allowlist condition is independently proven. The next build must disable strict filtering and still log/verify the actual Kbase architecture.
