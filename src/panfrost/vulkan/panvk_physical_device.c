@@ -2343,8 +2343,10 @@ panvk_GetPhysicalDeviceFragmentShadingRatesKHR(
       {{4, 4}, VK_SAMPLE_COUNT_1_BIT},
       {{4, 2}, VK_SAMPLE_COUNT_1_BIT},
       {{2, 4}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT},
-      {{2, 2}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_4_BIT},
-      {{2, 1}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_4_BIT},
+      {{2, 2}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT |
+                  VK_SAMPLE_COUNT_4_BIT},
+      {{2, 1}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT |
+                  VK_SAMPLE_COUNT_4_BIT},
       {{1, 2}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT |
                   VK_SAMPLE_COUNT_4_BIT},
       {{1, 1}, ~0u},
