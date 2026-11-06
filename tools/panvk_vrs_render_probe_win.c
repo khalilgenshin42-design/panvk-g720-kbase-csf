@@ -138,10 +138,16 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
    };
-   if (create_image(device, &image_info, NULL, &image) != VK_SUCCESS)
+   LOG("    stage: vkCreateImage begin\n");
+   VkResult step_result = create_image(device, &image_info, NULL, &image);
+   LOG("    stage: vkCreateImage result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
    VkMemoryRequirements image_req;
+   LOG("    stage: vkGetImageMemoryRequirements begin\n");
    get_image_memory_requirements(device, image, &image_req);
+   LOG("    stage: image memory size=%llu typeBits=0x%x\n",
+       (unsigned long long)image_req.size, image_req.memoryTypeBits);
    uint32_t image_type = memory_type(mem_props, image_req.memoryTypeBits,
                                      0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
    if (image_type == UINT32_MAX)
@@ -151,8 +157,15 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .allocationSize = image_req.size,
       .memoryTypeIndex = image_type,
    };
-   if (allocate_memory(device, &image_alloc, NULL, &image_mem) != VK_SUCCESS ||
-       bind_image_memory(device, image, image_mem, 0) != VK_SUCCESS)
+   LOG("    stage: vkAllocateMemory(image) begin\n");
+   step_result = allocate_memory(device, &image_alloc, NULL, &image_mem);
+   LOG("    stage: vkAllocateMemory(image) result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
+      goto done;
+   LOG("    stage: vkBindImageMemory begin\n");
+   step_result = bind_image_memory(device, image, image_mem, 0);
+   LOG("    stage: vkBindImageMemory result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
 
    VkImageViewCreateInfo view_info = {
@@ -164,7 +177,10 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
                      VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
    };
-   if (create_image_view(device, &view_info, NULL, &image_view) != VK_SUCCESS)
+   LOG("    stage: vkCreateImageView begin\n");
+   step_result = create_image_view(device, &view_info, NULL, &image_view);
+   LOG("    stage: vkCreateImageView result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
 
    VkFramebufferCreateInfo framebuffer_info = {
@@ -176,9 +192,11 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .height = H,
       .layers = 1,
    };
+   LOG("    stage: vkCreateFramebuffer begin\n");
    if (!create_framebuffer || !destroy_framebuffer ||
-       create_framebuffer(device, &framebuffer_info, NULL, &framebuffer) != VK_SUCCESS)
+       (step_result = create_framebuffer(device, &framebuffer_info, NULL, &framebuffer)) != VK_SUCCESS)
       goto done;
+   LOG("    stage: vkCreateFramebuffer result=%d\n", step_result);
 
    VkBufferCreateInfo buffer_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -186,10 +204,16 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
    };
-   if (create_buffer(device, &buffer_info, NULL, &staging) != VK_SUCCESS)
+   LOG("    stage: vkCreateBuffer begin\n");
+   step_result = create_buffer(device, &buffer_info, NULL, &staging);
+   LOG("    stage: vkCreateBuffer result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
    VkMemoryRequirements buffer_req;
+   LOG("    stage: vkGetBufferMemoryRequirements begin\n");
    get_buffer_memory_requirements(device, staging, &buffer_req);
+   LOG("    stage: buffer memory size=%llu typeBits=0x%x\n",
+       (unsigned long long)buffer_req.size, buffer_req.memoryTypeBits);
    uint32_t buffer_type = memory_type(mem_props, buffer_req.memoryTypeBits,
                                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -200,8 +224,15 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .allocationSize = buffer_req.size,
       .memoryTypeIndex = buffer_type,
    };
-   if (allocate_memory(device, &buffer_alloc, NULL, &buffer_mem) != VK_SUCCESS ||
-       bind_buffer_memory(device, staging, buffer_mem, 0) != VK_SUCCESS)
+   LOG("    stage: vkAllocateMemory(staging) begin\n");
+   step_result = allocate_memory(device, &buffer_alloc, NULL, &buffer_mem);
+   LOG("    stage: vkAllocateMemory(staging) result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
+      goto done;
+   LOG("    stage: vkBindBufferMemory begin\n");
+   step_result = bind_buffer_memory(device, staging, buffer_mem, 0);
+   LOG("    stage: vkBindBufferMemory result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
 
    VkPipelineShaderStageCreateInfo stages[2] = {
@@ -263,8 +294,11 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .subpass = 0,
       .basePipelineIndex = -1,
    };
-   if (create_graphics_pipelines(device, VK_NULL_HANDLE, 1, &pipeline_info,
-                                 NULL, &pipeline) != VK_SUCCESS)
+   LOG("    stage: vkCreateGraphicsPipelines rate=%ux%u begin\n", rate.width, rate.height);
+   step_result = create_graphics_pipelines(device, VK_NULL_HANDLE, 1, &pipeline_info,
+                                           NULL, &pipeline);
+   LOG("    stage: vkCreateGraphicsPipelines result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
 
    VkCommandPoolCreateInfo pool_info = {
@@ -272,7 +306,10 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
       .queueFamilyIndex = queue_family,
    };
-   if (create_command_pool(device, &pool_info, NULL, &pool) != VK_SUCCESS)
+   LOG("    stage: vkCreateCommandPool begin\n");
+   step_result = create_command_pool(device, &pool_info, NULL, &pool);
+   LOG("    stage: vkCreateCommandPool result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
    VkCommandBufferAllocateInfo cb_alloc = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -284,14 +321,20 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    if (!alloc_cb)
       goto done;
    VkCommandBuffer cb;
-   if (alloc_cb(device, &cb_alloc, &cb) != VK_SUCCESS)
+   LOG("    stage: vkAllocateCommandBuffers begin\n");
+   step_result = alloc_cb(device, &cb_alloc, &cb);
+   LOG("    stage: vkAllocateCommandBuffers result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
 
    VkCommandBufferBeginInfo begin = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
    };
-   if (begin_command_buffer(cb, &begin) != VK_SUCCESS)
+   LOG("    stage: vkBeginCommandBuffer begin\n");
+   step_result = begin_command_buffer(cb, &begin);
+   LOG("    stage: vkBeginCommandBuffer result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
    VkClearValue clear = {.color = {{0, 0, 0, 1}}};
    VkRenderPassBeginInfo rp_begin = {
@@ -330,7 +373,10 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    cmd_pipeline_barrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
                         VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 1,
                         &host_barrier, 0, NULL);
-   if (end_command_buffer(cb) != VK_SUCCESS)
+   LOG("    stage: vkEndCommandBuffer begin\n");
+   step_result = end_command_buffer(cb);
+   LOG("    stage: vkEndCommandBuffer result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
 
    VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
@@ -341,21 +387,33 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .commandBufferCount = 1,
       .pCommandBuffers = &cb,
    };
-   if (queue_submit(queue, 1, &submit, fence) != VK_SUCCESS)
+   LOG("    stage: vkQueueSubmit begin\n");
+   step_result = queue_submit(queue, 1, &submit, fence);
+   LOG("    stage: vkQueueSubmit result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
    submitted = 1;
    PFN_vkWaitForFences wait_fences = LOAD_D(WaitForFences);
-   if (!wait_fences || wait_fences(device, 1, &fence, VK_TRUE, 30ull * 1000ull * 1000ull * 1000ull) != VK_SUCCESS)
+   LOG("    stage: vkWaitForFences begin (30s)\n");
+   step_result = wait_fences ? wait_fences(device, 1, &fence, VK_TRUE,
+                                           30ull * 1000ull * 1000ull * 1000ull)
+                             : VK_ERROR_INITIALIZATION_FAILED;
+   LOG("    stage: vkWaitForFences result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
 
    void *mapped = NULL;
-   if (map_memory(device, buffer_mem, 0, IMAGE_BYTES, 0, &mapped) != VK_SUCCESS)
+   LOG("    stage: vkMapMemory begin\n");
+   step_result = map_memory(device, buffer_mem, 0, IMAGE_BYTES, 0, &mapped);
+   LOG("    stage: vkMapMemory result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
       goto done;
    memcpy(pixels, mapped, IMAGE_BYTES);
    unmap_memory(device, buffer_mem);
    ok = 1;
 
 done:
+   LOG("    render_rate cleanup: ok=%d submitted=%d\n", ok, submitted);
    if (submitted && !ok && device_wait_idle)
       device_wait_idle(device);
    if (fence && destroy_fence) destroy_fence(device, fence, NULL);
