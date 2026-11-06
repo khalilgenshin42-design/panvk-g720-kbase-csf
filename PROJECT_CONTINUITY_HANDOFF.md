@@ -5021,3 +5021,25 @@ A new Windows/Winlator offscreen render probe is being developed on `experiment/
 - The probe's pass criterion is intentionally stronger than command recording: both 1x1 and 2x2 draws must submit, complete, and read back; the 2x2 output must differ from 1x1 and show a substantial increase in equal adjacent pixel pairs. A failure is diagnostic, not automatically proof that the GPU lacks VRS; first inspect the exact Vulkan result and readback signatures.
 
 Next work: finish static review and compile the new probe in CI. Then inspect the artifact and only request one controlled Winlator run if it is valid. No PanVK runtime code was changed in this probe-harness step, and no driver or wrapper package needs replacing.
+
+
+### VRS combiner capability correction and extended GPU test (2026-11-06)
+
+A second pass over the Vulkan properties exposed one conservative setting that did not match the v12 hardware register definitions:
+
+- The v12 GenXML `VRS Combiner` enum explicitly defines `Keep=0`, `Replace=1`, `Min=2`, `Max=3`, and `Mul=4`.
+- PanVK's draw path writes the Vulkan combiner enum values directly into the two hardware combiner fields; the enum values match exactly.
+- The physical-device properties had nevertheless reported `fragmentShadingRateNonTrivialCombinerOps=false`, which tells Vulkan applications that MIN/MAX/MUL are unavailable. This is inconsistent with the v12 register interface and unnecessarily constrains translation layers that need nontrivial D3D12 VRS combiners.
+- Updated `src/panfrost/vulkan/panvk_vX_physical_device.c` to report `fragmentShadingRateNonTrivialCombinerOps = PAN_ARCH >= 12`. `fragmentShadingRateStrictMultiplyCombiner` remains false for now; the extended render probe will compare actual MUL output with the reported property before this is treated as hardware-verified. No primitive or attachment FSR feature was enabled.
+- Source change commit: `1991b323ddb3ccc3ac8f71d4c6b65bf395ce8d35`.
+
+The render probe was extended to query and log `fragmentShadingRateNonTrivialCombinerOps` and `fragmentShadingRateStrictMultiplyCombiner`, then render/read back five cases:
+1. 1x1 with KEEP/KEEP (fine-rate control).
+2. 2x2 with KEEP/KEEP.
+3. 2x2 with MAX/KEEP (should preserve 2x2 against the default 1x1 primitive rate).
+4. 2x2 with MIN/KEEP (should reduce to 1x1).
+5. 1x1 with MUL/KEEP (distinguishes strict vs non-strict multiply behavior according to the queried property).
+
+The probe checks GPU submission/fence/readback, the expected 2x2 repeated-pixel signature, and output equivalence for MIN/MAX/MUL against the property value. It now queries FSR properties only after confirming the extension is present.
+
+Latest probe source commit: `12379968b4eca4ed074c2c72b9d8d764851cd5e4` on `experiment/g720-fragment-shading-rate`. The CI build and artifact inspection are still pending. Do not give the user a download or request a device run until the executable has compiled, been inspected, and the matching Android ICD build containing the combiner-property correction has succeeded.
