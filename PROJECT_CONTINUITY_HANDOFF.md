@@ -5569,3 +5569,10 @@ No artifact ID, ZIP, driver SHA256, successful build, or device validation exist
 
 
 CI progression follow-up (same 2026-11-07 recheck): a later jobs poll shows **Generate host tools completed successfully** and **Build real Android ARM64 libdrm** is now `in_progress`. The remaining Android configure/compile/audit/package/upload steps are pending, and the run-level timestamp is still stale. Artifact listing is currently empty. This is genuine step progression, but still no build/package success and no device test request is appropriate yet.
+
+
+### 2026-11-07 CI progression — Android compile/staging underway
+
+A subsequent poll of workflow run `42313022389` (source `00ed7243e5dea048361a1682753b7e4630450bb8`) confirms two more successful steps: **Build real Android ARM64 libdrm** and **Configure Android-only build**. The job has advanced to **Compile and stage Android install**, currently `in_progress`. The dependency setup, host-tool generation, libdrm build, and Android-only configuration are all reported successful. Audit, flat Winlator package creation, and artifact upload remain pending; artifact listing remains empty. The run-level updated timestamp remains stale, and job-log download currently returns 404 while active.
+
+This is meaningful build progress, but not yet proof that PanVK compiled or that a package exists. No phone action is required. Continue checking the compile step, then require the symbol/dependency audit and package artifact before giving the user a download or asking for the VRS render-probe run.
