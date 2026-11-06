@@ -333,11 +333,91 @@ main(void)
       if (result == VK_SUCCESS) {
          PFN_vkDestroyDevice destroy_device =
             (PFN_vkDestroyDevice)get_device_proc_addr(device, "vkDestroyDevice");
+         PFN_vkCreateCommandPool create_command_pool =
+            (PFN_vkCreateCommandPool)get_device_proc_addr(device,
+                                                           "vkCreateCommandPool");
+         PFN_vkAllocateCommandBuffers allocate_command_buffers =
+            (PFN_vkAllocateCommandBuffers)get_device_proc_addr(
+               device, "vkAllocateCommandBuffers");
+         PFN_vkBeginCommandBuffer begin_command_buffer =
+            (PFN_vkBeginCommandBuffer)get_device_proc_addr(
+               device, "vkBeginCommandBuffer");
+         PFN_vkEndCommandBuffer end_command_buffer =
+            (PFN_vkEndCommandBuffer)get_device_proc_addr(
+               device, "vkEndCommandBuffer");
+         PFN_vkDestroyCommandPool destroy_command_pool =
+            (PFN_vkDestroyCommandPool)get_device_proc_addr(
+               device, "vkDestroyCommandPool");
+         PFN_vkCmdSetFragmentShadingRateKHR cmd_set_shading_rate =
+            (PFN_vkCmdSetFragmentShadingRateKHR)get_device_proc_addr(
+               device, "vkCmdSetFragmentShadingRateKHR");
+
+         if (create_command_pool && allocate_command_buffers &&
+             begin_command_buffer && end_command_buffer &&
+             destroy_command_pool && cmd_set_shading_rate) {
+            VkCommandPoolCreateInfo pool_info = {
+               .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+               .queueFamilyIndex = graphics_queue,
+            };
+            VkCommandPool pool = VK_NULL_HANDLE;
+            VkResult pool_result =
+               create_command_pool(device, &pool_info, NULL, &pool);
+
+            if (pool_result == VK_SUCCESS) {
+               VkCommandBufferAllocateInfo alloc_info = {
+                  .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                  .commandPool = pool,
+                  .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                  .commandBufferCount = 1,
+               };
+               VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+               VkResult alloc_result =
+                  allocate_command_buffers(device, &alloc_info,
+                                            &command_buffer);
+               if (alloc_result == VK_SUCCESS) {
+                  VkCommandBufferBeginInfo begin_info = {
+                     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                  };
+                  VkResult begin_result =
+                     begin_command_buffer(command_buffer, &begin_info);
+                  if (begin_result == VK_SUCCESS) {
+                     VkExtent2D fragment_size = {2, 2};
+                     VkFragmentShadingRateCombinerOpKHR combiners[2] = {
+                        VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
+                        VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
+                     };
+                     cmd_set_shading_rate(command_buffer, &fragment_size,
+                                          combiners);
+                     VkResult end_result =
+                        end_command_buffer(command_buffer);
+                     LOG("  vkCmdSetFragmentShadingRateKHR record/end: %d\n",
+                         end_result);
+                     if (end_result == VK_SUCCESS) {
+                        passed = 1;
+                        LOG("  PASS: extension query, device creation, and "
+                            "dynamic FSR command recording\n");
+                     }
+                  } else {
+                     LOG("  FAIL: vkBeginCommandBuffer returned %d\n",
+                         begin_result);
+                  }
+               } else {
+                  LOG("  FAIL: vkAllocateCommandBuffers returned %d\n",
+                      alloc_result);
+               }
+               destroy_command_pool(device, pool, NULL);
+            } else {
+               LOG("  FAIL: vkCreateCommandPool returned %d\n",
+                   pool_result);
+            }
+         } else {
+            LOG("  FAIL: FSR command or command-buffer entrypoint missing\n");
+         }
+
          if (destroy_device)
             destroy_device(device, NULL);
-         passed = 1;
-         LOG("  PASS: extension query and feature-enabled device creation\n");
-         break;
+         if (passed)
+            break;
       }
    }
 
