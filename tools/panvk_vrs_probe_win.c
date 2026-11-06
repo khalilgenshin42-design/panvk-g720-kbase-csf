@@ -198,8 +198,36 @@ main(void)
           VK_VERSION_MAJOR(properties.properties.apiVersion),
           VK_VERSION_MINOR(properties.properties.apiVersion),
           VK_VERSION_PATCH(properties.properties.apiVersion));
+      LOG("  vendorID/deviceID: 0x%04x/0x%04x\n",
+          properties.properties.vendorID, properties.properties.deviceID);
+      LOG("  driverVersion: 0x%08x\n", properties.properties.driverVersion);
       LOG("  Driver: %s (%s)\n", driver_properties.driverName,
           driver_properties.driverInfo);
+
+      uint32_t ext_count = 0;
+      VkResult ext_result =
+         enumerate_device_extensions(physical_device, NULL, &ext_count, NULL);
+      LOG("  device extension enumeration: result=%d count=%u\n",
+          ext_result, ext_count);
+      if (ext_result == VK_SUCCESS && ext_count) {
+         VkExtensionProperties *all_exts =
+            calloc(ext_count, sizeof(*all_exts));
+         if (all_exts) {
+            uint32_t returned = ext_count;
+            ext_result = enumerate_device_extensions(physical_device, NULL,
+                                                      &returned, all_exts);
+            if (ext_result == VK_SUCCESS) {
+               for (uint32_t e = 0; e < returned; e++)
+                  LOG("    %s (spec %u)\n", all_exts[e].extensionName,
+                      all_exts[e].specVersion);
+            } else {
+               LOG("  full extension enumeration failed: %d\n", ext_result);
+            }
+            free(all_exts);
+         } else {
+            LOG("  full extension list allocation failed\n");
+         }
+      }
 
       int extension_present =
          has_device_extension(enumerate_device_extensions, physical_device,
