@@ -564,7 +564,10 @@ main(void)
       if (!get_queue || !create_rp || !create_sm || !create_pl ||
           !destroy_sm || !destroy_pl || !destroy_rp || !destroy_dev) {
          LOG("FAIL: render setup entrypoint missing\n");
-         if (destroy_dev) destroy_dev(device, NULL);\n         continue;\n      }\n      VkQueue queue = VK_NULL_HANDLE;
+         if (destroy_dev) destroy_dev(device, NULL);
+         continue;
+      }
+      VkQueue queue = VK_NULL_HANDLE;
       get_queue(device, qf, 0, &queue);
 
       VkAttachmentDescription attachment = {
