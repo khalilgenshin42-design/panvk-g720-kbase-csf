@@ -4382,3 +4382,14 @@ This commit already contained the extension/feature exposure, rate query, CSF `P
 - Wrapper workflow run `42137715709` for commit `9330fc2c5666bccf0a0be7ee53b7adf23a914e19`: release build and artifact upload succeeded; debugoptimized compile is still running at the time of this update.
 - Android-only package workflow run `42137897031` for commit `3ea2dd468ec9bdb10ffbaa2b71326d98f5b39e94`: static source verification, host tools, Android ARM64 libdrm build, and Meson configure all passed; Android ARM64 driver compile/stage is in progress.
 - These runs cover the implementation but predate the final sample-count table change. Exact current head remains `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a` and must pass its own builds.
+
+
+### Winlator-side VRS smoke-test probe added
+
+To avoid relying on Tomb Raider/DXVK 1.7.2 (which does not enable or exercise `VK_KHR_fragment_shading_rate`), a separate Windows x64 probe has been added:
+- Source: `tools/panvk_vrs_probe_win.c`
+- It dynamically loads Winlator's `vulkan-1.dll`, identifies the active Vulkan device/driver, checks the extension and `pipelineFragmentShadingRate` feature, enumerates the advertised rate/sample-count table, attempts `vkCreateDevice` with the feature enabled, and records a `vkCmdSetFragmentShadingRateKHR` 2x2 KEEP/KEEP command into a command buffer.
+- It writes `panvk_vrs_probe.log` in its working directory; it does not modify or replace the Android system Vulkan driver.
+- A dedicated `build-vrs-probe` job was added to the existing push workflow to produce artifact `panvk-vrs-probe-win64`.
+
+This is an API/dispatch/device-create smoke test, not a rendering correctness or performance test. It does not submit a draw, so hardware FSR execution still needs a proper CTS/render test. The probe build is queued with the latest workflow update.
