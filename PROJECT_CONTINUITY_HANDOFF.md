@@ -4787,3 +4787,13 @@ This distinction is now part of the diagnostic decision tree. The driver-side al
 - Expanded Windows probe + alternate Android PanVK build run: `42218076595`, run #449, same source/workflow SHA. The Windows probe is the useful artifact from this run. The `libvulkan_wrapper-aarch64-*` artifacts from this job are actually `libvulkan_panfrost.so` alternate driver builds (as proven by `.github/workflows/build.yml` upload path), not loader/wrapper libraries.
 - At the last poll both runs were still in progress. Android-only job was compiling/staging; the Windows probe was installing MinGW-w64; both alternate PanVK variants were compiling. Do not use artifacts from the pre-fix run `42217026789`.
 - User testing remains blocked until run `42218076513` uploads the corrected PanVK package and run `42218076595` uploads `panvk-vrs-probe-win64`.
+
+
+
+### Pipeline-FSR static/dynamic state source audit
+
+While the corrected package builds, audited the pipeline-state plumbing to ensure the extension is not merely an enumeration stub:
+- `src/vulkan/runtime/vk_graphics_state.h` contains `vk_fragment_shading_rate_state`, the FSR dynamic-state enum, and the `fsr` member in both dynamic and pipeline graphics state.
+- `src/vulkan/runtime/vk_graphics_state.c` parses `VkPipelineFragmentShadingRateStateCreateInfoKHR` from pipeline `pNext`, initializes the fragment extent and both combiner operations, and defaults to 1x1 with KEEP/KEEP when the structure is absent. The generic `FOREACH_STATE_GROUP`/state-init machinery routes the FSR state through the same pipeline-state initialization/copy path.
+- `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c` consumes `dyns->fsr` on v12+, converts the width/height to the hardware log2 VRS draw-rate encoding, writes both Mali VRS combiner fields into `PRIMITIVE_FLAGS_2`, and forces 1x1 KEEP/KEEP for sample-shaded fragment shaders.
+- Therefore, the source path has both generic static pipeline FSR state and PanVK CSF draw-register programming. This is still source inspection only; device execution and output correctness remain unvalidated.
