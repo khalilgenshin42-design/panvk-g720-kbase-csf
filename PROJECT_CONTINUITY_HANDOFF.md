@@ -5155,7 +5155,7 @@ To isolate the exact call, instrumented `tools/panvk_vrs_render_probe_win.c` wit
 - Diagnostic probe source commit: `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d`.
 - Exact-source Windows probe workflow run: `42260680210`, observed in progress.
 - Exact-source Android-only package workflow run: `42260680099`, observed in progress.
-- Android wrapper variant run: `42260680099` is not the wrapper run; separate wrapper run should be checked from the latest Actions list if a wrapper artifact is desired. Wrapper rebuild is not required for this test.
+- Android wrapper variant run: `42260680099`, in progress. Wrapper rebuild is not required for this test; keep the existing Winlator wrapper unchanged.
 - New package/probe must be built and inspected from source SHA `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d` before next user test. Keep wrapper unchanged and do not benchmark a game yet.
 - Ask user whether the prior probe visibly exited/crashed or remained stuck only if the new diagnostic run cannot be performed; the new stage logs should identify the last successful call even after an application crash.
 
