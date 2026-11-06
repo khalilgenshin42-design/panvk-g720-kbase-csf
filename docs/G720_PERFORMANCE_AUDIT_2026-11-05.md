@@ -944,7 +944,7 @@ Commit `cec14bb825176cb714e0a6d2e4dab3c7dd44de0e`.
 
 ### Current performance-audit branch source
 
-- Branch HEAD: `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8` (documentation/capability-matrix update).
+- CI/package snapshot HEAD: `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8` (documentation/capability-matrix update); this audit refresh was committed as `3aeb3e8a441b346d231f5f25198956f542271c1f`.
 - Latest code commit on this branch: `a2e5ac142b4f0df71cb28204ece4337bace046de` (`panvk: fix descriptor profile log call`). The descriptor-failure classification and effective heap-threshold log are present in the current tree.
 - Source review of `panvk_vX_descriptor_set.c` confirms the set-allocation failure returns are classified as:
   - `overflow`: variable-count adjustment overflow and final descriptor-count overflow; returns remain `VK_ERROR_OUT_OF_POOL_MEMORY`.
