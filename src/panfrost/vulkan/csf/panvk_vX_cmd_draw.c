@@ -3183,7 +3183,8 @@ set_tiler_idvs_flags(struct cs_builder *b, struct panvk_cmd_buffer *cmdbuf,
    bool dirty = vertex_shader_dirty || fs_user_dirty(cmdbuf) ||
                 gfx_state_dirty(cmdbuf, IDVS) ||
                 dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE) ||
-                dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE);
+                dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE) ||
+                dyn_gfx_state_dirty(cmdbuf, FSR);
 
    if (dirty) {
       pan_pack(&tiler_idvs_flags, PRIMITIVE_FLAGS, cfg) {
@@ -3219,6 +3220,26 @@ set_tiler_idvs_flags(struct cs_builder *b, struct panvk_cmd_buffer *cmdbuf,
       pan_pack(&tiler_flags_2, PRIMITIVE_FLAGS_2, cfg) {
 #if PAN_ARCH >= 14
          cfg.view_mask = cmdbuf->state.gfx.render.view_mask;
+#endif
+#if PAN_ARCH >= 12
+         const struct vk_fragment_shading_rate_state *fsr = &dyns->fsr;
+         uint32_t frag_w = fsr->fragment_size.width;
+         uint32_t frag_h = fsr->fragment_size.height;
+         VkFragmentShadingRateCombinerOpKHR op0 = fsr->combiner_ops[0];
+         VkFragmentShadingRateCombinerOpKHR op1 = fsr->combiner_ops[1];
+
+         /* Sample-rate shading and fragment-rate shading are mutually
+          * exclusive. Keep the hardware at 1x1 for sample-shaded pipelines. */
+         if (fs && fs->info.fs.sample_shading) {
+            frag_w = frag_h = 1;
+            op0 = op1 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+         }
+
+         cfg.vrs_draw_rate =
+            (util_logbase2(MAX2(frag_w, 1)) << 2) |
+            util_logbase2(MAX2(frag_h, 1));
+         cfg.vrs_combiner_0 = (enum mali_vrs_combiner)op0;
+         cfg.vrs_combiner_1 = (enum mali_vrs_combiner)op1;
 #endif
       }
       cs_move32_to(b, cs_sr_reg32(b, IDVS, TILER_FLAGS2),
