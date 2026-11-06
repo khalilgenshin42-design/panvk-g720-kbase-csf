@@ -2052,11 +2052,22 @@ vk_create_graphics_pipeline(struct vk_device *device,
       memset(&state_tmp, 0, sizeof(state_tmp));
 
    struct vk_graphics_pipeline_compile_info compile_info;
+   mesa_logi("PANVK_VRS_DIAG runtime pipeline begin stages=%u library=%u",
+             pCreateInfo->stageCount, is_library);
    vk_get_graphics_pipeline_compile_info(
       &compile_info, device,
       is_library ? &pipeline->lib.state : &state_tmp,
       is_library ? &pipeline->lib.all_state : &all_state_tmp,
       pCreateInfo);
+   if (compile_info.state && compile_info.state->fsr) {
+      mesa_logi("PANVK_VRS_DIAG runtime state parsed rate=%ux%u ops=%u,%u",
+                compile_info.state->fsr->fragment_size.width,
+                compile_info.state->fsr->fragment_size.height,
+                compile_info.state->fsr->combiner_ops[0],
+                compile_info.state->fsr->combiner_ops[1]);
+   } else {
+      mesa_logi("PANVK_VRS_DIAG runtime state parsed fsr=none");
+   }
 
    /* For pipeline libraries, the state is stored in the pipeline */
    if (!(pipeline->base.flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR)) {
@@ -2135,9 +2146,13 @@ vk_create_graphics_pipeline(struct vk_device *device,
 
          struct vk_pipeline_stage *pipeline_stage =
             &compile_info.stages[compile_info.stage_to_index[stage]];
+         mesa_logi("PANVK_VRS_DIAG runtime precompile begin index=%u stage=%u",
+                   i, stage);
          result = vk_pipeline_precompile_shader(device, cache, pipeline_flags,
                                                 pCreateInfo->pNext,
                                                 stage_info, pipeline_stage);
+         mesa_logi("PANVK_VRS_DIAG runtime precompile end index=%u stage=%u result=%d",
+                   i, stage, result);
          if (result != VK_SUCCESS)
             goto fail_stages;
 
@@ -2145,11 +2160,14 @@ vk_create_graphics_pipeline(struct vk_device *device,
          stage_feedbacks[stage].duration += stage_end - stage_start;
       }
 
+      mesa_logi("PANVK_VRS_DIAG runtime shader_compile begin");
       result = vk_graphics_pipeline_compile_shaders(device, cache,
                                                     pipeline_flags,
                                                     pipeline_layout,
                                                     &compile_info,
                                                     stage_feedbacks);
+      mesa_logi("PANVK_VRS_DIAG runtime shader_compile end result=%d",
+                result);
       if (result != VK_SUCCESS)
          goto fail_stages;
    }
