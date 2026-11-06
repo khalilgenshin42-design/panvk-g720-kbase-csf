@@ -4352,3 +4352,8 @@ The first pipeline-FSR draft under-reported the KHR-mandated rate/sample combina
 - `maxFragmentSizeAspectRatio = 2`; no 4x1 or 1x4 rate is advertised.
 
 This follows the Khronos extension's required minimum rate list and the newer PanVK reference's conservative sample-count table. Latest source commit for this correction: `2a1dc018f29795835e3002f681be0f10943e3fc3`. Android wrapper and Android-only package workflows for this commit are queued; no build pass is claimed yet.
+
+
+### FSR rate-table refinement
+
+The final rate table also includes the verified 2x-MSAA combinations for 2x2 and 2x1, matching the current PanVK reference table: 2x4 at 1x/2x, 2x2 and 2x1 at 1x/2x/4x, 1x2 at 1x/2x/4x, and 1x1 at all sample counts. Latest query-table source commit: `ea9284fb58fea3c0f5861c21f7b9ff8ef2350915`. The Android build must be rerun against this exact head before packaging.
