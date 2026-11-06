@@ -5503,3 +5503,16 @@ Before changing code:
 5. Only after the above is proven, implement the narrowest valid lowering and run compiler/NIR tests plus the existing 1x1/2x2 render probe. Do not modify Kbase memory mapping, queue synchronization, shader-core dispatch, descriptor heaps, or general extension exposure for this failure.
 
 No source code, build artifact, package, or device configuration was modified by this diagnosis. The user's wrapper and container settings must remain unchanged, and the Android system/vendor Vulkan driver must not be replaced.
+
+
+#### Follow-up probe-shader audit
+
+The exact render-probe shaders were fetched from the same feature-branch HEAD:
+- `tools/vrs_probe.frag` computes `ivec2(floor(gl_FragCoord.xy))` and writes an 8-pixel coordinate pattern.
+- `tools/vrs_probe.vert` emits a full-screen triangle using `gl_VertexIndex`.
+
+This confirms the fragment shader deliberately reads `gl_FragCoord`. PanVK's VRS helper replaces `load_sample_pos_or_center` for the fragment-center calculation with `load_frag_shading_rate`; therefore the probe itself exercises the VRS-adjusted fragment-center system value. The log's `Unhandled intrinsic load_frag_shading_rate` is directly connected to this shader behavior, not an unrelated shader feature.
+
+A source search of the current branch's `src/panfrost/compiler/bifrost/bifrost_nir.c` and `bifrost_compile.c` found no explicit `frag_shading_rate` or `SYSTEM_VALUE_FRAG_SHADING_RATE` handling in those files. This is consistent with the compiler rejection, but does not by itself establish the exact hardware register/instruction needed for a general dynamic-FSR implementation.
+
+A narrow static-rate specialization remains a candidate for the current render probe because its `VkPipelineFragmentShadingRateStateCreateInfoKHR` is static (`dynamic=0`) and the rate is fixed per pipeline. It must only be implemented after verifying the Vulkan/Mesa rate encoding and the expected `load_sample_pos_or_center` semantics. A constant substitution is not valid for dynamic FSR and must not be used as a general lowering. The probe's use of `gl_FragCoord` is important: the center calculation affects observable pixel coordinates, so a passing pipeline-creation test alone is insufficient; the final pixel readback comparison must also pass.
