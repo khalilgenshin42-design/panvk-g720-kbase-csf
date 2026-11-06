@@ -5278,3 +5278,20 @@ Revised investigation:
 - The investigation should now focus on pipeline-state parsing/validation/compilation/cache interactions when static FSR is non-default, and on whether the compiler's `fs_may_use_vrs` / `panvk_hash_state` handling or an unrelated pipeline-state path loops or corrupts state. Since the probe shader only reads `gl_FragCoord`, isolate whether the hang occurs before compiler entry, during VS compile, during FS compile, or after shader compile.
 - Next diagnostic improvement: instrument the PanVK `panvk_compile_shaders` callback and `compile_shaders` loop with flushed checkpoints per stage, and instrument entry/exit around `panvk_compile_nir` / `pan_shader_compile`. Also log the static FSR state (width, height, combiner ops, dynamic bit) as read by PanVK. This can identify the precise compiler boundary without changing driver behavior.
 - No driver code or package was changed during this correction. The prior "disable extension because no state programming exists" proposal is withdrawn pending these more precise diagnostics.
+
+
+### Added PanVK VRS pipeline/compiler checkpoints for the next device log (2026-11-06)
+
+After correcting the prior source-audit miss, a diagnostic-only source change was committed to the feature branch:
+- Commit: `4b9556729f7807689f49a8efa9673f7b4a10847b`
+- File changed: `src/panfrost/vulkan/panvk_vX_shader.c`
+- No hardware behavior, feature advertisement, compiler lowering, memory allocation, or CSF draw programming was changed.
+- Added `mesa_logi` checkpoints prefixed `PANVK_VRS_DIAG`:
+  - `panvk_compile_shaders` callback entry/exit, including static FSR dimensions, combiner ops, and dynamic-FSR bit.
+  - Per-stage compile entry/exit with stage index, stage enum, and VkResult.
+  - `panvk_compile_nir` entry with FSR state.
+  - `pan_shader_compile` entry/exit with generated binary byte count.
+- This instrumentation will distinguish a hang before PanVK's shader callback, during per-stage NIR preparation, inside the Mali compiler, or after shader compilation.
+- CI triggered by feature branch update: Android NDK Wrapper Variant run `42269851892` and Android-only PanVK run `42269851869`. At handoff update time both were in progress; inspect their results/artifacts before asking the user to install anything.
+- Once the diagnostic Android package is built, the next test should run the same Winlator probe unchanged. Collect both the normal probe log and Android/Mesa driver logs containing `PANVK_VRS_DIAG`. The critical outcome is the last checkpoint printed before the 2x2 pipeline create stall.
+- Do not modify the extension advertisement or disable VRS yet: the CSF v12 draw-state implementation exists and the 2x2 hardware enum mapping is consistent with the GenXML. The pipeline-create hang remains localized to an earlier stage and needs instrumentation evidence.
