@@ -5349,3 +5349,17 @@ Completed the remaining explicit enum/bool/VkResult casts in the PanVK diagnosti
 - Authoritative feature branch head: `fa4ae716d1e643f680a4109db81470aba23492ea`.
 - This commit changes diagnostic formatting only; no runtime driver behavior.
 - All previous builds are superseded. Use only the Android build artifacts generated from this exact head.
+
+
+### Runtime VRS diagnostic package built and audited (2026-11-07)
+
+Both CI workflows for authoritative feature commit `fa4ae716d1e643f680a4109db81470aba23492ea` completed successfully:
+- Android-only workflow `42271462292`, job `128076798673`.
+- Android wrapper + Windows probe workflow `42271462129`; Android release job `128076798947`, debugoptimized job `128076798592`, Windows probe job `128076799058`.
+- Android-only artifact ID `13529083912`; Android wrapper artifacts `13529094029` (release) and `13528994353` (debugoptimized); Windows probe artifact ID `13528824074`.
+- Independently downloaded inner package `PanVK-G720-experimental.zip`: 4 files (`meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, `SHA256SUMS`); ZIP integrity passed; SHA256 `229f1df7a86b7c06e8658450b4e153db3c8372dedc8248b34ca31e6d99216ac9`.
+- The outer Actions artifact contains staging and audit files. Import only the inner package, not the outer ZIP.
+- Windows probe executable: PE32+ x86-64, 274,278 bytes, SHA256 `5e3418aa6c00ee874259e4bd5194ce179255255e1dd145d9e1559a1b980742fa`.
+- Android build audit passed; missing-DRM-symbol report is empty.
+
+These are diagnostic builds from corrected feature head `fa4ae716d1e643f680a4109db81470aba23492ea`, not a performance release. Next: import the inner package into the same Winlator test container, replace/run the Windows probe there, save the complete output as `panvk_vrs_render_probe.log`, and send it. Keep wrapper/container settings unchanged. Do not run Borderlands until the 2x2 pipeline-create checkpoint is understood.
