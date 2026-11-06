@@ -133,6 +133,10 @@ jobs:
             -Dandroid-stub=true \
             -Dandroid-libbacktrace=disabled \
             -Dplatform-sdk-version=30 \
+            # This is a Winlator/Adrenotools ICD, not the Android system HAL.
+            # Disable Android CTS extension allowlisting so implemented KHR
+            # extensions are not hidden by the API-30 build target.
+            -Dandroid-strict=false \
             -Dglx=disabled \
             -Dgbm=disabled \
             -Degl=disabled \
