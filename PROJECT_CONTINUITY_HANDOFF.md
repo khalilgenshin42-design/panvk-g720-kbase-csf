@@ -5455,3 +5455,51 @@ The render-probe executable was built from source commit `665d86a75d94b9dc015b3d
 Use the latest diagnostic Android package together with the existing render-probe executable. Save its output as `panvk_vrs_render_probe.log` and also capture the same process's Winlator/Wine or Android driver log containing `PANVK_VRS_DIAG`. Keep the capability-probe log as a separate successful API/device-create result; do not confuse it with the render-probe result.
 
 This correction supersedes the previous sentence in the 2026-11-07 continuation that called artifact `13528824074` the matching render probe. No source or binary was changed by this correction.
+
+
+### 2026-11-07 VRS render-probe log correlation — root cause isolated to unsupported NIR intrinsic
+
+The user uploaded the Winlator log archive `[Community] Tomb Raider (1) (copy)_logs_2026-11-07_00-28-42.zip`. The archive contains `wine_debug.log` (18,130 bytes), which was read in full and correlated with the previously uploaded `panvk_vrs_render_probe.log`.
+
+#### Runtime/device identity
+
+- Winlator Mali 1.2.1 Bionic (23), Wine `10-arm64ec-0`, Android 16, device Xiaomi 25069PTEBG / MT6899.
+- Graphics driver is the imported `wrapper-gamenative`; DX wrapper metadata reports DXVK+VKD3D but the executable launched in this run is the standalone render probe, not Tomb Raider.
+- PanVK reports GPU ID `0xc8700010`, architecture v12, Kbase backend enabled, and `VK_KHR_fragment_shading_rate=1`.
+- The log contains two render-probe launches. Both reproduce the same 1x1-success / 2x2-failure sequence.
+
+#### Exact failure sequence
+
+For each launch:
+1. The 1x1 graphics pipeline's vertex and fragment stages both pass through `pan_shader_compile`, return success, and the callback completes.
+2. The 2x2 pipeline's generic runtime precompilation completes successfully for vertex and fragment stages.
+3. The PanVK callback starts with `rate=2x2`, `ops=0,0`, `dynamic=0`.
+4. The vertex stage compiles successfully.
+5. The fragment stage reaches `pan_shader_compile begin stage=4`.
+6. The compiler prints `Unhandled intrinsic load_frag_shading_rate`.
+7. Wine reports `_wassert ... "!status && \"vkCreateGraphicsPipelines\"`.
+8. No matching fragment `pan_shader_compile end`, stage completion, or successful 2x2 pipeline creation follows.
+
+This is not a stall in generic runtime precompilation, the PanVK callback setup, the vertex compiler, queue submission, fence wait, Kbase mapping, or GPU execution. The 2x2 fragment shader enters the Mali compiler and fails on an unsupported NIR intrinsic. The probe's own 2x2 pipeline creation assertion is downstream of this compiler failure.
+
+#### Source correlation at feature branch HEAD
+
+Feature branch `experiment/g720-fragment-shading-rate` remains at `fa4ae716d1e643f680a4109db81470aba23492ea`.
+
+In `src/panfrost/vulkan/panvk_vX_shader.c`:
+- `lower_vrs_frag_center()` (around lines 719–739) replaces `nir_intrinsic_load_sample_pos_or_center` with a calculation that calls `nir_load_frag_shading_rate()`, marks `SYSTEM_VALUE_FRAG_SHADING_RATE` as read, extracts X/Y log2 rate components, and scales the 0.5 center.
+- In `panvk_compile_nir()` (around lines 1290–1300), that pass is enabled for fragment shaders on PAN_ARCH >= 12 when sample shading is not enabled and `fs_may_use_vrs()` returns true.
+- The resulting `load_frag_shading_rate` is still present when `pan_shader_compile()` is called. The current Panfrost/Mali compiler path has no working lowering for this intrinsic, which is exactly what the runtime diagnostic reports.
+
+Important nuance: the existing helper is trying to preserve sample-position/fragment-center semantics under VRS. Simply deleting the intrinsic or replacing it unconditionally with a constant could silently break shaders using sample position/center, and dynamic FSR cannot generally be represented by one compile-time constant. Do not apply a broad constant replacement or disable the extension as a speculative fix.
+
+#### Next source investigation / safe implementation direction
+
+Before changing code:
+1. Inspect how `nir_intrinsic_load_frag_shading_rate` is represented in this Mesa revision, and whether Panfrost's compiler already has a supported hardware system-value route for fragment shading rate or whether this path needs an explicit PanVK lowering.
+2. Inspect the render-probe fragment shader/SPIR-V to determine why it contains `load_sample_pos_or_center` and whether the intrinsic is required for this minimal shader.
+3. Determine the exact encoding of the static `VkPipelineFragmentShadingRateStateCreateInfoKHR` rate and whether the current compiler path can safely specialize a **static** FSR rate at pipeline compile time while retaining a correct path (or rejecting unsupported usage) for dynamic FSR.
+4. Add a focused NIR validation/assertion or diagnostic immediately before `pan_shader_compile()` so unsupported `load_frag_shading_rate` cannot silently reach the compiler.
+5. Only after the above is proven, implement the narrowest valid lowering and run compiler/NIR tests plus the existing 1x1/2x2 render probe. Do not modify Kbase memory mapping, queue synchronization, shader-core dispatch, descriptor heaps, or general extension exposure for this failure.
+
+No source code, build artifact, package, or device configuration was modified by this diagnosis. The user's wrapper and container settings must remain unchanged, and the Android system/vendor Vulkan driver must not be replaced.
