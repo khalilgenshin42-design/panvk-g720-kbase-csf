@@ -110,3 +110,30 @@ jobs:
           name: libvulkan_wrapper-aarch64-${{ matrix.build-type }}
           path: build/src/panfrost/vulkan/libvulkan_panfrost.so
           if-no-files-found: error
+
+  build-vrs-probe:
+    name: Build Winlator VRS capability probe
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install MinGW-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+
+      - name: Compile VRS probe
+        run: |
+          x86_64-w64-mingw32-gcc \\
+            -std=c11 -O2 -Wall -Wextra \\
+            -Iinclude \\
+            tools/panvk_vrs_probe_win.c \\
+            -o panvk-vrs-probe.exe
+
+      - name: Upload Winlator VRS probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: panvk-vrs-probe-win64
+          path: panvk-vrs-probe.exe
+          if-no-files-found: error
