@@ -5235,3 +5235,25 @@ Interpretation / investigation priorities:
 6. No game benchmark is authorized yet; preserve the 1x1 PASS as the control.
 
 No source or driver binary was changed by this rerun. The canonical feature branch remains `experiment/g720-fragment-shading-rate` at `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d`. The handoff branch is updated by this entry only.
+
+
+### Source audit after reproducible VRS stall: advertised pipeline FSR has incomplete visible PanVK lowering (2026-11-06)
+
+Inspected the exact feature branch at source commit `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d`, focusing on the architecture-12 shader/compiler path and generated Mali v12 register definitions.
+
+Findings:
+- `src/panfrost/vulkan/panvk_vX_physical_device.c` advertises `.KHR_fragment_shading_rate = PAN_ARCH >= 12` and reports `.pipelineFragmentShadingRate = PAN_ARCH >= 12`, while primitive and attachment FSR are false. The properties report `.fragmentShadingRateNonTrivialCombinerOps = PAN_ARCH >= 12`, strict multiply false, and multiple additional restrictions (depth/stencil writes, sample mask, conservative rasterization, interlock, custom sample locations false).
+- In `src/panfrost/vulkan/panvk_vX_shader.c`, the only explicit PanVK FSR-specific shader handling found is:
+  - `fs_may_use_vrs()` tests the pipeline/feature state and returns a boolean.
+  - `panvk_hash_state()` hashes that boolean into the shader cache key.
+  - `panvk_compile_nir()` optionally rewrites `nir_intrinsic_load_sample_pos_or_center` into a calculation based on `nir_load_frag_shading_rate()`.
+- The above is a shader semantic adjustment for fragment sample-position/center behavior. It is not itself implementation of the requested pipeline fragment rate, and it does not visibly encode `VkPipelineFragmentShadingRateStateCreateInfoKHR` rate dimensions or combiner operations into Mali hardware state.
+- `src/panfrost/vulkan/panvk_vX_cmd_draw.c` has no FSR-specific references.
+- `src/panfrost/genxml/v12.xml` contains no fragment-shading-rate / shading-rate fields or named register definitions (searched case-insensitively for shading-rate and fragment-rate terms).
+- The PanVK Meson source list uses common `panvk_vX_*.c` sources for arch 12; the `fifthgen` directory is empty except `.gitkeep`. This reinforces that there is no separate fifth-generation FSR implementation file in this branch.
+
+Assessment (provisional, not a confirmed root cause):
+- The branch currently appears to advertise pipeline fragment shading rate on v12 without a corresponding visible hardware pipeline-state programming path in PanVK/genxml. The 2x2 pipeline-create stall may be in shader compilation/cache handling triggered by the VRS-enabled state, but the log alone cannot prove which internal function is hanging.
+- It is not safe to keep advertising this extension merely because the feature bit is true. Before further device tests, trace the Vulkan runtime pipeline callback path into PanVK's `panvk_compile_shaders` and then the Mali compiler, and verify how `state->fsr` is consumed outside the shader source. Also inspect Mali G720 hardware documentation/firmware interface for any actual fragment-rate control not represented in the current genxml.
+- Do not patch in guessed register fields or expose a speculative 2x2 implementation. The safe experimental fallback, if this audit confirms there is no supported hardware path, is to disable `VK_KHR_fragment_shading_rate` and its feature/property advertisement for this branch, then build a non-VRS control driver. Keep that separate from the existing diagnostic package until the code path is proven.
+- No driver source or package was modified during this source audit. Next work remains source tracing and hardware capability verification; no user test is requested yet.
