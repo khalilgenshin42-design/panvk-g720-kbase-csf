@@ -4492,3 +4492,11 @@ A fresh GitHub Actions poll confirms the following state (this supersedes the ol
 - Earlier run `42138669765` confirms the corrected driver source had a successful wrapper release job, while debugoptimized was still compiling at that earlier poll and the old probe compile job failed. Exact-source wrapper run `42138343235` is the authoritative successful pair.
 
 **Current gate:** do not ask for device testing yet. Wait for run `42138343360` to complete all Android-only package audits and upload, and for run `42140194467` to produce a verified Windows probe artifact. Keep the phone's vendor/system Vulkan driver unchanged; any eventual test is through Winlator Mali 1.2's custom importer. No current VRS package is approved for installation.
+
+
+### 2026-11-06 continuation — latest poll (00:57 UTC)
+
+- Re-polled exact-head Android-only job `127632082794` in run `42138343360`: still active in **Generate host tools**; dependency installation is confirmed complete, no failed steps are reported, and all Android libdrm/driver/package steps remain pending.
+- The GitHub job-log download endpoint returned `BlobNotFound` while the job is still running. This is an unavailable live-log archive, not a reported build failure. Continue using job-step status until the run completes and logs become downloadable.
+- Fresh feature-branch runs remain queued: Android-only `42140194412` and wrapper/probe `42140194467`. No probe artifact has been uploaded.
+- No code or driver-source change was made during this poll. Handoff updated to preserve the exact job IDs, states, and log limitation.
