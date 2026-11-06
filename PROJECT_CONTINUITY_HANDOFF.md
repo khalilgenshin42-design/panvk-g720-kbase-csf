@@ -1,12 +1,12 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-06 (UTC)
+Last updated: 2026-11-06 12:25 UTC
 
 ## Authoritative current state — 2026-11-06
 
 This section supersedes older "next steps", queued-CI, and "no code changed" statements in the historical addenda below. Keep the historical record, but use the branch-specific state here when deciding what is current.
 
-- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file; its pre-refresh HEAD was `48a4b8aea923b877267876a75b396ee9e8dfacda`; this refresh was committed as `71cd44130da9a8683136d5a2d8d764e60c14ae2d`.
-- Current task branch: `experiment/g720-performance-audit`. The exact CI/package snapshot was branch HEAD `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8`; the 2026-11-06 audit-doc refresh was committed as `3aeb3e8a441b346d231f5f25198956f542271c1f`. The latest code change remains `a2e5ac142b4f0df71cb28204ece4337bace046de`; later commits are documentation/capability-audit updates.
+- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file; immediately before the 2026-11-06 monitoring refresh its HEAD was `85df8d35130deb059647ad988236bac848d4f63a`. The latest monitoring addendum below records the current CI/package state.
+- Current task branch: `experiment/g720-performance-audit`. The latest exact CI/package snapshot is branch HEAD `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`; this is a documentation-only audit wording correction on top of the earlier `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8` snapshot. The latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`. Exact-head Android-only and Android-wrapper results are recorded in the 2026-11-06 monitoring addendum below.
 - Separate 4x heap-threshold candidate: `experiment/g720-heap-renew-262k`, HEAD `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`. It changes the compiled default from 65,536 to 262,144; it is not an environment-variable propagation test.
 - Separate descriptor-heap implementation: `experiment/g720-descriptor-heaps`, HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. Its exact-head Android and wrapper builds now pass; the package is independently audited below. No device runtime test has been performed.
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
@@ -4664,3 +4664,46 @@ No runtime source or feature-gate change was made during this audit. Do not forc
 5. If architecture is 12 but the table bit is 0, inspect dispatch/compiled per-architecture object selection and the exact loaded package.
 
 Keep the custom PanVK ICD isolated in Winlator Mali 1.2. Never replace the Android vendor/system Vulkan driver.
+
+## 2026-11-06 12:25 UTC — scheduled GitHub build and artifact monitoring
+
+### Exact branch and workflow snapshot
+
+- Active source branch: `experiment/g720-performance-audit`, HEAD `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`.
+- The HEAD commit changes only `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md`; it is not a driver-source change. Latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`.
+- The latest matching Android-only and Android-wrapper runs both built the exact `b17b98...` HEAD. No workflow was manually dispatched and no source code was modified during this monitoring pass.
+
+### Exact-head workflow results
+
+- Android-only run [`42215758218`](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218): **completed / success**. Job `127885224447` (`build-android-only`) completed successfully. Every substantive step passed: checkout, checkout verification, Python setup, dependency installation, host-tool generation, Android ARM64 libdrm build, Android-only Meson configure, compile/stage, driver/manifest/dependency/staged-file audit, flat Winlator/Adrenotools package creation, and artifact upload. Setup and post-job cleanup steps also completed successfully. No pending or failed steps.
+- Android-wrapper run [`42215758167`](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167): **completed / success**.
+  - Release job `127885224388` (`build-android-wrapper (release)`): success. Checkout, memfd_create compatibility patch, Python setup, build-dependency installation, host-tool generation, Meson configure, compile, and artifact upload all passed; setup/cleanup also completed.
+  - Debugoptimized job `127885224836` (`build-android-wrapper (debugoptimized)`): success. The same substantive steps all passed; setup/cleanup also completed.
+- No first actionable CI failure exists for this exact HEAD. Logs were not needed to diagnose a failure because all three jobs and their steps completed successfully.
+
+### Android-only package validation
+
+- Workflow artifact `13501237590`, `panvk-g720-android-only-experimental-package`, downloaded and checked. Outer ZIP size: 16,753,940 bytes. Outer SHA-256: `f5e58163b3caf3f9fa5791dedf56ade82fd87d17dcfdb42722cd846e51ed825a`. ZIP integrity test passed.
+- The outer artifact contains the staged install, audit reports, and inner `PanVK-G720-experimental.zip`. Inner package SHA-256: `14f7b13ab1735daffd31a0723c1f6d949155e5c6570f1980f98291cb54383e86`; ZIP integrity test passed.
+- Inner package has exactly four root members: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`. All three member hashes verified:
+  - driver: `362ad05b978c673b82bf1e66b4ab553f8ea79154c8c5a0a6731b65648359bfb1`
+  - private libdrm: `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`
+  - metadata: `064c52b79a1d0dc14aab89fa98857d4a905c2167c41d7ee28536b81337b82e81`
+- Metadata identifies `PanVK Mali G720 (experimental)`, package version `26.3.0-devel-android-kbase-b17b98cef92f`, driver version `26.3.0-devel`, and minimum Android API 30. It explicitly states the driver is not Vulkan conformant and device/game compatibility is unverified.
+- Both package libraries are ELF64 little-endian AArch64 Android API 30 binaries built with NDK r30. Driver SONAME is `libvulkan_panfrost.so`; RUNPATH is `$ORIGIN`; its private dependency is `libpanvk_drm.so`. The private libdrm SONAME is `libpanvk_drm.so` and its only NEEDED dependency is Android `libc.so`. Driver Android dependencies are `liblog.so`, `libsync.so`, `libhardware.so`, `libnativewindow.so`, the bundled private libdrm, `libm.so`, `libz.so`, `libdl.so`, and `libc.so`.
+- The workflow audit's `missing-drm-symbols.txt` is empty, confirming every DRM symbol imported by the driver is defined by the bundled libdrm. The staged ICD manifest reports Vulkan API `1.4.354`; it is included in the outer audit/stage artifact, while the flat inner importer package carries the Adrenotools `meta.json`.
+- **State: artifact-validated at static/package level.** The inner ZIP structure, metadata, ELF architecture/API, RUNPATH, private dependency, and member hashes all pass. This is suitable to treat as a structurally validated experimental Winlator custom-driver package, not as a runtime-validated or conformant release.
+
+### Android-wrapper artifact validation
+
+- Release artifact `13502135385`, `libvulkan_wrapper-aarch64-release`: outer ZIP size 4,288,169 bytes; outer SHA-256 `5647fe999a9225123116118eb26ef91f277eef38d4ea2c2a29e98e965d3b0f04`; one-member ZIP integrity passed. Extracted `libvulkan_panfrost.so` SHA-256: `edce8b3dd4fea68ffda7e44622d4c778cdaf0a22fc219cc2b4368335060aa80a`.
+- Debugoptimized artifact `13502061037`, `libvulkan_wrapper-aarch64-debugoptimized`: outer ZIP size 50,663,624 bytes; outer SHA-256 `fcd0b4d2dcba93c67f3c09dedb6cdc4ab843cd7eef45f34813e90916adbd4159`; one-member ZIP integrity passed. Extracted `libvulkan_panfrost.so` SHA-256: `eebdc6229236e4c91204bd01148409c2b91c71977d1cf71a44a25181b3617477`.
+- Both wrapper libraries are ELF64 AArch64 Android API 30 binaries. Debugoptimized includes debug information. Both have RUNPATH `$ORIGIN/../../android_stub` and a `libdrm.so` dependency; the X11-enabled wrapper build also imports `libxcb`, `libX11-xcb`, `libxcb-dri3`, `libxcb-present`, `libxcb-xfixes`, `libxcb-sync`, `libxcb-randr`, `libxcb-shm`, and `libxshmfence` libraries.
+- Each wrapper artifact contains only `libvulkan_panfrost.so`; neither contains a manifest, checksum file, companion `android_stub/libdrm.so`, or the X11 dependency set. Therefore these are **build-passed and ELF-checked raw wrapper libraries**, not independently package-validated/self-contained Winlator import packages. Runtime resolution of the stub and X11 dependencies remains dependent on the intended wrapper environment.
+
+### Monitoring conclusion and next gate
+
+- Current exact-head state: Android-only build **PASSED**; Android-wrapper Release **PASSED**; Android-wrapper Debugoptimized **PASSED**.
+- Android-only ADPKG: **STATIC/PACKAGE VALIDATED**. Wrapper outputs: **RAW ELF VALIDATED ONLY**. No device runtime test was performed by CI or in this monitoring pass.
+- No source code, build configuration, or workflow was changed. Both documentation updates use `[skip ci]` so the required audit trail does not trigger another build.
+- Next runtime gate remains a user-controlled test of the Android-only package imported separately through Winlator Mali's custom-driver importer. Do not replace the phone's system/vendor Vulkan driver or modify the live kernel.
