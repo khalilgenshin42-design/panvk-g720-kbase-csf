@@ -12,6 +12,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <vulkan/vulkan.h>
 
 static FILE *log_file;
@@ -134,7 +135,8 @@ main(void)
        !get_features2 || !get_properties2 || !get_queue_properties ||
        !create_device || !destroy_instance || !get_device_proc_addr) {
       LOG("FAIL: required Vulkan core entrypoint unavailable\n");
-      destroy_instance(instance, NULL);
+      if (destroy_instance)
+         destroy_instance(instance, NULL);
       fclose(log_file);
       return 1;
    }
@@ -184,7 +186,6 @@ main(void)
       };
       VkPhysicalDeviceDriverProperties driver_properties = {
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
-         .pNext = &fsr_properties,
       };
       VkPhysicalDeviceProperties2 properties = {
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
@@ -209,6 +210,9 @@ main(void)
       if (!extension_present) {
          continue;
       }
+
+      driver_properties.pNext = &fsr_properties;
+      get_properties2(physical_device, &properties);
 
       if (!get_shading_rates) {
          LOG("  FAIL: vkGetPhysicalDeviceFragmentShadingRatesKHR unavailable\n");
