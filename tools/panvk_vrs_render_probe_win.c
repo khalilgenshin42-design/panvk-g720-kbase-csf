@@ -464,7 +464,7 @@ main(void)
       };
       VkPhysicalDeviceDriverProperties driver = {
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
-         .pNext = &fsr_props,
+         .pNext = NULL,
       };
       VkPhysicalDeviceProperties2 props = {
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
@@ -488,6 +488,8 @@ main(void)
       }
       free(exts);
       if (!fsr_ext) { LOG("SKIP: FSR extension absent\n"); continue; }
+      driver.pNext = &fsr_props;
+      get_props2(pds[d], &props);
 
       VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features = {
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR,
@@ -497,7 +499,9 @@ main(void)
          .pNext = &fsr_features,
       };
       get_features2(pds[d], &features);
-      LOG("pipelineFragmentShadingRate=%u\n", fsr_features.pipelineFragmentShadingRate);\n      LOG("nonTrivialCombinerOps=%u strictMultiplyCombiner=%u\n",\n          fsr_props.fragmentShadingRateNonTrivialCombinerOps,\n          fsr_props.fragmentShadingRateStrictMultiplyCombiner);
+      LOG("pipelineFragmentShadingRate=%u\n", fsr_features.pipelineFragmentShadingRate);
+      LOG("nonTrivialCombinerOps=%u strictMultiplyCombiner=%u\n",
+          fsr_props.fragmentShadingRateNonTrivialCombinerOps,\n          fsr_props.fragmentShadingRateStrictMultiplyCombiner);
       if (!fsr_features.pipelineFragmentShadingRate) continue;
 
       VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -552,16 +556,14 @@ main(void)
       get_memory(pds[d], &mem_props);
       PFN_vkGetDeviceQueue get_queue = (PFN_vkGetDeviceQueue)gdpa(device, "vkGetDeviceQueue");
       PFN_vkCreateRenderPass create_rp = (PFN_vkCreateRenderPass)gdpa(device, "vkCreateRenderPass");
-      PFN_vkCreateFramebuffer create_fb = (PFN_vkCreateFramebuffer)gdpa(device, "vkCreateFramebuffer");
       PFN_vkCreateShaderModule create_sm = (PFN_vkCreateShaderModule)gdpa(device, "vkCreateShaderModule");
       PFN_vkCreatePipelineLayout create_pl = (PFN_vkCreatePipelineLayout)gdpa(device, "vkCreatePipelineLayout");
       PFN_vkDestroyShaderModule destroy_sm = (PFN_vkDestroyShaderModule)gdpa(device, "vkDestroyShaderModule");
       PFN_vkDestroyPipelineLayout destroy_pl = (PFN_vkDestroyPipelineLayout)gdpa(device, "vkDestroyPipelineLayout");
-      PFN_vkDestroyFramebuffer destroy_fb = (PFN_vkDestroyFramebuffer)gdpa(device, "vkDestroyFramebuffer");
       PFN_vkDestroyRenderPass destroy_rp = (PFN_vkDestroyRenderPass)gdpa(device, "vkDestroyRenderPass");
       PFN_vkDestroyDevice destroy_dev = (PFN_vkDestroyDevice)gdpa(device, "vkDestroyDevice");
-      if (!get_queue || !create_rp || !create_fb || !create_sm || !create_pl ||
-          !destroy_sm || !destroy_pl || !destroy_fb || !destroy_rp || !destroy_dev) {
+      if (!get_queue || !create_rp || !create_sm || !create_pl ||
+          !destroy_sm || !destroy_pl || !destroy_rp || !destroy_dev) {
          LOG("FAIL: render setup entrypoint missing\n");
          destroy_dev(device, NULL); continue;
       }
