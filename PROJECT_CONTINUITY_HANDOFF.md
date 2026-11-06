@@ -4818,3 +4818,13 @@ While the corrected package builds, audited the pipeline-state plumbing to ensur
 Extracted the corrected nested package and ran `strings` on its `libvulkan_panfrost.so`. The binary contains the exact startup diagnostic format string:
 `PanVK capability audit: gpu_id=0x%llx arch=v%u KHR_fragment_shading_rate=%u kbase=1`.
 This confirms the GPU-ID/architecture/extension-bit diagnostic was linked into the artifact, not merely present in source.
+
+
+
+### Nested package dynamic-link audit
+
+Inspected the extracted nested ADPKG itself (not just the pre-patched staging ELF):
+- `libvulkan_panfrost.so` has `DT_NEEDED: libpanvk_drm.so` and `RUNPATH: $ORIGIN`.
+- `libpanvk_drm.so` has SONAME `libpanvk_drm.so` and depends only on `libc.so`.
+- No `libdrm.so` dependency remains in the nested driver. The private libdrm ABI is packaged under a private SONAME to avoid interposing on the Android platform's libdrm.
+- This confirms the flat ADPKG contains the complete private dependency pair and is relocatable as expected by the Winlator Mali 1.2 importer.
