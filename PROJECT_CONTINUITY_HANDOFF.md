@@ -5257,3 +5257,24 @@ Assessment (provisional, not a confirmed root cause):
 - It is not safe to keep advertising this extension merely because the feature bit is true. Before further device tests, trace the Vulkan runtime pipeline callback path into PanVK's `panvk_compile_shaders` and then the Mali compiler, and verify how `state->fsr` is consumed outside the shader source. Also inspect Mali G720 hardware documentation/firmware interface for any actual fragment-rate control not represented in the current genxml.
 - Do not patch in guessed register fields or expose a speculative 2x2 implementation. The safe experimental fallback, if this audit confirms there is no supported hardware path, is to disable `VK_KHR_fragment_shading_rate` and its feature/property advertisement for this branch, then build a non-VRS control driver. Keep that separate from the existing diagnostic package until the code path is proven.
 - No driver source or package was modified during this source audit. Next work remains source tracing and hardware capability verification; no user test is requested yet.
+
+
+### Correction to VRS implementation audit: CSF draw-state programming is present (2026-11-06)
+
+A deeper search of the architecture-specific CSF draw backend found a VRS implementation that the prior audit missed. The earlier statement that there was no visible Mali v12 hardware-state programming path was incorrect and is superseded by this correction.
+
+Verified implementation:
+- `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c:set_tiler_idvs_flags()` checks `dyn_gfx_state_dirty(cmdbuf, FSR)` and packs `MALI_PRIMITIVE_FLAGS_2` on `PAN_ARCH >= 12`.
+- It reads `dyns->fsr.fragment_size.width/height` and both combiner ops.
+- It forces 1x1 and KEEP/KEEP when the fragment shader uses sample shading.
+- It encodes the rate as `(log2(max(width,1)) << 2) | log2(max(height,1))`, then packs both combiner enums into `vrs_combiner_0/1`.
+- `src/panfrost/genxml/v12.xml` defines `Primitive Flags 2`: VRS Draw Rate (4 bits), Combiner 0 (3 bits), Combiner 1 (3 bits). The enum explicitly maps 1x1=0, 1x2=1, 1x4=2, 2x1=4, 2x2=5, 2x4=6, 4x1=8, 4x2=9, 4x4=10; combiner Keep=0, Replace=1, Min=2, Max=3, Mul=4. Thus the 2x2 formula yields 5, matching the v12 GenXML enum.
+- The physical-device property comment and reported property values correspond to pipeline-only VRS. The GenXML also contains VRS image-rate definitions, but this driver does not advertise attachment VRS.
+- The probe fragment shader uses `gl_FragCoord` to emit an 8x8 coordinate pattern; it does not use `gl_SamplePosition` / sample-position intrinsics. Therefore the optional NIR lowering in `panvk_vX_shader.c` that injects `nir_load_frag_shading_rate()` is not expected to be exercised by this particular probe shader.
+
+Revised investigation:
+- VRS hardware draw-state programming exists in the CSF path; do not disable the extension solely on the earlier missing-path claim.
+- The observed hang remains during `vkCreateGraphicsPipelines`, before command recording or the CSF draw-state packer is called. The 2x2 rate is present in the graphics pipeline pNext state, and Mesa's Vulkan runtime parses it into `vk_graphics_pipeline_state.fsr`. The PanVK shader compiler callback receives this state.
+- The investigation should now focus on pipeline-state parsing/validation/compilation/cache interactions when static FSR is non-default, and on whether the compiler's `fs_may_use_vrs` / `panvk_hash_state` handling or an unrelated pipeline-state path loops or corrupts state. Since the probe shader only reads `gl_FragCoord`, isolate whether the hang occurs before compiler entry, during VS compile, during FS compile, or after shader compile.
+- Next diagnostic improvement: instrument the PanVK `panvk_compile_shaders` callback and `compile_shaders` loop with flushed checkpoints per stage, and instrument entry/exit around `panvk_compile_nir` / `pan_shader_compile`. Also log the static FSR state (width, height, combiner ops, dynamic bit) as read by PanVK. This can identify the precise compiler boundary without changing driver behavior.
+- No driver code or package was changed during this correction. The prior "disable extension because no state programming exists" proposal is withdrawn pending these more precise diagnostics.
