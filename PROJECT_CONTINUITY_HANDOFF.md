@@ -4468,3 +4468,14 @@ These are wrapper build artifacts, not the flat Android-only Winlator driver-imp
 ### User action gate
 
 Do not request device testing until the exact-head Android-only package passes all compile, ELF/libdrm, dependency and flat-package audits. The wrapper builds passing do not replace that gate. Keep the Android vendor/system Vulkan driver untouched; eventual device testing must use Winlator Mali 1.2's custom driver importer only. Tomb Raider/DXVK 1.7.2 remains a regression check, not a VRS performance test, because its captured enabled extension list did not include `VK_KHR_fragment_shading_rate`.
+
+
+## 2026-11-06 continuation — VRS probe CI command fix
+
+- Initial VRS probe workflow run `42138721988` failed in the shell/link stage before meaningful source compilation. The workflow's multi-line command encoded literal backslash arguments; MinGW linker reported `cannot find \\\\: No such file or directory`.
+- This is a CI command formatting defect, not a driver build or Vulkan implementation failure.
+- Fixed `.github/workflows/build.yml` to invoke the compiler as one explicit command line.
+- Fix commit on `experiment/g720-fragment-shading-rate`: `157418c71475b9d96170a43f24157a80673d4160`.
+- A fresh probe build result has not yet been observed. Do not distribute or test a probe executable until its artifact exists and is verified.
+- Exact-head Android-only workflow `42138343360` remained in dependency installation at the last poll; host tools, Android ARM64 driver compile, dependency audit and package stages were still pending. No current importable package is available.
+- The exact source driver commit remains `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`; the workflow-only fix does not change driver source.
