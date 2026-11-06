@@ -126,6 +126,9 @@ jobs:
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           envsubst < android.toml > android-cross.txt
 
+          # Winlator/Adrenotools custom ICD, not Android system HAL:
+          # keep API-30 minimum but do not hide implemented KHR extensions
+          # behind Android CTS's build-target extension allowlist.
           meson setup build-android-only \
             --cross-file android-cross.txt \
             -Dbuildtype=release \
@@ -133,9 +136,6 @@ jobs:
             -Dandroid-stub=true \
             -Dandroid-libbacktrace=disabled \
             -Dplatform-sdk-version=30 \
-            # This is a Winlator/Adrenotools ICD, not the Android system HAL.
-            # Disable Android CTS extension allowlisting so implemented KHR
-            # extensions are not hidden by the API-30 build target.
             -Dandroid-strict=false \
             -Dglx=disabled \
             -Dgbm=disabled \
