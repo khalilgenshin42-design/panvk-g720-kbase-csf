@@ -4797,3 +4797,16 @@ While the corrected package builds, audited the pipeline-state plumbing to ensur
 - `src/vulkan/runtime/vk_graphics_state.c` parses `VkPipelineFragmentShadingRateStateCreateInfoKHR` from pipeline `pNext`, initializes the fragment extent and both combiner operations, and defaults to 1x1 with KEEP/KEEP when the structure is absent. The generic `FOREACH_STATE_GROUP`/state-init machinery routes the FSR state through the same pipeline-state initialization/copy path.
 - `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c` consumes `dyns->fsr` on v12+, converts the width/height to the hardware log2 VRS draw-rate encoding, writes both Mali VRS combiner fields into `PRIMITIVE_FLAGS_2`, and forces 1x1 KEEP/KEEP for sample-shaded fragment shaders.
 - Therefore, the source path has both generic static pipeline FSR state and PanVK CSF draw-register programming. This is still source inspection only; device execution and output correctness remain unvalidated.
+
+
+
+### Corrected PanVK package built and independently inspected (2026-11-06 13:35 CET)
+
+- Android-only run `42218076513` completed successfully from source/workflow SHA `cf078c491c86b01c452542cde014439410277182`.
+- Meson summary in the actual build log explicitly confirms `android-strict: false` and `platform-sdk-version: 30`. The build therefore retains Android API 30 minimum compatibility while disabling the CTS extension allowlist that hid FSR.
+- Artifact ID: `13502283504`; artifact name `panvk-g720-android-only-experimental-package`; outer artifact SHA-256 `cf81c2c7697a273050df6b3fc9ff9ac7e778b95c75cf1e326685e3660d5aaaa0`.
+- Nested Winlator package SHA-256: `ba54e040ed1dcd2c9f8148c74a2618f395085f477fc44d7806e67e01b67482b6`.
+- Nested package was downloaded and inspected locally. It contains exactly `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`. Metadata reports `packageVersion=26.3.0-devel-android-kbase-cf078c491c86`, `minApi=30`, and `libraryName=libvulkan_panfrost.so`.
+- Embedded checksums verified against the extracted library files. The CI ELF/dependency audit passed, `audit/missing-drm-symbols.txt` is empty, and the staged ICD manifest resolves the expected library. The package is structurally valid and ready for Winlator import.
+- Do not confuse this corrected package with artifact `13501453528` from pre-fix run `42217026789`; that earlier package had strict filtering enabled and is superseded.
+- Expanded Windows probe job in run `42218076595` was still in progress at this poll; wait for its artifact before asking for device testing so the test uses the full extension-list/device-ID diagnostics.
