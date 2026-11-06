@@ -16,6 +16,7 @@ on:
       - experiment/g720-performance-audit
       - experiment/g720-clip-cull-capabilities
       - experiment/g720-descriptor-heaps
+      - experiment/g720-fragment-shading-rate
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
@@ -54,6 +55,10 @@ jobs:
           grep -q "UnregisterCustomBorderColorEXT" src/panfrost/vulkan/panvk_vX_sampler.c
           grep -q ".EXT_descriptor_heap = PAN_ARCH >= 9" src/panfrost/vulkan/panvk_vX_physical_device.c
           grep -q ".descriptorHeap = PAN_ARCH >= 9" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -q ".KHR_fragment_shading_rate = PAN_ARCH >= 12" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -q ".pipelineFragmentShadingRate = PAN_ARCH >= 12" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -q "panvk_GetPhysicalDeviceFragmentShadingRatesKHR" src/panfrost/vulkan/panvk_physical_device.c
+          grep -q "cfg.vrs_draw_rate" src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c
 
       - name: Set up Python
         uses: actions/setup-python@v5
