@@ -96,6 +96,8 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
             PFN_vkGetDeviceProcAddr get_device_proc_addr,
             VkQueue queue, uint32_t queue_family, VkFormat format,
             VkRenderPass render_pass, VkPipelineLayout layout, VkShaderModule vs, VkShaderModule fs,
+            VkFragmentShadingRateCombinerOpKHR op0,
+            VkFragmentShadingRateCombinerOpKHR op1,
             VkExtent2D rate, uint8_t *pixels)
 {
    DECLARE_DEVICE_FUNCS;
@@ -246,8 +248,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    VkPipelineFragmentShadingRateStateCreateInfoKHR fsr = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR,
       .fragmentSize = rate,
-      .combinerOps = {VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
-                      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR},
+      .combinerOps = {op0, op1},
    };
    VkGraphicsPipelineCreateInfo pipeline_info = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -458,8 +459,12 @@ main(void)
 
    int passed = 0;
    for (uint32_t d = 0; d < pd_count && !passed; d++) {
+      VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_props = {
+         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR,
+      };
       VkPhysicalDeviceDriverProperties driver = {
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
+         .pNext = &fsr_props,
       };
       VkPhysicalDeviceProperties2 props = {
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
@@ -492,7 +497,7 @@ main(void)
          .pNext = &fsr_features,
       };
       get_features2(pds[d], &features);
-      LOG("pipelineFragmentShadingRate=%u\n", fsr_features.pipelineFragmentShadingRate);
+      LOG("pipelineFragmentShadingRate=%u\n", fsr_features.pipelineFragmentShadingRate);\n      LOG("nonTrivialCombinerOps=%u strictMultiplyCombiner=%u\n",\n          fsr_props.fragmentShadingRateNonTrivialCombinerOps,\n          fsr_props.fragmentShadingRateStrictMultiplyCombiner);
       if (!fsr_features.pipelineFragmentShadingRate) continue;
 
       VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -605,28 +610,54 @@ main(void)
       LOG("shader modules/pipeline layout=%d\n",result);
       if(result!=VK_SUCCESS){destroy_dev(device,NULL);continue;}
 
-      uint8_t *image_1x1=malloc(IMAGE_BYTES),*image_2x2=malloc(IMAGE_BYTES);
-      if(!image_1x1||!image_2x2){LOG("FAIL: host allocation\n");destroy_dev(device,NULL);continue;}
-      int ok1=render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,(VkExtent2D){1,1},image_1x1);
-      LOG("1x1 draw submit/fence/readback=%s\n",ok1?"PASS":"FAIL");
-      int ok2=ok1 && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,(VkExtent2D){2,2},image_2x2);
-      LOG("2x2 draw submit/fence/readback=%s\n",ok2?"PASS":"FAIL");
-      if(ok1&&ok2){
-         uint32_t e1=equal_neighbors(image_1x1),e2=equal_neighbors(image_2x2);
-         uint64_t h1=checksum(image_1x1),h2=checksum(image_2x2);
-         LOG("1x1 checksum=0x%016llx equal-neighbor-count=%u\n",(unsigned long long)h1,e1);
-         LOG("2x2 checksum=0x%016llx equal-neighbor-count=%u\n",(unsigned long long)h2,e2);
-         LOG("image comparison: %s\n",h1!=h2?"different":"identical");
-         if(h1!=h2 && e2>e1+W*H/2){
-            LOG("PASS: GPU executed both rates and 2x2 produced coarse repeated output\n");
-            passed=1;
-         } else {
-            LOG("FAIL: readback did not show the expected 2x2 coarse-rate signature\n");
+      uint8_t *images[5] = {0};
+      for (uint32_t i = 0; i < 5; i++) images[i] = malloc(IMAGE_BYTES);
+      int allocated = 1;
+      for (uint32_t i = 0; i < 5; i++) if (!images[i]) allocated = 0;
+      if (!allocated) {
+         LOG("FAIL: host allocation\n");
+      } else {
+         const VkFragmentShadingRateCombinerOpKHR keep = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+         int ok[5];
+         ok[0] = render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,keep,keep,(VkExtent2D){1,1},images[0]);
+         LOG("1x1 KEEP control submit/fence/readback=%s\n",ok[0]?"PASS":"FAIL");
+         ok[1] = ok[0] && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,keep,keep,(VkExtent2D){2,2},images[1]);
+         LOG("2x2 KEEP submit/fence/readback=%s\n",ok[1]?"PASS":"FAIL");
+         ok[2] = ok[1] && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR,keep,(VkExtent2D){2,2},images[2]);
+         LOG("2x2 MAX/KEEP combiner=%s\n",ok[2]?"PASS":"FAIL");
+         ok[3] = ok[2] && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR,keep,(VkExtent2D){2,2},images[3]);
+         LOG("2x2 MIN/KEEP combiner=%s\n",ok[3]?"PASS":"FAIL");
+         ok[4] = ok[3] && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR,keep,(VkExtent2D){1,1},images[4]);
+         LOG("1x1 MUL/KEEP combiner=%s\n",ok[4]?"PASS":"FAIL");
+         if (ok[4]) {
+            uint32_t e0=equal_neighbors(images[0]),e1=equal_neighbors(images[1]);
+            uint32_t e2=equal_neighbors(images[2]),e3=equal_neighbors(images[3]);
+            uint32_t e4=equal_neighbors(images[4]);
+            uint64_t h0=checksum(images[0]),h1=checksum(images[1]);
+            uint64_t h2=checksum(images[2]),h3=checksum(images[3]);
+            uint64_t h4=checksum(images[4]);
+            LOG("1x1 KEEP: checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h0,e0);
+            LOG("2x2 KEEP: checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h1,e1);
+            LOG("2x2 MAX:  checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h2,e2);
+            LOG("2x2 MIN:  checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h3,e3);
+            LOG("1x1 MUL:  checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h4,e4);
+            int basic = h0 != h1 && e1 > e0 + W*H/2;
+            int max_ok = h2 == h1;
+            int min_ok = h3 == h0;
+            int mul_ok = fsr_props.fragmentShadingRateStrictMultiplyCombiner ? h4 == h0 : h4 == h1;
+            LOG("combiner comparisons: basic=%d MAX=%d MIN=%d MUL-vs-strict-property=%d\n",basic,max_ok,min_ok,mul_ok);
+            if (basic && fsr_props.fragmentShadingRateNonTrivialCombinerOps &&
+                max_ok && min_ok && mul_ok) {
+               LOG("PASS: GPU draw/readback confirms 1x1, 2x2, and nontrivial VRS combiners\n");
+               passed=1;
+            } else {
+               LOG("FAIL: GPU output or advertised combiner properties disagree\n");
+            }
          }
       }
-      free(image_1x1);free(image_2x2);
+      for (uint32_t i = 0; i < 5; i++) free(images[i]);
       destroy_sm(device,vs,NULL);destroy_sm(device,fs,NULL);
-      destroy_pl(device,pl,NULL);destroy_fb(device,fb,NULL);
+      destroy_pl(device,pl,NULL);
       destroy_rp(device,rp,NULL);
       destroy_dev(device,NULL);
    }
