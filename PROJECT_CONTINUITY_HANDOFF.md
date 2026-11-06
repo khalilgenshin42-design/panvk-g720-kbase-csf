@@ -4365,3 +4365,13 @@ Latest feature branch head after the 2x-MSAA rate-table refinement and comment u
 `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`.
 
 The latest exact-head wrapper and Android-only package workflows are being queued by GitHub Actions. Older in-flight runs cover earlier commits; they are useful for early compile diagnostics but do not replace a pass on this exact head. No VRS package has been approved for user testing yet.
+
+
+### Early compile milestone — VRS implementation compiled
+
+GitHub Actions run `42137547230` for feature commit `f651e48768a0110b811e874cf3c1157ec6a29746` completed successfully in both build types:
+- Android wrapper release: SUCCESS.
+- Android wrapper debugoptimized: SUCCESS.
+- Both Meson configure and full project compile steps passed.
+
+This commit already contained the extension/feature exposure, rate query, CSF `PRIMITIVE_FLAGS_2` programming, and fragment sample-center lowering. Later commits only refined physical-device property/rate sample-count reporting and CI checks. Exact-head validation is still pending on `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`; do not treat the early compile as a final package pass.
