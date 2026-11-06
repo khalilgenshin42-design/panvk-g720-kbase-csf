@@ -4425,3 +4425,8 @@ This package predates the final FSR rate/sample-count table refinements and must
 ### Wrapper CI completion update
 
 The previously in-progress wrapper workflow `42137715709` has now completed successfully in both release and debugoptimized configurations. This is still an early source commit (`9330fc2c5666bccf0a0be7ee53b7adf23a914e19)); exact-head validation for the final FSR rate table and current branch is still required.
+
+
+### Exact-source wrapper validation progress
+
+For the driver-source head `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`, wrapper release compile and artifact upload have passed in run `42138343235`; debugoptimized compile is still in progress. The exact-head Android-only package workflow `42138343360` has passed checkout/source verification and is installing build dependencies. The Windows probe workflow is queued behind the wrapper jobs.
