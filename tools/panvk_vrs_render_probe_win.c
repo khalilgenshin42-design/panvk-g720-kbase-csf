@@ -88,7 +88,8 @@ memory_type(const VkPhysicalDeviceMemoryProperties *props, uint32_t bits,
    PFN_vkQueueSubmit queue_submit = LOAD_D(QueueSubmit); \
    PFN_vkCreateFence create_fence = LOAD_D(CreateFence); \
    PFN_vkDestroyFence destroy_fence = LOAD_D(DestroyFence); \
-   PFN_vkWaitForFences wait_for_fences = LOAD_D(WaitForFences)
+   PFN_vkWaitForFences wait_for_fences = LOAD_D(WaitForFences); \
+   PFN_vkDeviceWaitIdle device_wait_idle = LOAD_D(DeviceWaitIdle)
 
 static int
 render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
@@ -119,7 +120,9 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    VkCommandPool pool = VK_NULL_HANDLE;
    VkFence fence = VK_NULL_HANDLE;
    int ok = 0;
+   int submitted = 0;
 
+   LOG("  creating %ux%u pipeline and offscreen target\\n", rate.width, rate.height);
    VkImageCreateInfo image_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
@@ -341,6 +344,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    };
    if (queue_submit(queue, 1, &submit, fence) != VK_SUCCESS)
       goto done;
+   submitted = 1;
    PFN_vkWaitForFences wait_fences = LOAD_D(WaitForFences);
    if (!wait_fences || wait_fences(device, 1, &fence, VK_TRUE, 30ull * 1000ull * 1000ull * 1000ull) != VK_SUCCESS)
       goto done;
@@ -353,6 +357,8 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    ok = 1;
 
 done:
+   if (submitted && !ok && device_wait_idle)
+      device_wait_idle(device);
    if (fence && destroy_fence) destroy_fence(device, fence, NULL);
    if (framebuffer && destroy_framebuffer) destroy_framebuffer(device, framebuffer, NULL);
    if (pool && destroy_command_pool) destroy_command_pool(device, pool, NULL);
@@ -603,7 +609,7 @@ main(void)
       if(!image_1x1||!image_2x2){LOG("FAIL: host allocation\n");destroy_dev(device,NULL);continue;}
       int ok1=render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,(VkExtent2D){1,1},image_1x1);
       LOG("1x1 draw submit/fence/readback=%s\n",ok1?"PASS":"FAIL");
-      int ok2=render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,(VkExtent2D){2,2},image_2x2);
+      int ok2=ok1 && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,(VkExtent2D){2,2},image_2x2);
       LOG("2x2 draw submit/fence/readback=%s\n",ok2?"PASS":"FAIL");
       if(ok1&&ok2){
          uint32_t e1=equal_neighbors(image_1x1),e2=equal_neighbors(image_2x2);
