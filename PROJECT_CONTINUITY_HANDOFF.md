@@ -5303,3 +5303,12 @@ Checked Arm's official Mali-G720 product support page. Arm lists Variable Rate S
 - https://support.arm.com/compute-ip/mali-g720
 
 This confirms the GPU family has VRS capability in hardware; it does not by itself prove every PanVK path or every Vulkan feature/property is correctly implemented. The current PanVK branch intentionally exposes only pipeline FSR, and the CSF v12 draw backend packs the pipeline rate and combiner state. Keep primitive and attachment FSR disabled until those separate paths are implemented and validated.
+
+
+### VRS diagnostic instrumentation format fix (2026-11-06)
+
+A compile-warning prevention fix was committed after reviewing Mesa's `util_dynarray_num_elements()` macro return type (`size_t`):
+- Feature branch commit: `dcd607bb809b271ac53e1138c071e5faeac5ef53`
+- Changed the diagnostic byte-count format from `%u` to `%zu`.
+- No functional driver behavior changed.
+- New CI runs triggered for this corrected source commit; use only artifacts from the corrected head `dcd607bb809b271ac53e1138c071e5faeac5ef53`, not the preceding diagnostic commit's build.
