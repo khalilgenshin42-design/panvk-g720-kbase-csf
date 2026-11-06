@@ -4966,3 +4966,35 @@ Inspected `src/vulkan/wrapper/wrapper_device.c` on the same pinned GameNative co
 - `VK_EXT_image_compression_control_swapchain`
 
 It does not blacklist `VK_KHR_fragment_shading_rate`. Together with the `-Dplatforms=x11` / no-`ANDROID_STRICT` build path, there is no source-supported GameNative wrapper filter for FSR in this version. The wrapper rebuild was unnecessary and remains deleted.
+
+
+### User-device VRS probe result: PASS (2026-11-06)
+
+The user supplied `panvk_vrs_probe.log` from the corrected PanVK package and existing Winlator wrapper. The full log was read from the uploaded file and confirms:
+
+- Physical device: `Wrapper(Mali-G720 MC7)`.
+- Vulkan API: `1.3.354`.
+- Vendor/device IDs: `0x13b5 / 0xc8700010`.
+- Driver: `panvk (Mesa 26.3.0-devel (git-cf078c491c))`.
+- Device extension enumeration succeeded, count 163.
+- `VK_KHR_fragment_shading_rate` is present (spec version 2).
+- `pipelineFragmentShadingRate=true`.
+- `primitiveFragmentShadingRate=false`; `attachmentFragmentShadingRate=false`, as expected for this pipeline-only implementation.
+- Reported properties: max fragment size 4x4, max aspect ratio 2, max coverage samples 16, max rasterization samples 4x.
+- Enumerated rates: 4x4@1x; 4x2@1x; 2x4@1x/2x; 2x2, 2x1, 1x2@1x/2x/4x; 1x1 at all sample counts.
+- `vkCreateDevice` with `pipelineFragmentShadingRate` enabled returned `VK_SUCCESS (0)`.
+- `vkCmdSetFragmentShadingRateKHR` command recording and command-buffer end returned `VK_SUCCESS (0)`.
+- Probe concludes `PASS: extension query, device creation, and dynamic FSR command recording` and `VRS PROBE PASS`.
+
+Interpretation and limits:
+- This proves that the tested custom PanVK ICD is active in the Winlator container, that FSR pipeline mode is visible to the application, that the feature can be enabled, and that the dynamic command path can be recorded without validation/API failure in this probe.
+- The reported device name and device ID are consistent with the expected Mali-G720 MC7 target. The log itself does not include the PanVK startup diagnostic's raw kernel `gpu_id`, decoded `pan_arch`, or extension-table bit; therefore those exact internal values remain uncorrelated. The user-visible Vulkan identity and successful v12-gated FSR path are strong evidence but are not a substitute for that startup line.
+- This is not yet proof of actual VRS rasterization behavior, visual correctness, shader-rate lowering correctness, or performance improvement. No game benchmark should be interpreted as a VRS result until an actual draw has been submitted with a non-1x1 rate and its output/performance compared.
+
+Next engineering gate:
+1. Build a minimal controlled render probe (or extend the existing probe) that creates a small offscreen color target and pipeline, submits real geometry at a deliberately coarse rate (e.g. 2x2), then reads back or otherwise verifies output. Include a 1x1 control path and ensure identical geometry/shaders/state except for the shading-rate state.
+2. Verify the command is actually executed on the GPU, not merely recorded; capture submission/fence completion and output checksum/readback if supported by the current probe environment.
+3. Only after the controlled rendering path passes, ask the user to run a short controlled test in Winlator. Then evaluate whether a DXVK title can use the feature and whether there is a measurable benefit. Do not claim that DXVK automatically uses this extension; the application/translation layer must opt into the relevant Vulkan functionality.
+4. Keep primitive and attachment FSR disabled until independently implemented and validated. Do not expose additional unimplemented extensions just to match the stock MediaTek extension list.
+
+No system/vendor driver replacement and no wrapper replacement were performed. The tested driver remains the separately imported custom PanVK package.
