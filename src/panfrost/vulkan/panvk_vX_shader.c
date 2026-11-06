@@ -700,6 +700,45 @@ panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
    pan_preprocess_nir(nir, pdev->kmod.dev->props.gpu_id);
 }
 
+#if PAN_ARCH >= 12
+static bool
+fs_may_use_vrs(const struct vk_features *features,
+               const struct vk_graphics_pipeline_state *state)
+{
+   if (!features->pipelineFragmentShadingRate &&
+       !features->primitiveFragmentShadingRate &&
+       !features->attachmentFragmentShadingRate)
+      return false;
+
+   if (state == NULL || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR))
+      return true;
+
+   return state->fsr && !vk_fragment_shading_rate_is_disabled(state->fsr);
+}
+
+static bool
+lower_vrs_frag_center(nir_builder *b, nir_intrinsic_instr *intr,
+                      UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_load_sample_pos_or_center)
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def *rate = nir_load_frag_shading_rate(b);
+   BITSET_SET(b->shader->info.system_values_read,
+              SYSTEM_VALUE_FRAG_SHADING_RATE);
+   nir_def *log2_size =
+      nir_vec2(b, nir_iand_imm(b, nir_ushr_imm(b, rate, 2), 3),
+               nir_iand_imm(b, rate, 3));
+   nir_def *center = nir_ldexp(b, nir_imm_vec2(b, 0.5f, 0.5f), log2_size);
+   if (center->bit_size != intr->def.bit_size)
+      center = nir_f2fN(b, center, intr->def.bit_size);
+
+   nir_def_replace(&intr->def, center);
+   return true;
+}
+#endif
+
 static void
 panvk_hash_state(struct vk_physical_device *device,
                  const struct vk_graphics_pipeline_state *state,
@@ -718,6 +757,10 @@ panvk_hash_state(struct vk_physical_device *device,
          state->ms && state->ms->sample_shading_enable;
       _mesa_blake3_update(&blake3_ctx, &sample_shading_enable,
                           sizeof(sample_shading_enable));
+#if PAN_ARCH >= 12
+      bool vrs = fs_may_use_vrs(enabled_features, state);
+      _mesa_blake3_update(&blake3_ctx, &vrs, sizeof(vrs));
+#endif
 
       _mesa_blake3_update(&blake3_ctx, &state->mv->view_mask,
                           sizeof(state->mv->view_mask));
@@ -1231,6 +1274,17 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
 
    /* We're going to modify this so make our own copy to be nicer to callers */
    struct pan_compile_inputs input = *compile_input;
+
+   if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+      if (state && state->ms && state->ms->sample_shading_enable)
+         nir->info.fs.uses_sample_shading = true;
+#if PAN_ARCH >= 12
+      if (!nir->info.fs.uses_sample_shading &&
+          fs_may_use_vrs(&dev->vk.enabled_features, state))
+         NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_vrs_frag_center,
+                  nir_metadata_control_flow, NULL);
+#endif
+   }
 
    if (nir->info.stage == MESA_SHADER_VERTEX)
       NIR_PASS(_, nir, nir_shader_intrinsics_pass, panvk_lower_load_vs_input,
