@@ -5043,3 +5043,24 @@ The render probe was extended to query and log `fragmentShadingRateNonTrivialCom
 The probe checks GPU submission/fence/readback, the expected 2x2 repeated-pixel signature, and output equivalence for MIN/MAX/MUL against the property value. It now queries FSR properties only after confirming the extension is present.
 
 Latest probe source commit: `12379968b4eca4ed074c2c72b9d8d764851cd5e4` on `experiment/g720-fragment-shading-rate`. The CI build and artifact inspection are still pending. Do not give the user a download or request a device run until the executable has compiled, been inspected, and the matching Android ICD build containing the combiner-property correction has succeeded.
+
+
+### Current VRS probe build queue and latest source checkpoint (2026-11-06)
+
+The expanded render probe has been statically reviewed and corrected through several source passes:
+- Framebuffer/image ownership is now per-render invocation, so each 1x1/2x2/combiner case reads back the exact image attached to its framebuffer.
+- Host readback requires HOST_VISIBLE + HOST_COHERENT memory; no non-coherent read is accepted without an invalidate path.
+- A failed fence wait after a successful submit attempts `vkDeviceWaitIdle` before releasing resources.
+- The main path checks extension support before chaining/querying `VkPhysicalDeviceFragmentShadingRatePropertiesKHR`.
+- The render probe exercises KEEP, MAX, MIN, and MUL combiners with static pipeline FSR state. The 1x1 MUL case is compared against `fragmentShadingRateStrictMultiplyCombiner`.
+- The Windows source includes a coordinate-dependent fragment shader and embedded-SPIR-V build step. No driver code beyond the nontrivial-combiner property correction was changed.
+
+Latest source commit: `10472e2c0c22a72dd4acd32d67ee145953b3d555` on `experiment/g720-fragment-shading-rate`.
+
+GitHub Actions runs observed for this source checkpoint:
+- Android NDK build (wrapper variant): run `42224083920`.
+- Android-only PanVK experiment: run `42224083693`.
+- Winlator VRS render probe: run `42224083881`.
+- All three were **queued** at the last poll. Earlier runs from intermediate commits were also queued; only the latest matching-source artifacts should be considered if they complete. The final source checkpoint is not yet compile-verified and no render-probe artifact is ready to distribute.
+
+Next: poll these exact runs, inspect the Windows build logs and Android build artifacts, and correct any compile/runtime issues before asking for a device test. The previously tested package `cf078c491c86b01c452542cde014439410277182` predates the nontrivial-combiner property correction and must not be reused to validate the updated combiner behavior.
