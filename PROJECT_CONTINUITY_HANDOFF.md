@@ -4778,3 +4778,12 @@ A second possible filtering layer was identified while checking the exact GameNa
 - After the corrected PanVK package is installed, compare PanVK's startup capability-audit line with the probe's extension list. If PanVK logs `KHR_fragment_shading_rate=1` but the wrapper-visible probe still omits FSR, then the installed wrapper is the remaining suspect. At that point, obtain/verify the exact wrapper build or produce a separate wrapper build with `-Dandroid-strict=false`; do not modify PanVK's hardware gate.
 
 This distinction is now part of the diagnostic decision tree. The driver-side allowlist fix is necessary, but wrapper-side filtering remains an unverified possible second gate.
+
+
+
+### Corrected-build CI run IDs (2026-11-06)
+
+- Corrected Android-only PanVK package run: `42218076513`, run #189, source/workflow SHA `cf078c491c86b01c452542cde014439410277182`. This is the authoritative package build with `-Dandroid-strict=false`.
+- Expanded Windows probe + alternate Android PanVK build run: `42218076595`, run #449, same source/workflow SHA. The Windows probe is the useful artifact from this run. The `libvulkan_wrapper-aarch64-*` artifacts from this job are actually `libvulkan_panfrost.so` alternate driver builds (as proven by `.github/workflows/build.yml` upload path), not loader/wrapper libraries.
+- At the last poll both runs were still in progress. Android-only job was compiling/staging; the Windows probe was installing MinGW-w64; both alternate PanVK variants were compiling. Do not use artifacts from the pre-fix run `42217026789`.
+- User testing remains blocked until run `42218076513` uploads the corrected PanVK package and run `42218076595` uploads `panvk-vrs-probe-win64`.
