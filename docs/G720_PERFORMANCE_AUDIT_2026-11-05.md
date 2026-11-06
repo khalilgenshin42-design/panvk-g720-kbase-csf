@@ -938,3 +938,55 @@ two-slot length. This is declaration-level coverage only; it does not yet
 test dereference rewrites, indirect indexing, or arrayed stage interfaces.
 The tests are separate from gather/merge and do not prove pass order.
 Commit `cec14bb825176cb714e0a6d2e4dab3c7dd44de0e`.
+
+
+## 2026-11-06 continuation — exact-head build/package audit and environment-override correction
+
+### Current performance-audit branch source
+
+- Branch HEAD: `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8` (documentation/capability-matrix update).
+- Latest code commit on this branch: `a2e5ac142b4f0df71cb28204ece4337bace046de` (`panvk: fix descriptor profile log call`). The descriptor-failure classification and effective heap-threshold log are present in the current tree.
+- Source review of `panvk_vX_descriptor_set.c` confirms the set-allocation failure returns are classified as:
+  - `overflow`: variable-count adjustment overflow and final descriptor-count overflow; returns remain `VK_ERROR_OUT_OF_POOL_MEMORY`.
+  - `capacity`: no free descriptor-set slot or insufficient descriptor-heap free bytes; returns remain `VK_ERROR_OUT_OF_POOL_MEMORY`.
+  - `vma`: `util_vma_heap_alloc()` returns zero; return remains `VK_ERROR_FRAGMENTED_POOL`.
+  - The aggregate failure counter is retained and incremented with each category. Profiling is gated by `PANVK_DESCRIPTOR_PROFILE=1`; no allocation semantics or Vulkan return codes changed.
+- Source review of `panvk_vX_gpu_queue.c` confirms the threshold helper calls `debug_get_num_option("PANVK_KBASE_HEAP_RENEW_WORK", KBASE_TILER_HEAP_RENEW_WORK)`, accepts positive values, maps non-positive values to zero, and logs the effective value once. On this branch the compiled default is still 65,536.
+
+### Important correction: the earlier 262K run was not an environment-variable test
+
+Commit `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7` on `experiment/g720-heap-renew-262k` changes only the compiled default macro from 65,536 to 262,144 (plus a diagnostic comment); the environment-variable parser remains present. Therefore the 02:42 startup log showing 262,144 proves the candidate binary's effective threshold, but **does not prove Winlator passed `PANVK_KBASE_HEAP_RENEW_WORK`**. This distinction supersedes any earlier wording that described that run as an override-propagation test.
+
+Documented controlled datapoints remain:
+- Clean 65,536 baseline: **9.0 min / 17.6 max / 13.5 average FPS** (02:33 capture; log recorded effective 65,536 and profiling disabled).
+- 262,144 compiled-default candidate: **7.8 min / 18.9 max / 13.9 average FPS** (02:42 result corrected by the user; log recorded effective 262,144).
+- Candidate delta: +0.4 average, -1.2 minimum, +1.3 maximum FPS. One run per variant is inconclusive; no gain or promotion is justified.
+- The earlier **7.7 / 19.7 / 13.6 FPS** capture had diagnostic profiling enabled and is not a clean comparison.
+- No new Tomb Raider archive was supplied in this update; current conversation attachments contain the earlier 02:03:50 archive only.
+
+### Exact-head performance-audit CI and independently verified 65K package
+
+- Android-only run `42082282882`, job `127438170627`: SUCCESS through host-tool generation, Android ARM64 libdrm build, Android-only configure/compile/stage, driver/manifest/dependency audit, flat package creation, and artifact upload.
+- Wrapper run `42082283389`: SUCCESS for Release job `127438172351` and Debugoptimized job `127438172901`.
+- Workflow artifact `13442371778`, outer SHA-256 `3fc3eef74d546c11a1f1e799b38e4135fc935d25286c8b013cdfde5a897def6c`.
+- Independently downloaded inner package `PanVK-G720-experimental.zip`: SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`; ZIP integrity test passed; exactly `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`; all three member hashes pass.
+- Metadata version: `26.3.0-devel-android-kbase-fb70e9b5cf8b`, min API 30. Both libraries are ELF64 AArch64/Android API 30. Driver RUNPATH is `$ORIGIN`, its private dependency is `libpanvk_drm.so`, bundled libdrm depends only on libc, and the workflow's missing-DRM-symbol report is empty.
+- This is the correct package for an environment-override test because its compiled threshold remains 65,536. It is not a runtime-validated release.
+
+### Parallel branch status (not merged into this branch)
+
+- Descriptor heaps: `experiment/g720-descriptor-heaps` at `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`; Android-only run `42082198442` and wrapper run `42082198906` passed. Artifact `13441682356` outer SHA-256 `0a4f6b7899f3df42a89133f071b2c441e62739e8000ad55bdf14af7329fccf71`; inner package SHA-256 `2142ecffb957580f317071b9f1c0370029650cade149d10aa62f472fc5de82d6`. Package integrity, member hashes, AArch64/API 30, RUNPATH, private libdrm, and empty missing-symbol report verified. No device test.
+- Clip/cull: `experiment/g720-clip-cull-capabilities` at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`; NIR tests run `42033527839`, Android-only run `42033527656`, and wrapper run `42033527658` passed. This does not prove all legal stage chains or runtime semantics; feature bits remain disabled.
+- VRS: `experiment/g720-fragment-shading-rate` at workflow-fix HEAD `157418c71475b9d96170a43f24157a80673d4160`, driver source `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`. Android-only run `42140194412`, wrapper/probe run `42140194467` (Release, Debugoptimized, Windows x64 probe) passed. Android artifact `13468166958` outer SHA-256 `a7077179b08ae616abed1334ccb580583b89e0b79993206108df50ec793e60ca`; inner package SHA-256 `fa83005808ca2f7207008a9b2a5139f82f36de269c95c9da97784fc9d1350cbe`. Probe artifact `13467578263`, SHA-256 `618ca16d798d97ecc0ba3c316f1fbbca831578ac271adbc41790bd0bd761306f`; it is a PE32+ x86-64 capability/command-recording probe, not a rendering benchmark. Both package and probe ZIPs passed integrity checks; inner package hashes passed. No device runtime test.
+- Keep these experiments isolated. In particular, do not use the VRS or descriptor-heap package for the heap-threshold A/B test.
+
+### Exact next device test
+
+Use the verified 65K-default package from workflow artifact `13442371778`. It has been copied to the working delivery file `PanVK-G720-65k-env-override-test.zip`, SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`.
+
+1. Run the same Tomb Raider scene/settings with `PANVK_KBASE_HEAP_RENEW_WORK` absent; restart the game/driver process and require the startup log `tiler heap renewal work threshold=65536`.
+2. Run again with exactly `PANVK_KBASE_HEAP_RENEW_WORK=262144`; restart the process and require `tiler heap renewal work threshold=262144`. On this 65K-default binary, that value proves Winlator passed the override.
+3. If the second log says 65,536 or is absent, stop and report that environment propagation was not demonstrated. Do not treat its FPS as the 262K result.
+4. Leave `PANVK_KBASE_PROFILE`, `PANVK_DESCRIPTOR_PROFILE`, `PANVK_MEMPOOL_PROFILE`, `PANVK_KBASE_DIAG_MEM_FLAGS`, and `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` unset in both performance runs. Keep DXVK 1.7.2, wrapper, resolution, quality, scene, and thermal conditions matched. Record min/max/average and visual/stability observations; ideally repeat each value.
+
+No driver source was changed in this continuation. No FPS improvement is claimed.
