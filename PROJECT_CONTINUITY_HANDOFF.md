@@ -5341,3 +5341,11 @@ The VRS diagnostic log arguments were reviewed for C printf type correctness. Ex
 - Feature branch head: `f29602475f75b53665d30041c53a00c81b4f0933`
 - No functional behavior changed.
 - The build containing the final instrumented source must use this exact feature-branch head.
+
+
+### Final format-argument cleanup and authoritative build head (2026-11-06)
+
+Completed the remaining explicit enum/bool/VkResult casts in the PanVK diagnostic calls after reviewing the exact source lines.
+- Authoritative feature branch head: `fa4ae716d1e643f680a4109db81470aba23492ea`.
+- This commit changes diagnostic formatting only; no runtime driver behavior.
+- All previous builds are superseded. Use only the Android build artifacts generated from this exact head.
