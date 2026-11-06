@@ -5363,3 +5363,24 @@ Both CI workflows for authoritative feature commit `fa4ae716d1e643f680a4109db814
 - Android build audit passed; missing-DRM-symbol report is empty.
 
 These are diagnostic builds from corrected feature head `fa4ae716d1e643f680a4109db81470aba23492ea`, not a performance release. Next: import the inner package into the same Winlator test container, replace/run the Windows probe there, save the complete output as `panvk_vrs_render_probe.log`, and send it. Keep wrapper/container settings unchanged. Do not run Borderlands until the 2x2 pipeline-create checkpoint is understood.
+
+
+### User-uploaded VRS capability probe result (2026-11-07)
+
+The user uploaded `panvk_vrs_probe.log` from the PanVK package built at feature head `fa4ae716d1e643f680a4109db81470aba23492ea`. The complete log was read.
+
+Observed:
+- Device: `Wrapper(Mali-G720 MC7)`; PanVK Mesa `26.3.0-devel (git-fa4ae716d1)`; Vulkan API `1.3.354`.
+- Device extension enumeration succeeds and includes `VK_KHR_fragment_shading_rate` (spec version 2).
+- Reported feature bits: `pipelineFragmentShadingRate=true`; primitive and attachment FSR are false.
+- Reported maximum fragment size is 4x4; supported-rate enumeration includes 2x2 with sampleCounts `0x7`, which includes the probe's 1x sample count.
+- `vkCreateDevice` with pipeline FSR returns `VK_SUCCESS`.
+- `vkCmdSetFragmentShadingRateKHR` command-buffer recording/end returns `VK_SUCCESS`.
+- Probe ends `VRS PROBE PASS`.
+
+Interpretation:
+- This validates extension enumeration, feature enablement, and dynamic FSR command recording on the user's actual Winlator/Mali-G720 setup.
+- This is the capability/command-recording probe, not the newer render probe. It does not create a graphics pipeline with static 2x2 `VkPipelineFragmentShadingRateStateCreateInfoKHR`, submit a draw, wait on a fence, or read back pixels.
+- Therefore it does not resolve the separately reproduced stall at `vkCreateGraphicsPipelines rate=2x2 begin`, and it does not prove VRS rendering correctness or performance.
+- Keep the prior 1x1 render control PASS and the 2x2 static pipeline-creation stall as separate evidence. Do not disable VRS based on this result; do not claim 2x2 rendering works; do not run a game benchmark yet.
+- No driver source or package was changed in response to this log. Next investigation remains the exact static-FSR pipeline compilation boundary using the instrumented render-probe build. Confirm the user has run the matching `panvk-vrs-render-probe.exe` before requesting another test; if the uploaded file is the only available output, explain the distinction and provide the correct matching probe artifact.
