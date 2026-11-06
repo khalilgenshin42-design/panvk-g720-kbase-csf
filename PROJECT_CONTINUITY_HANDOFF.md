@@ -4955,3 +4955,14 @@ The corrected PanVK package and expanded probe are now the only artifacts needed
 - The Android-only rebuild run `42220313021` and the Release/Debugoptimized jobs in wrapper run `42220312994` were still in progress at the last poll. They are not required to validate the already-built corrected PanVK artifact `13502283504` or the completed Windows probe artifact `13503216545`.
 - User device validation is now the only missing input. Ask for one probe run with the corrected PanVK package and the existing wrapper unchanged. Do not request a wrapper import, game benchmark, or VRS rendering benchmark yet.
 
+
+
+### Final wrapper-side blacklist check
+
+Inspected `src/vulkan/wrapper/wrapper_device.c` on the same pinned GameNative commit. Its `wrapper_filter_extensions` table contains only:
+- `VK_EXT_hdr_metadata`
+- `VK_GOOGLE_display_timing`
+- `VK_KHR_shared_presentable_image`
+- `VK_EXT_image_compression_control_swapchain`
+
+It does not blacklist `VK_KHR_fragment_shading_rate`. Together with the `-Dplatforms=x11` / no-`ANDROID_STRICT` build path, there is no source-supported GameNative wrapper filter for FSR in this version. The wrapper rebuild was unnecessary and remains deleted.
