@@ -4756,3 +4756,11 @@ Do not yet claim VRS is device-validated. No FSR rendering draw has been submitt
 - `src/panfrost/vulkan/panvk_macros.h::panvk_arch_dispatch` routes architecture 11 to the v10 implementation and architecture 12 to the v12 implementation. Therefore, if the Kbase diagnostic reports arch 11, the driver is not dispatching the G720 v12 implementation; investigate the raw GPU ID/model decoding rather than weakening the VRS gate.
 - Mesa's public Panfrost driver documentation independently classifies G720 as 5th Gen (v12). This supports the expected classification but does not replace the device's raw Kbase diagnostic.
 - The Android strict-filter diagnosis remains the primary explanation for the extension's absence because the build's API-30 allowlist condition is independently proven. The next build must disable strict filtering and still log/verify the actual Kbase architecture.
+
+
+
+### CI poll after allowlist diagnosis (2026-11-06 13:30 CET)
+
+- Earlier Android-only run `42217026789` completed successfully and uploaded artifact `13501453528` (`panvk-g720-android-only-experimental-package`, SHA-256 `15274e447777e4c3a35a2751ca28e4f87408c785b65951098f239008e107c4e8`). Its source SHA is `5df8d3fb0243e1e3691b5b10ccaa1e73c180ab80`; it was built before the `-Dandroid-strict=false` workflow correction and is **not** the package to test for the VRS enumeration fix.
+- Wrapper/probe run `42217026859`: Android wrapper Release and Debugoptimized jobs both completed successfully. Artifacts: Release `13502460833` (SHA-256 `5b3863a7889f1908165ee913f0d266eed19199994b30c19db49c649aadf232fb`), Debugoptimized `13502630575` (SHA-256 `fe077345b532ece9a6fcae5c6c22ee97f46219a01fb17f29be203c049bd01a69`). The Windows probe job remained in progress at MinGW installation; no probe artifact yet.
+- The authoritative corrected workflow file is on source branch head `cf078c491c86b01c452542cde014439410277182`. Its Android-only job must be allowed to complete before choosing a package. The earlier strict/API-30 package is explicitly superseded for this diagnostic.
