@@ -4707,3 +4707,43 @@ Keep the custom PanVK ICD isolated in Winlator Mali 1.2. Never replace the Andro
 - Android-only ADPKG: **STATIC/PACKAGE VALIDATED**. Wrapper outputs: **RAW ELF VALIDATED ONLY**. No device runtime test was performed by CI or in this monitoring pass.
 - No source code, build configuration, or workflow was changed. Both documentation updates use `[skip ci]` so the required audit trail does not trigger another build.
 - Next runtime gate remains a user-controlled test of the Android-only package imported separately through Winlator Mali's custom-driver importer. Do not replace the phone's system/vendor Vulkan driver or modify the live kernel.
+
+
+
+## 2026-11-06 — root cause found for missing VRS extension enumeration
+
+A source-level root cause has been identified for the first Winlator VRS probe reporting `VK_KHR_fragment_shading_rate: missing`.
+
+### Confirmed code path
+
+1. The Android-only package workflow configures Mesa with `-Dplatform-sdk-version=30`.
+2. Mesa's `meson.options` sets `android-strict=true` by default.
+3. In `meson.build`, that option defines `ANDROID_STRICT`.
+4. `src/vulkan/runtime/vk_physical_device.c::vk_common_EnumerateDeviceExtensionProperties()` filters every advertised extension through `vk_android_allowed_device_extensions` when `ANDROID_STRICT` is defined.
+5. `src/vulkan/util/vk_extensions.py` explicitly whitelists `VK_KHR_fragment_shading_rate` only from Android API 31 (`ALLOWED_ANDROID_VERSION["VK_KHR_fragment_shading_rate"] = 31`).
+6. Since this package was compiled with `ANDROID_API_LEVEL=30`, the generated allowlist bit is false and the common enumeration function hides the extension even when PanVK's architecture-specific extension table reports it as supported.
+
+This exactly matches the symptom: source says `.KHR_fragment_shading_rate = PAN_ARCH >= 12`, but runtime extension enumeration says missing. It is a compile-time Android CTS allowlist filter, not evidence of unsupported G720 hardware or a broken VRS feature table.
+
+### Winlator-only build correction
+
+The Android-only workflow on `experiment/g720-fragment-shading-rate` was corrected:
+- Keep `-Dplatform-sdk-version=30` and the existing Android API 30 minimum.
+- Add `-Dandroid-strict=false` for this separate Winlator/Adrenotools custom ICD package.
+- Rationale: this package is not installed as Android's system Vulkan HAL; it is loaded by Winlator's custom-driver wrapper. The Android CTS extension allowlist must not hide otherwise implemented Vulkan device extensions from the Winlator process.
+- This disables the generated Android instance/device extension allowlist checks; it does not turn on any PanVK extension or feature bit. The PanVK extension table and feature/property implementation remain the source of advertised capabilities.
+
+The workflow edit was verified in the committed file: `-Dplatform-sdk-version=30` remains and `-Dandroid-strict=false` is passed directly as a Meson option (comments are outside the shell command continuation).
+- Workflow correction commit: `cf078c491c86b01c452542cde014439410277182`.
+- The immediately preceding workflow-only edit `4a93b748...` was corrected before being treated as a valid build configuration; use `cf078c4...` as the authoritative workflow head.
+- Driver implementation source still includes the VRS extension/feature gates and the Kbase startup diagnostic from commits `9aa4bdcc1201d5cd2de08d68df104652bb6ca346` and `5df8d3fb0243e1e3691b5b10ccaa1e73c180ab80`.
+
+### Validation still required
+
+- Build a fresh Android-only package from workflow head `cf078c4...`; do not use the previous strict/API-30 package.
+- Retain the Windows probe artifact from the expanded-probe source commit `5df8d3f...` once its job completes.
+- Import only the nested `PanVK-G720-experimental.zip` from the new artifact.
+- In the new PanVK log, verify the raw Kbase `gpu_id`, decoded architecture, and supported-extension-table bit. Expected for a correctly identified G720 is v12 and bit 1.
+- Run the expanded probe and confirm `VK_KHR_fragment_shading_rate` appears in the complete extension list, `pipelineFragmentShadingRate=true`, device creation succeeds, and dynamic command recording succeeds.
+
+Do not yet claim VRS is device-validated. No FSR rendering draw has been submitted by the current probe. Keep the custom ICD isolated from the Android system/vendor Vulkan driver.
