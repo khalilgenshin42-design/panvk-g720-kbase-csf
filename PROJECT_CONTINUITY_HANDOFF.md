@@ -5171,3 +5171,43 @@ Next: poll exact-source Android-only and Windows probe runs, inspect artifacts/h
 - Android-only package build `42260680071` for the exact same SHA is still in progress; latest state was Generate host tools, no package artifact yet.
 - Android wrapper variant run `42260680099` is also in progress but not required for this diagnostic test.
 - Do not ask user to rerun until the matching Android package for this diagnostic source is built and its flat package/ELF dependencies are independently inspected.
+
+
+### Stage-diagnostic VRS package build and independent audit completed (2026-11-06)
+
+The exact-source Android PanVK package and Windows stage-diagnostic render probe are now both built and independently inspected.
+
+- Feature branch: `experiment/g720-fragment-shading-rate`
+- Exact source/workflow commit: `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d`
+- Commit changes only `tools/panvk_vrs_render_probe_win.c`: it adds flushed per-operation checkpoints and VkResult logging around image creation/allocation/binding, image view/framebuffer, staging buffer, pipeline creation, command pool/buffer allocation and recording, queue submission, fence wait, map/readback, and cleanup. No PanVK VRS register, compiler, or runtime driver behavior was changed by this diagnostic commit.
+
+#### Android-only CI and package
+
+- Workflow run `42260680071`, job `128039482139`: SUCCESS. All 12 substantive steps passed, including Android ARM64 libdrm, Android-only configure, PanVK compile/stage, driver/dependency audit, flat ADPKG packaging, and artifact upload.
+- Artifact ID: `13524573718`; outer artifact SHA-256: `38554c72e94dbe78e597bc6ec7c1822640f496c6bd9febc665e5d98db55a9933`.
+- Extracted inner `PanVK-G720-experimental.zip`: 4,148,410 bytes; SHA-256 `9b0b27cd512f82d81a4259bb5c35c84c8cab111afe6b72cc4bb7589722b13afc`.
+- Inner ZIP integrity passed. It contains exactly `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`; all three payload hashes verify.
+- Metadata: `26.3.0-devel-android-kbase-665d86a75d94`, min API 30, library `libvulkan_panfrost.so`.
+- Both libraries are ELF64 AArch64 Android API 30. Driver SONAME is `libvulkan_panfrost.so`, RUNPATH is `$ORIGIN`, and DT_NEEDED resolves to private `libpanvk_drm.so`; that helper depends only on libc. CI's missing DRM symbol audit is empty.
+- The final driver binary contains the PanVK capability-audit startup diagnostic string for raw GPU ID, decoded architecture, and the VRS extension-table bit.
+
+#### Windows stage-diagnostic probe
+
+- Workflow run `42260680210`, job `128039486326`: SUCCESS. GLSL/SPIR-V compilation, MinGW executable build, executable verification, and upload all passed.
+- Artifact ID: `13525121377`; outer ZIP SHA-256 `a27bf55d180bcbba0af25e9f8b454148236597d47b5fdd371bb34a0ff2ee66a7`.
+- Executable `panvk-vrs-render-probe.exe`: 271,968 bytes, PE32+ x86-64; SHA-256 `4e12b8e68baa0ee82afb092cc66c271737498b7bd91f291a85df307c7ab2e1e0`.
+- Static import table contains only `KERNEL32.dll` and `msvcrt.dll`; Vulkan is loaded dynamically through the Winlator loader.
+
+#### Current interpretation and next device gate
+
+This is build/package validation only. It does not establish 2x2 GPU execution, shading-rate output, combiner semantics, or VRS performance.
+
+The prior probe established that the 1x1 KEEP/KEEP control completed submit, fence wait, and readback, then stopped during 2x2 setup. The new probe should identify the exact operation/result where progress stops.
+
+Next user action:
+1. Import only the inner `PanVK-G720-experimental.zip` from Android artifact `13524573718` through Winlator Mali 1.2's custom-driver importer. Do not import the outer Actions ZIP, and do not replace the Android system/vendor Vulkan driver.
+2. Keep the existing Winlator wrapper and container unchanged.
+3. Run the matching `panvk-vrs-render-probe.exe` from artifact `13525121377` in that same container.
+4. Send the complete `panvk_vrs_render_probe.log` (or full console output) and state whether the process exits, crashes, or remains stuck.
+
+Do not run a game benchmark yet. First identify the last successful 2x2 Vulkan stage and its exact VkResult. Preserve the 1x1 PASS as a confirmed control; VRS remains unverified until the 2x2 readback and combiner comparisons pass.
