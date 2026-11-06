@@ -2333,11 +2333,21 @@ panvk_GetPhysicalDeviceFragmentShadingRatesKHR(
    VK_OUTARRAY_MAKE_TYPED(VkPhysicalDeviceFragmentShadingRateKHR, out,
                           pFragmentShadingRates, pFragmentShadingRateCount);
 
-   /* The v12 PRIMITIVE_FLAGS_2 VRS rate field supports all nine power-of-two
-    * width/height combinations. This first implementation deliberately
-    * restricts rasterization to single-sample pipelines. */
-   static const VkExtent2D rates[] = {
-      {4, 4}, {4, 2}, {2, 4}, {2, 2}, {2, 1}, {1, 2}, {1, 1},
+   /* Required KHR rates are 2x2 and 2x1 at 1x/4x MSAA, plus 1x1 at
+    * every supported sample count. The larger 4x4/4x2 and 2x4/1x2 rates
+    * are exposed conservatively at 1x MSAA only. */
+   static const struct {
+      VkExtent2D size;
+      VkSampleCountFlags samples;
+   } rates[] = {
+      {{4, 4}, VK_SAMPLE_COUNT_1_BIT},
+      {{4, 2}, VK_SAMPLE_COUNT_1_BIT},
+      {{2, 4}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT},
+      {{2, 2}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_4_BIT},
+      {{2, 1}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_4_BIT},
+      {{1, 2}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT |
+                  VK_SAMPLE_COUNT_4_BIT},
+      {{1, 1}, ~0u},
    };
 
    for (uint32_t i = 0; i < ARRAY_SIZE(rates); i++) {
@@ -2345,8 +2355,8 @@ panvk_GetPhysicalDeviceFragmentShadingRatesKHR(
                                r) {
          *r = (VkPhysicalDeviceFragmentShadingRateKHR) {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR,
-            .sampleCounts = VK_SAMPLE_COUNT_1_BIT,
-            .fragmentSize = rates[i],
+            .sampleCounts = rates[i].samples,
+            .fragmentSize = rates[i].size,
          };
       }
    }
