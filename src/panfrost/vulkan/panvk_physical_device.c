@@ -1396,6 +1396,11 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
    panvk_arch_dispatch(arch, get_physical_device_extensions, device, instance,
                        &supported_extensions);
 
+   mesa_logi("PanVK capability audit: gpu_id=0x%llx arch=v%u "
+             "KHR_fragment_shading_rate=%u kbase=1",
+             (unsigned long long)device->kmod.dev->props.gpu_id, arch,
+             supported_extensions.KHR_fragment_shading_rate);
+
    struct vk_features supported_features;
    panvk_arch_dispatch(arch, get_physical_device_features, instance,
                        device, &supported_features);
