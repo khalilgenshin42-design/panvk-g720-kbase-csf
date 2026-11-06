@@ -69,6 +69,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .KHR_external_semaphore = true,
       .KHR_external_semaphore_fd = true,
       .KHR_format_feature_flags2 = true,
+      .KHR_fragment_shading_rate = PAN_ARCH >= 12,
       .KHR_get_memory_requirements2 = true,
       .KHR_global_priority = true,
       .KHR_image_format_list = true,
@@ -459,6 +460,9 @@ panvk_per_arch(get_physical_device_features)(
 
       .dynamicRendering = true,
       .shaderIntegerDotProduct = true,
+      .pipelineFragmentShadingRate = PAN_ARCH >= 12,
+      .primitiveFragmentShadingRate = false,
+      .attachmentFragmentShadingRate = false,
       .maintenance4 = true,
 
       /* Vulkan 1.4 */
@@ -1214,7 +1218,19 @@ panvk_per_arch(get_physical_device_properties)(
       .nonStrictWideLinesUseParallelogram = false,
       .blockTexelViewCompatibleMultipleLayers = true,
       .maxCombinedImageSamplerDescriptorCount = 1,
-      /* We don't implement VK_KHR_fragment_shading_rate */
+      /* VK_KHR_fragment_shading_rate: pipeline-only VRS on v12+. */
+      .maxFragmentSize = {4, 4},
+      .maxFragmentSizeAspectRatio = 4,
+      .maxFragmentShadingRateCoverageSamples = 1,
+      .maxFragmentShadingRateRasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+      .fragmentShadingRateWithShaderDepthStencilWrites = false,
+      .fragmentShadingRateWithSampleMask = false,
+      .fragmentShadingRateWithShaderSampleMask = false,
+      .fragmentShadingRateWithConservativeRasterization = false,
+      .fragmentShadingRateWithFragmentShaderInterlock = false,
+      .fragmentShadingRateWithCustomSampleLocations = false,
+      .fragmentShadingRateNonTrivialCombinerOps = false,
+      .fragmentShadingRateStrictMultiplyCombiner = false,
       .fragmentShadingRateClampCombinerInputs = false,
       .defaultRobustnessStorageBuffers =
          VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT,
@@ -1248,7 +1264,6 @@ panvk_per_arch(get_physical_device_properties)(
       .shaderBinaryVersion = 1,
 
       /* VK_KHR_maintenance7 */
-      /* We don't implement VK_KHR_fragment_shading_rate */
       .robustFragmentShadingRateAttachmentAccess = false,
       .separateDepthStencilAttachmentAccess = false,
       .maxDescriptorSetTotalUniformBuffersDynamic = MAX_DYNAMIC_UNIFORM_BUFFERS,
