@@ -176,8 +176,6 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .height = H,
       .layers = 1,
    };
-   PFN_vkCreateFramebuffer create_framebuffer = LOAD_D(CreateFramebuffer);
-   PFN_vkDestroyFramebuffer destroy_framebuffer = LOAD_D(DestroyFramebuffer);
    if (!create_framebuffer || !destroy_framebuffer ||
        create_framebuffer(device, &framebuffer_info, NULL, &framebuffer) != VK_SUCCESS)
       goto done;
