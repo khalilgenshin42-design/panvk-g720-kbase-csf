@@ -5516,3 +5516,46 @@ This confirms the fragment shader deliberately reads `gl_FragCoord`. PanVK's VRS
 A source search of the current branch's `src/panfrost/compiler/bifrost/bifrost_nir.c` and `bifrost_compile.c` found no explicit `frag_shading_rate` or `SYSTEM_VALUE_FRAG_SHADING_RATE` handling in those files. This is consistent with the compiler rejection, but does not by itself establish the exact hardware register/instruction needed for a general dynamic-FSR implementation.
 
 A narrow static-rate specialization remains a candidate for the current render probe because its `VkPipelineFragmentShadingRateStateCreateInfoKHR` is static (`dynamic=0`) and the rate is fixed per pipeline. It must only be implemented after verifying the Vulkan/Mesa rate encoding and the expected `load_sample_pos_or_center` semantics. A constant substitution is not valid for dynamic FSR and must not be used as a general lowering. The probe's use of `gl_FragCoord` is important: the center calculation affects observable pixel coordinates, so a passing pipeline-creation test alone is insufficient; the final pixel readback comparison must also pass.
+
+
+### 2026-11-07 implementation attempt — static VRS fragment-center lowering
+
+After correlating the runtime failure with the probe shader, a narrowly scoped source change was committed to the feature branch:
+
+- Feature branch: `experiment/g720-fragment-shading-rate`
+- Source commit: `00ed7243e5dea048361a1682753b7e4630450bb8`
+- Changed file: `src/panfrost/vulkan/panvk_vX_shader.c`
+- Commit message: `panvk: lower static VRS fragment center to NIR constant`
+
+#### Change
+
+The previous `lower_vrs_frag_center()` emitted `nir_load_frag_shading_rate()`, which the Bifrost/Valhall compiler currently rejects. It now receives a precomputed NIR bitfield and uses `nir_imm_int()` instead. The static rate is encoded according to the NIR intrinsic definition:
+- bits 0..1: log2(fragment height), representing Vertical2/Vertical4;
+- bits 2..3: log2(fragment width), representing Horizontal2/Horizontal4.
+
+For 2x2, the encoded value is `0x5` (bit 0 + bit 2). The existing NIR calculation then produces fragment center (1.0, 1.0), preserving the original helper's intended center calculation for a 2x2 invocation. The rate calculation is limited by assertions to supported dimensions 1, 2, and 4.
+
+The pass is now applied only when all these conditions hold:
+- fragment shader is not using sample shading;
+- FSR is enabled for this pipeline;
+- pipeline has a concrete static `state->fsr`;
+- `MESA_VK_DYNAMIC_FSR` is not set;
+- both pipeline/primitive and attachment combiner operations are KEEP.
+
+This covers the failing render probe's static 2x2 configuration (`dynamic=0`, combiner ops `0,0`) without emitting the unsupported intrinsic.
+
+For dynamic FSR, missing static state, or non-KEEP combiners, the pass is deliberately skipped. The original `load_sample_pos_or_center` path is retained so the compiler is not handed `load_frag_shading_rate`. This is a conservative compiler-crash avoidance fallback, **not proof of correct `gl_FragCoord` semantics under those dynamic/combined-rate configurations**. Those cases remain explicitly unresolved and must not be described as fully supported.
+
+#### Build status and next validation
+
+The Android-only build workflow was automatically triggered by the feature-branch push:
+- Workflow run: `42313022389`
+- Run URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42313022389
+- Source SHA: `00ed7243e5dea048361a1682753b7e4630450bb8`
+- At the time of this handoff update, GitHub reported the run as `in_progress`, with dependency installation underway. No successful compile or package artifact is claimed yet.
+
+If the build succeeds, import only the inner `PanVK-G720-experimental.zip` produced by this run, alongside the already-built `panvk-vrs-render-probe.exe`. Keep the existing Winlator wrapper/container unchanged and never replace the Android system/vendor Vulkan driver. Re-run the same render probe and collect both:
+1. `panvk_vrs_render_probe.log`, checking for a successful 2x2 pipeline creation, queue submit, fence wait, readback, and expected 2x2 pixel repetition;
+2. the same process's Winlator/Wine or Android driver log, checking for `PANVK_VRS_DIAG static frag-center lowering rate=2x2 encoded=0x5` and absence of `Unhandled intrinsic load_frag_shading_rate`.
+
+A successful compile is only a build gate. A successful 2x2 pipeline creation is only an intermediate runtime gate. The final gate is correct readback/pixel-pattern verification. No performance gain is claimed. Dynamic FSR and non-KEEP combiner semantics remain open work.
