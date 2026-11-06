@@ -4300,3 +4300,14 @@ Do not equate Mali-G720 with Immortalis-G720. Hardware ray tracing is associated
 4. Add targeted unit/CTS coverage for reported rates, pipeline state, dynamic state, combiners, and validation.
 5. Build Android ARM64, run ELF/package audits, then issue a new isolated Winlator package with checksums.
 6. For performance comparisons, record DXVK version/config, resolution, game settings, thermal state, and same benchmark segment. The current 13.6 FPS baseline is not directly comparable to tests with different wrapper or DXVK versions.
+
+
+### 2026-11-06 capability evidence refinement — stock MT6899 report
+
+A public FauxVkDB validation report for a POCO X7 Pro (MT6899, Mali-G720 MC7, system driver r49p1) lists both `VK_KHR_fragment_shading_rate` and `VK_KHR_ray_query`, plus `VK_KHR_acceleration_structure`:
+- Device report: https://fauxvkdb.canonspike.com/fr/gpu/13b5-c8700010/52e95a852ce4dc29
+- Raw report JSON: https://fauxvkdb.canonspike.com/report/295.json
+
+This is a device/SoC-matched stock-driver capability reference, not a proof that our PanVK implementation can expose these features safely. It refines the ray-tracing note above: the ordinary Mali-G720 MC7 stock driver does list ray-query and acceleration-structure extensions, but the extension list alone does not tell us whether traversal is implemented in software, which ray-query feature bits are true, or whether the same firmware/driver build exposes them on the user's Xiaomi 15T. Do not categorically claim the API extension is impossible on Mali-G720; equally, do not infer a dedicated RTU or turn on PanVK ray-query without feature/property and implementation evidence.
+
+VRS remains the nearer-term candidate because Arm's product support page explicitly documents pipeline, primitive, and attachment VRS rates up to 4x4 on Mali-G720, and the Vulkan FSR extension provides separable feature bits. For the user's immediate DX11 Tomb Raider test, neither descriptor heaps nor VRS will improve FPS unless DXVK/game actually uses the corresponding API. DXVK 1.7.2's uploaded log does not show either extension in its enabled extension list.
