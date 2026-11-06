@@ -92,9 +92,9 @@ memory_type(const VkPhysicalDeviceMemoryProperties *props, uint32_t bits,
 
 static int
 render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
+            PFN_vkGetDeviceProcAddr get_device_proc_addr,
             VkQueue queue, uint32_t queue_family, VkFormat format,
-            VkRenderPass render_pass, VkFramebuffer framebuffer,
-            VkPipelineLayout layout, VkShaderModule vs, VkShaderModule fs,
+            VkRenderPass render_pass, VkPipelineLayout layout, VkShaderModule vs, VkShaderModule fs,
             VkExtent2D rate, uint8_t *pixels)
 {
    DECLARE_DEVICE_FUNCS;
@@ -113,6 +113,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    VkImage image = VK_NULL_HANDLE;
    VkDeviceMemory image_mem = VK_NULL_HANDLE, buffer_mem = VK_NULL_HANDLE;
    VkImageView image_view = VK_NULL_HANDLE;
+   VkFramebuffer framebuffer = VK_NULL_HANDLE;
    VkBuffer staging = VK_NULL_HANDLE;
    VkPipeline pipeline = VK_NULL_HANDLE;
    VkCommandPool pool = VK_NULL_HANDLE;
@@ -159,6 +160,21 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
    };
    if (create_image_view(device, &view_info, NULL, &image_view) != VK_SUCCESS)
+      goto done;
+
+   VkFramebufferCreateInfo framebuffer_info = {
+      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+      .renderPass = render_pass,
+      .attachmentCount = 1,
+      .pAttachments = &image_view,
+      .width = W,
+      .height = H,
+      .layers = 1,
+   };
+   PFN_vkCreateFramebuffer create_framebuffer = LOAD_D(CreateFramebuffer);
+   PFN_vkDestroyFramebuffer destroy_framebuffer = LOAD_D(DestroyFramebuffer);
+   if (!create_framebuffer || !destroy_framebuffer ||
+       create_framebuffer(device, &framebuffer_info, NULL, &framebuffer) != VK_SUCCESS)
       goto done;
 
    VkBufferCreateInfo buffer_info = {
@@ -337,6 +353,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
 
 done:
    if (fence && destroy_fence) destroy_fence(device, fence, NULL);
+   if (framebuffer && destroy_framebuffer) destroy_framebuffer(device, framebuffer, NULL);
    if (pool && destroy_command_pool) destroy_command_pool(device, pool, NULL);
    if (pipeline && destroy_pipeline) destroy_pipeline(device, pipeline, NULL);
    if (staging && destroy_buffer) destroy_buffer(device, staging, NULL);
@@ -570,41 +587,6 @@ main(void)
       LOG("vkCreateRenderPass=%d\n", result);
       if (result != VK_SUCCESS) { destroy_dev(device, NULL); continue; }
 
-      VkImage image = VK_NULL_HANDLE;
-      PFN_vkCreateImage ci = (PFN_vkCreateImage)gdpa(device, "vkCreateImage");
-      PFN_vkGetImageMemoryRequirements gimr = (PFN_vkGetImageMemoryRequirements)gdpa(device, "vkGetImageMemoryRequirements");
-      PFN_vkAllocateMemory alloc_mem = (PFN_vkAllocateMemory)gdpa(device, "vkAllocateMemory");
-      PFN_vkBindImageMemory bind_im = (PFN_vkBindImageMemory)gdpa(device, "vkBindImageMemory");
-      PFN_vkCreateImageView civ = (PFN_vkCreateImageView)gdpa(device, "vkCreateImageView");
-      if (!ci || !gimr || !alloc_mem || !bind_im || !civ) { LOG("FAIL: image functions missing\n"); destroy_rp(device,rp,NULL); destroy_dev(device,NULL); continue; }
-      VkImageCreateInfo imci = {
-         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
-         .format = format, .extent = {W,H,1}, .mipLevels=1, .arrayLayers=1,
-         .samples=VK_SAMPLE_COUNT_1_BIT, .tiling=VK_IMAGE_TILING_OPTIMAL,
-         .usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-         .sharingMode=VK_SHARING_MODE_EXCLUSIVE, .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED,
-      };
-      result = ci(device,&imci,NULL,&image);
-      LOG("vkCreateImage=%d\n",result);
-      if(result!=VK_SUCCESS){destroy_rp(device,rp,NULL);destroy_dev(device,NULL);continue;}
-      VkMemoryRequirements imreq; gimr(device,image,&imreq);
-      uint32_t imtype=memory_type(&mem_props,imreq.memoryTypeBits,0,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-      VkDeviceMemory imem=VK_NULL_HANDLE;
-      VkMemoryAllocateInfo mai={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=imreq.size,.memoryTypeIndex=imtype};
-      result=alloc_mem(device,&mai,NULL,&imem);
-      if(result!=VK_SUCCESS||bind_im(device,image,imem,0)!=VK_SUCCESS){LOG("FAIL: image memory allocation/bind=%d\n",result);destroy_rp(device,rp,NULL);destroy_dev(device,NULL);continue;}
-      VkImageViewCreateInfo ivci={
-         .sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=image,.viewType=VK_IMAGE_VIEW_TYPE_2D,
-         .format=format,.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1},
-      };
-      VkImageView iv=VK_NULL_HANDLE;
-      result=civ(device,&ivci,NULL,&iv);
-      if(result!=VK_SUCCESS){LOG("FAIL: vkCreateImageView=%d\n",result);destroy_rp(device,rp,NULL);destroy_dev(device,NULL);continue;}
-      VkFramebuffer fb=VK_NULL_HANDLE;
-      VkFramebufferCreateInfo fbci={.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,.renderPass=rp,.attachmentCount=1,.pAttachments=&iv,.width=W,.height=H,.layers=1};
-      result=create_fb(device,&fbci,NULL,&fb);
-      if(result!=VK_SUCCESS){LOG("FAIL: vkCreateFramebuffer=%d\n",result);destroy_dev(device,NULL);continue;}
-
       VkShaderModuleCreateInfo smv={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_vert_spv),.pCode=vrs_vert_spv};
       VkShaderModuleCreateInfo smf={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_frag_spv),.pCode=vrs_frag_spv};
       VkShaderModule vs=VK_NULL_HANDLE,fs=VK_NULL_HANDLE;
@@ -618,9 +600,9 @@ main(void)
 
       uint8_t *image_1x1=malloc(IMAGE_BYTES),*image_2x2=malloc(IMAGE_BYTES);
       if(!image_1x1||!image_2x2){LOG("FAIL: host allocation\n");destroy_dev(device,NULL);continue;}
-      int ok1=render_rate(device,&mem_props,queue,qf,format,rp,fb,pl,vs,fs,(VkExtent2D){1,1},image_1x1);
+      int ok1=render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,(VkExtent2D){1,1},image_1x1);
       LOG("1x1 draw submit/fence/readback=%s\n",ok1?"PASS":"FAIL");
-      int ok2=render_rate(device,&mem_props,queue,qf,format,rp,fb,pl,vs,fs,(VkExtent2D){2,2},image_2x2);
+      int ok2=render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,(VkExtent2D){2,2},image_2x2);
       LOG("2x2 draw submit/fence/readback=%s\n",ok2?"PASS":"FAIL");
       if(ok1&&ok2){
          uint32_t e1=equal_neighbors(image_1x1),e2=equal_neighbors(image_2x2);
@@ -638,10 +620,6 @@ main(void)
       free(image_1x1);free(image_2x2);
       destroy_sm(device,vs,NULL);destroy_sm(device,fs,NULL);
       destroy_pl(device,pl,NULL);destroy_fb(device,fb,NULL);
-      PFN_vkDestroyImageView div=(PFN_vkDestroyImageView)gdpa(device,"vkDestroyImageView");
-      PFN_vkDestroyImage dim=(PFN_vkDestroyImage)gdpa(device,"vkDestroyImage");
-      PFN_vkFreeMemory fm=(PFN_vkFreeMemory)gdpa(device,"vkFreeMemory");
-      if(div)div(device,iv,NULL);if(dim)dim(device,image,NULL);if(fm)fm(device,imem,NULL);
       destroy_rp(device,rp,NULL);
       destroy_dev(device,NULL);
    }
