@@ -5139,3 +5139,24 @@ The matching Android-only PanVK build and both Windows probe workflows have comp
 5. Do not run a game benchmark yet. First determine whether real GPU rendering, fence completion, readback, 2x2 shading signature, and MIN/MAX/MUL comparisons pass. Only after this validation should VRS be considered hardware-confirmed or used for DXVK/Winlator performance experiments.
 
 Canonical handoff updated before requesting device work. Preserve this branch and file as the single continuity source; do not create a duplicate handoff.
+
+
+### First real VRS render log analysis and stage-diagnostic probe (2026-11-06)
+
+User ran the exact-source VRS probe and uploaded `panvk_vrs_render_probe.log` (450 bytes). Findings:
+- Device enumeration selected `Wrapper(Mali-G720 MC7)`; driver is PanVK Mesa 26.3.0-devel git `10472e2c0c`; Vulkan API 1.3.354.
+- `pipelineFragmentShadingRate=1`, `nonTrivialCombinerOps=1`, `strictMultiplyCombiner=0`.
+- `vkCreateDevice=0`, `vkCreateRenderPass=0`, shader modules and pipeline layout result `0`.
+- Crucially, the 1x1 KEEP/KEEP control completed real submission, fence wait, and staging readback: `PASS`.
+- The log ends after entering the 2x2 render setup, immediately after the generic `creating 2x2 pipeline and offscreen target` message. The prior probe emitted no intermediate stage markers and therefore cannot identify which subsequent Vulkan operation stopped. It is not valid to conclude from this truncated log alone that the 2x2 GPU draw or VRS itself failed.
+- No 2x2 submit/readback or combiner output was recorded. VRS remains unverified; the 1x1 control is confirmed.
+
+To isolate the exact call, instrumented `tools/panvk_vrs_render_probe_win.c` with flushed begin/result checkpoints for image creation, memory requirements/allocation/binding, image view/framebuffer, staging buffer, graphics pipeline creation, command pool/buffer, command recording, queue submit, fence wait, map/readback, and cleanup. No PanVK driver source or VRS register programming was changed in this diagnostic commit.
+- Diagnostic probe source commit: `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d`.
+- Exact-source Windows probe workflow run: `42260680210`, observed in progress.
+- Exact-source Android-only package workflow run: `42260680099`, observed in progress.
+- Android wrapper variant run: `42260680099` is not the wrapper run; separate wrapper run should be checked from the latest Actions list if a wrapper artifact is desired. Wrapper rebuild is not required for this test.
+- New package/probe must be built and inspected from source SHA `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d` before next user test. Keep wrapper unchanged and do not benchmark a game yet.
+- Ask user whether the prior probe visibly exited/crashed or remained stuck only if the new diagnostic run cannot be performed; the new stage logs should identify the last successful call even after an application crash.
+
+Next: poll exact-source Android-only and Windows probe runs, inspect artifacts/hashes/dependencies, then ask user to rerun with the instrumented probe and matching ICD package. Continue to avoid declaring VRS support until the 2x2 output signature and combiner comparisons pass.
