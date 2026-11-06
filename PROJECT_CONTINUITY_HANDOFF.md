@@ -1,32 +1,50 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-05 (UTC)
+Last updated: 2026-11-06 (UTC)
 
-## Authoritative current state — 2026-11-05
+## Authoritative current state — 2026-11-06
 
-This section supersedes older "next steps" and "no code changed" statements in the historical addenda below. Keep the historical record; do not treat its older status as current.
+This section supersedes older "next steps", queued-CI, and "no code changed" statements in the historical addenda below. Keep the historical record, but use the branch-specific state here when deciding what is current.
 
-- Repository branch inventory was checked across all 25 branches. The only branch containing the root `PROJECT_CONTINUITY_HANDOFF.md` is `docs/project-continuity-handoff-2026-11-03`; no other branch has a divergent copy.
-- Canonical handoff branch: `docs/project-continuity-handoff-2026-11-03` (the only branch containing this root handoff file).
-- Current isolated implementation branch: `experiment/g720-descriptor-heaps`, source HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`.
-- Existing primary source branch `experiment/g720-clip-cull-capabilities` remains at `9188e7bf92a032431ca16ac02d54d81be5a5e12e`; it has not been merged with the descriptor-heap branch.
-- Capability matrix branch: `experiment/g720-performance-audit`, HEAD `82fc0e49709e170e7b669c3c62b6bc1cbbc9e722`.
+- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file; its pre-update HEAD was `48a4b8aea923b877267876a75b396ee9e8dfacda`.
+- Current task branch: `experiment/g720-performance-audit`, HEAD `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8`. The latest code change on this branch is `a2e5ac142b4f0df71cb28204ece4337bace046de`; later commits are documentation/capability-audit updates.
+- Separate 4x heap-threshold candidate: `experiment/g720-heap-renew-262k`, HEAD `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`. It changes the compiled default from 65,536 to 262,144; it is not an environment-variable propagation test.
+- Separate descriptor-heap implementation: `experiment/g720-descriptor-heaps`, HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. Its exact-head Android and wrapper builds now pass; the package is independently audited below. No device runtime test has been performed.
+- Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
+- Separate fragment-shading-rate work: `experiment/g720-fragment-shading-rate`, HEAD `157418c71475b9d96170a43f24157a80673d4160`; driver-source commit `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`. Android package, Android wrapper variants, and the Windows VRS capability probe all pass CI; package and probe artifacts were independently inspected. No device runtime test has been performed.
+- These branches are parallel experiments. Do not merge or substitute their packages for one another without an explicit compatibility review.
 
 ### Current implementation state
 
-The isolated Valhall branch now contains the PanVK descriptor-heap backend path: NIR heap lowering, heap resource-table entries, sampler/resource heap binding, secondary-command-buffer inheritance, push data, explicit shader heap-use metadata, embedded sampler packing and shader binary/cache lifecycle, descriptor writer commands, conditional custom-border registration commands, and extension/feature/property reporting.
+The performance-audit branch already contains opt-in Kbase, descriptor-pool, and transient-BO telemetry; descriptor-set allocation failures are split into overflow, capacity, and VMA-allocation causes; and the Kbase tiler-heap helper logs its effective renewal-work threshold once. These diagnostics remain disabled by default. No allocator policy, heap topology, queue-ring sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver change was made in this update.
 
-The current registry command audit covers `vkWriteSamplerDescriptorsEXT`, `vkWriteResourceDescriptorsEXT`, `vkCmdBindSamplerHeapEXT`, `vkCmdBindResourceHeapEXT`, `vkCmdPushDataEXT`, `vkGetImageOpaqueCaptureDataEXT`, common-runtime `vkGetPhysicalDeviceDescriptorSizeEXT`, and conditional `vkRegisterCustomBorderColorEXT` / `vkUnregisterCustomBorderColorEXT`. YCbCr and subsampled samplers are rejected by the sampler-heap writer; YCbCr image descriptor counts now match the per-format PanVK texture descriptor count. Custom border colors are not allowed in embedded samplers. Acceleration structures, ARM tensors, QCOM image-processing descriptor types, sparse heaps, protected heaps, and descriptor-heap capture/replay remain unsupported/disabled.
+The threshold helper uses `debug_get_num_option("PANVK_KBASE_HEAP_RENEW_WORK", 65536)`. A positive environment value overrides the 65,536 compiled default; non-positive values disable work-triggered renewal. The log reports the effective value, not its origin. Therefore a 262,144 log from the separate 262K-default build does **not** prove that Winlator passed an environment variable. Use the verified 65K-default package for that proof: with the variable absent it must log 65,536; with `PANVK_KBASE_HEAP_RENEW_WORK=262144` it must log 262,144.
 
-### Build and test status
+The VRS branch currently exposes pipeline fragment shading rate on v12, while primitive- and attachment-based rate features remain false. The Tomb Raider/DXVK 1.7.2 capture did not show the application enabling `VK_KHR_fragment_shading_rate`; do not treat Tomb Raider as a VRS performance benchmark. The descriptor-heap, clip/cull, and VRS packages are separate from the current heap-threshold test.
 
-- Intermediate Android-only build run `42078972694` passed compile, stage, package audit and upload at older source `3e4e7ee3849ebab12c114eef8c6c3a650cd14b8f`. Its artifact `13438649591` is stale and must not be sent to the user for testing.
-- The first exact-current-source Android-only build run `42080294652` failed at compile because `struct pan_model` has no `arch` member. The YCbCr count code was corrected to derive architecture with `pan_arch(physical_device->kmod.dev->props.gpu_id)`. The corrected source HEAD is `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`; Android-only run `42082198442` and wrapper run `42082198906` are queued.
-- No exact-current-source compile/link/package validation has passed yet. No device runtime test has been requested or performed for this descriptor-heap branch.
+### Build and package status
 
-### User action gate
+- Performance-audit exact branch HEAD `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8`: Android-only run `42082282882` SUCCESS; wrapper run `42082283389` SUCCESS in Release and Debugoptimized. Artifact `13442371778`, outer SHA-256 `3fc3eef74d546c11a1f1e799b38e4135fc935d25286c8b013cdfde5a897def6c`. Independently verified inner flat package SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`; four members, all member checksums valid, ELF64 AArch64/Android API 30, driver RUNPATH `$ORIGIN`, private `libpanvk_drm.so` dependency, no missing DRM symbols. This package has the 65,536 compiled default and is the current environment-override test package.
+- Descriptor-heaps exact source `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`: Android-only run `42082198442` SUCCESS and wrapper run `42082198906` SUCCESS (Release and Debugoptimized). Artifact `13441682356`, outer SHA-256 `0a4f6b7899f3df42a89133f071b2c441e62739e8000ad55bdf14af7329fccf71`; inner package SHA-256 `2142ecffb957580f317071b9f1c0370029650cade149d10aa62f472fc5de82d6`. Four-member flat package, all hashes valid, AArch64/API 30, RUNPATH and private-libdrm checks pass, missing-DRM-symbol report empty. Build/package success is not runtime validation.
+- Clip/cull branch `9188e7bf92a032431ca16ac02d54d81be5a5e12e`: NIR tests run `42033527839` SUCCESS, Android-only run `42033527656` SUCCESS, wrapper run `42033527658` SUCCESS. These tests do not prove all GS/TCS/TES transport or runtime discard semantics.
+- VRS branch `157418c71475b9d96170a43f24157a80673d4160`: Android-only run `42140194412` SUCCESS; wrapper/probe run `42140194467` SUCCESS for Release, Debugoptimized, and Windows x64 probe. Android artifact `13468166958`, outer SHA-256 `a7077179b08ae616abed1334ccb580583b89e0b79993206108df50ec793e60ca`; inner package SHA-256 `fa83005808ca2f7207008a9b2a5139f82f36de269c95c9da97784fc9d1350cbe`. Probe artifact `13467578263`, SHA-256 `618ca16d798d97ecc0ba3c316f1fbbca831578ac271adbc41790bd0bd761306f`. Both ZIPs and inner package hashes were verified; probe is PE32+ x86-64. It records capabilities and command-buffer recording but does not submit a draw.
 
-Continue source review and CI work autonomously. Do not ask the user to import/test until the exact current source has passed Android ARM64 compile/link, ELF/libdrm audit, package creation, and package-contract audit. Keep the custom package separate and importable through Winlator Mali; never replace the Android vendor/system Vulkan driver. Do not return to tiny FPS A/B changes as the default work. Ray query, sparse residency, and any other incomplete feature remain disabled until end-to-end implementation and correctness evidence exist.
+### Benchmark and threshold status
 
+The older `7.7 / 19.7 / 13.6 FPS` capture had profiling enabled and is diagnostic, not a clean performance baseline. The later documented clean 65,536-threshold result is `9.0 / 17.6 / 13.5 FPS`. The 262,144 candidate result was corrected by the user to `7.8 / 18.9 / 13.9 FPS` (the initially supplied 3.9 average was mathematically inconsistent). That candidate's startup log confirms effective threshold 262,144, but its branch compiled 262,144 as the default. The +0.4 average delta with a 1.2 FPS lower minimum is one-run, inconclusive evidence; do not promote it or claim an improvement.
+
+No new Tomb Raider log archive was attached in this run. The current conversation file list contains the earlier `TombRaider_logs_2026-11-05_02-03-50.zip`; the later 02:33 and 02:42 results are recorded in the audit history but their archives were not newly supplied here.
+
+### User action gate and exact next test
+
+Use only the verified 65K-default package for the next controlled environment-variable test. Keep it imported as a separate Winlator Mali custom driver; never replace the Android system/vendor driver.
+
+1. Baseline process: leave `PANVK_KBASE_HEAP_RENEW_WORK` absent. Restart the container/game process and verify the startup log says `tiler heap renewal work threshold=65536`.
+2. Override process: set exactly `PANVK_KBASE_HEAP_RENEW_WORK=262144`, restart the container/game process, and verify the startup log says `tiler heap renewal work threshold=262144`. Because this binary's compiled default is 65,536, that log is direct evidence that Winlator passed the override.
+3. If the override run logs 65,536 or the threshold log is missing, stop: the override test is invalid and no FPS comparison should be reported.
+4. Keep `PANVK_KBASE_PROFILE`, `PANVK_DESCRIPTOR_PROFILE`, `PANVK_MEMPOOL_PROFILE`, `PANVK_KBASE_DIAG_MEM_FLAGS`, and `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` absent for both performance runs. Do not set them to `0`; leave them unset.
+5. Use the same Tomb Raider benchmark scene, resolution, quality, DXVK 1.7.2, wrapper, and comparable thermal starting state. Record min/max/average, completion, visual correctness, stutter, OOM/device loss, and teardown separately. Prefer repeated A/B samples; retain the 65K package as rollback.
+
+Do not change source or allocator policy until this test is complete. Never modify the phone's system/vendor Vulkan driver or kernel.
 
 This document is the durable handoff for future ChatGPT sessions working on this project. Read it before making changes. Treat GitHub history, branches, workflow artifacts, and the user's uploaded diagnostic archives as the source of truth. Do not assume this document contains every historical discussion; it records the key decisions, current state, and pointers needed to continue safely.
 
