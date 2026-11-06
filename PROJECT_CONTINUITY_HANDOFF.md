@@ -5312,3 +5312,15 @@ A compile-warning prevention fix was committed after reviewing Mesa's `util_dyna
 - Changed the diagnostic byte-count format from `%u` to `%zu`.
 - No functional driver behavior changed.
 - New CI runs triggered for this corrected source commit; use only artifacts from the corrected head `dcd607bb809b271ac53e1138c071e5faeac5ef53`, not the preceding diagnostic commit's build.
+
+
+### Added Vulkan runtime checkpoints before PanVK compiler callback (2026-11-06)
+
+The PanVK-only compiler instrumentation could not distinguish a stall during Mesa's generic pipeline precompile from a stall before the driver callback. Added runtime checkpoints to `src/vulkan/runtime/vk_pipeline.c` on the feature branch:
+- Feature branch commit: `3b2cb51178ff6f22d0160375b11cd681e324790d`
+- Logs runtime graphics pipeline entry and the parsed FSR dimensions/combiner state.
+- Logs entry/exit of each `vk_pipeline_precompile_shader()` call with stage index and VkResult.
+- Logs entry/exit of `vk_graphics_pipeline_compile_shaders()`.
+- Together with the PanVK shader logs, this identifies whether the stall occurs in generic state parsing, SPIR-V-to-NIR precompile, PanVK per-stage compilation, or `pan_shader_compile()`.
+- This is diagnostic-only and does not alter pipeline state or GPU behavior.
+- Use build artifacts only from feature branch head `3b2cb51178ff6f22d0160375b11cd681e324790d`; earlier CI runs were superseded by the added runtime checkpoints.
