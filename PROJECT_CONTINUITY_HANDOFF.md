@@ -4500,3 +4500,62 @@ A fresh GitHub Actions poll confirms the following state (this supersedes the ol
 - The GitHub job-log download endpoint returned `BlobNotFound` while the job is still running. This is an unavailable live-log archive, not a reported build failure. Continue using job-step status until the run completes and logs become downloadable.
 - Fresh feature-branch runs remain queued: Android-only `42140194412` and wrapper/probe `42140194467`. No probe artifact has been uploaded.
 - No code or driver-source change was made during this poll. Handoff updated to preserve the exact job IDs, states, and log limitation.
+
+
+## 2026-11-06 — stock Vulkan extension inventory audited against PanVK
+
+### User-provided stock-driver inventory
+
+The user supplied the complete device-extension and instance-extension lists reported by the Xiaomi 15T stock MediaTek Vulkan driver. Treat these as the stock driver/firmware capability baseline, not as proof that each extension's optional feature bits are enabled and not as capabilities automatically implemented by PanVK.
+
+Instance/device distinction recorded:
+- Instance extensions concern instance creation, physical-device discovery, platform surfaces, and capability queries. They are not direct rendering performance switches.
+- Device extensions add GPU/API functionality and must be checked against PanVK's extension table, feature query, property query, entrypoints, and actual backend/compiler implementation.
+
+### PanVK source audit
+
+Audited `src/panfrost/vulkan/panvk_vX_physical_device.c` on `experiment/g720-fragment-shading-rate` (driver source remains `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`; later `157418c...` only fixes the workflow command). Current v12 extension initializer contains 187 extension-table entries.
+
+Already exposed by PanVK, including important gaming/translation features:
+- `VK_EXT_descriptor_indexing` and project-specific `VK_EXT_descriptor_heap` (the latter is not in the user's stock list).
+- `VK_KHR_buffer_device_address`, `VK_KHR_timeline_semaphore`, `VK_KHR_synchronization2`.
+- `VK_KHR_dynamic_rendering`, `VK_KHR_dynamic_rendering_local_read`.
+- `VK_KHR_fragment_shading_rate` on v12, with pipeline feature enabled; primitive and attachment features remain false in the current experiment.
+- `VK_EXT_subgroup_size_control`, `VK_EXT_shader_subgroup_ballot`, `VK_EXT_shader_subgroup_vote`, `VK_EXT_shader_tile_image`, `VK_KHR_shader_integer_dot_product`, `VK_KHR_shader_float16_int8` and other shader features.
+- `VK_EXT_pipeline_creation_cache_control`, `VK_EXT_pipeline_creation_feedback`, `VK_EXT_multisampled_render_to_single_sampled`, `VK_EXT_rasterization_order_attachment_access`.
+- `VK_ARM_shader_core_builtins`, `VK_ARM_shader_core_properties`, and `VK_ARM_scheduling_controls`.
+- Current PanVK source also exposes newer maintenance and other extensions not in the user's stock list; do not interpret the stock extension count as a target to match.
+
+Relevant stock-listed device extensions missing from the current PanVK v12 extension table include:
+- `VK_EXT_fragment_density_map` and `VK_EXT_fragment_density_map2`.
+- `VK_EXT_image_compression_control` and `VK_EXT_image_compression_control_swapchain`.
+- `VK_ARM_render_pass_striped`.
+- `VK_KHR_cooperative_matrix`.
+- `VK_KHR_acceleration_structure`, `VK_KHR_deferred_host_operations`, `VK_KHR_ray_query`, and `VK_KHR_ray_tracing_position_fetch`.
+- Also absent are some diagnostics/feedback extensions such as `VK_EXT_frame_boundary` and `VK_EXT_subpass_merge_feedback`; these are not first-line FPS targets.
+
+### Performance relevance / implementation triage
+
+1. **Do not add extension-name flags alone.** Each extension needs the required Vulkan feature/property structs, entrypoints, format/image usage/layout behavior, synchronization and backend/compiler semantics. False advertising is likely to cause device-creation failures, CTS failures, or game crashes.
+2. **Fragment density map** can reduce fragment invocations in selected regions (commonly foveated rendering/VR). It is not an automatic full-screen FPS boost. Khronos' sample describes it as a region-of-framebuffer density attachment; it also recommends considering KHR fragment shading rate. Our current pipeline-only FSR does not yet implement attachment-based rate control, so FDM is a separate substantial follow-on rather than a one-line exposure.
+3. **VK_ARM_render_pass_striped is not a generic seven-core load-balancing switch.** The Khronos proposal's primary purpose is to split a render-pass instance into stripes and signal completion per stripe so an external/non-Vulkan consumer can begin post-processing before the entire image is complete. It should not be pursued as an assumed multi-core FPS optimization.
+4. **VK_KHR_cooperative_matrix** exposes cooperative matrix operations, primarily useful for compute/matrix-multiply workloads. It is not expected to accelerate ordinary DXVK raster games unless a game/translation layer uses those operations and the Mali compiler has a native or efficient lowering path.
+5. **Ray-query/acceleration-structure group** is for ray tracing. It is not a general performance extension and requires a full acceleration-structure build/update/traversal implementation, feature/property reporting, shader/SPIR-V/NIR support, memory/addressing, and synchronization. Do not expose it until that stack is implemented. The stock list alone does not prove a dedicated ray-tracing unit or the exact ray-query feature bits.
+6. **Image compression control** may affect memory/bandwidth behavior only when the implementation supports the relevant compression modes and image formats. PanVK's existing AFBC path is not equivalent to this Vulkan extension; no safe exposure shortcut is justified.
+7. **Highest-value current work remains FSR completion/validation and descriptor-heap correctness**, not indiscriminately enabling every stock extension. For the user's DX11 Tomb Raider/DXVK 1.7.2 benchmark, the log did not show FSR being enabled by the application, so pipeline FSR cannot be expected to raise that game's FPS. Keep it as a regression test.
+
+Reference material reviewed:
+- Khronos Fragment Density Map sample: https://docs.vulkan.org/samples/latest/samples/extensions/fragment_density_map/README.html
+- Khronos VK_ARM_render_pass_striped proposal: https://docs.vulkan.org/features/latest/features/proposals/VK_ARM_render_pass_striped.html
+- Khronos VK_KHR_cooperative_matrix proposal: https://docs.vulkan.org/features/latest/features/proposals/VK_KHR_cooperative_matrix.html
+- Khronos VK_KHR_fragment_shading_rate reference: https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_fragment_shading_rate.html
+
+No extension flags or driver source were changed during this audit. Next implementation candidate should be selected based on real game/API use and the stock driver's feature/property bits, not merely the presence of an extension name.
+
+### VRS package and probe CI completion
+
+- Android-only package run `42138343360`, exact driver source SHA `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`: SUCCESS through host tools, Android ARM64 libdrm, Android-only PanVK compile/stage, ELF/dependency audit, flat Winlator/Adrenotools package and upload. Artifact ID `13467518179`, SHA-256 `ba19fb0927a8a9721d232aea0cd4e2dc1b2583a6059c61a7c6bad28fd485a19d`.
+- Newer workflow-fix-commit package run `42140194412`, branch `experiment/g720-fragment-shading-rate`, workflow commit `157418c71475b9d96170a43f24157a80673d4160` (driver source unchanged): SUCCESS through all Android-only package stages. Artifact ID `13468166958`, SHA-256 `a7077179b08ae616abed1334ccb580583b89e0b79993206108df50ec793e60ca`. This is the preferred current Android-only package candidate, subject to final artifact inspection before user handoff.
+- Corrected Windows x64 VRS probe job in run `42140194467`: SUCCESS; artifact ID `13467578263`, SHA-256 `618ca16d798d97ecc0ba3c316f1fbbca831578ac271adbc41790bd0bd761306f`. Probe performs extension/feature/property enumeration, device creation with pipeline FSR enabled, and records a 2x2 KEEP/KEEP command buffer; it does not submit a draw and is not a rendering/performance test.
+- In the same run, Android wrapper Release job is SUCCESS; Debugoptimized job was still in dependency installation at the latest poll. Do not report the latter as passed until complete.
+- No device testing has been requested yet in this update. Package and probe artifacts are available but should be checked together before asking the user to test.
