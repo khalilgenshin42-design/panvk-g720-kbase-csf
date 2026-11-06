@@ -5211,3 +5211,27 @@ Next user action:
 4. Send the complete `panvk_vrs_render_probe.log` (or full console output) and state whether the process exits, crashes, or remains stuck.
 
 Do not run a game benchmark yet. First identify the last successful 2x2 Vulkan stage and its exact VkResult. Preserve the 1x1 PASS as a confirmed control; VRS remains unverified until the 2x2 readback and combiner comparisons pass.
+
+
+
+### Repeated stage-diagnostic VRS run confirms reproducible 2x2 pipeline-creation stall (2026-11-06)
+
+The user reran the same Windows probe from the same experimental PanVK package/container and uploaded a fresh complete log at `/mnt/data/panvk_vrs_render_probe.log`. The log identifies device `Wrapper(Mali-G720 MC7)`, PanVK Mesa `26.3.0-devel`, git `665d86a75d94`, Vulkan API `1.3.354`.
+
+Observed results from this second run:
+- Device creation, render-pass creation, shader modules, and pipeline layout all return success.
+- Reported `pipelineFragmentShadingRate=1`, `nonTrivialCombinerOps=1`, `strictMultiplyCombiner=0`.
+- The 1x1 KEEP/KEEP control passes completely: image/buffer allocation and binding, image view/framebuffer, graphics pipeline creation, command pool/buffer creation and recording, queue submit, 30-second fence wait, memory map/readback, and cleanup all return success. Log reports `1x1 KEEP control submit/fence/readback=PASS`.
+- The 2x2 run also successfully creates the offscreen image, allocates and binds image memory, creates image view/framebuffer, creates and allocates the staging buffer, and binds it.
+- The final log line is `stage: vkCreateGraphicsPipelines rate=2x2 begin`. No result is logged. The process was observed by the user still running after approximately 2m41s with 0 FPS, then terminated for log recovery. This points to a reproducible stall or crash inside/under 2x2 graphics pipeline creation, not a normal returned VkResult.
+- The log contains literal escaped newline sequences in the stage labels, but the flushed checkpoints and final operation boundary remain unambiguous.
+
+Interpretation / investigation priorities:
+1. Treat this as a confirmed reproducible 2x2 pipeline-creation failure boundary, not a Kbase queue-submit/fence/readback failure. The 1x1 path exercises and passes those downstream operations.
+2. Inspect the architecture-12 PanVK graphics pipeline path and compiler lowering for `VkPipelineFragmentShadingRateStateCreateInfoKHR`, including pNext parsing, rate validation/normalization, pipeline key/cache serialization, shader compilation inputs, and Mali v12 fragment state generation.
+3. Determine whether the probe's exact 2x2 pipeline state is valid for the exposed properties/features. Do not assume the advertised extension table bit or `pipelineFragmentShadingRate=1` proves that 2x2 is implemented correctly.
+4. Do not change Kbase memory mapping, queue synchronization, or CSF scheduling based on this log; the stall occurs before command submission.
+5. Do not expose broader VRS combinations or mark VRS supported until pipeline creation returns, submission/fence/readback pass, and the pixel signature verifies the requested rate.
+6. No game benchmark is authorized yet; preserve the 1x1 PASS as the control.
+
+No source or driver binary was changed by this rerun. The canonical feature branch remains `experiment/g720-fragment-shading-rate` at `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d`. The handoff branch is updated by this entry only.
