@@ -5439,3 +5439,19 @@ No additional source change is justified before seeing the instrumented run's ac
 The current diagnostic build identifiers are Android artifact `13529083912` and Windows probe artifact `13528824074`, both from source `fa4ae716d1e643f680a4109db81470aba23492ea`. Import only the nested `PanVK-G720-experimental.zip` from the Android Actions artifact. Keep the existing wrapper/container unchanged and never replace the Android system/vendor Vulkan driver.
 
 No runtime source change, new package, benchmark, or VRS rendering pass is claimed in this continuation.
+
+
+### 2026-11-07 correction — distinguish capability probe from render probe artifact
+
+A final workflow/source cross-check found that the Windows artifact ID `13528824074` from run `42271462129` is the **capability/command-recording probe**, built from `tools/panvk_vrs_probe_win.c`. It is the executable that produces `panvk_vrs_probe.log` and reports `VRS PROBE PASS`. It does not create a graphics pipeline or submit a draw. The user's latest `panvk_vrs_probe.log` is therefore the expected capability-probe result and does not contain the pipeline compiler checkpoints.
+
+The required next test is the separate **render probe**:
+- Windows render-probe artifact ID: `13525121377`, from workflow run `42260680210`.
+- Executable: `panvk-vrs-render-probe.exe`, PE32+ x86-64, SHA-256 `4e12b8e68baa0ee82afb092cc66c271737498b7bd91f291a85df307c7ab2e1e0`.
+- Matching diagnostic PanVK Android package: artifact ID `13529083912`, from run `42271462292`, inner package SHA-256 `229f1df7a86b7c06e8658450b4e153db3c8372dedc8248b34ca31e6d99216ac9`.
+
+The render-probe executable was built from source commit `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d`. A GitHub compare of `665d86a...` against the diagnostic driver commit `fa4ae716d1e643f680a4109db81470aba23492ea` confirms that the only five intervening commits modify `src/panfrost/vulkan/panvk_vX_shader.c` and `src/vulkan/runtime/vk_pipeline.c`; **no probe source or shader file changed**. Thus the existing render-probe executable is source-compatible with the latest diagnostic driver and does not need rebuilding.
+
+Use the latest diagnostic Android package together with the existing render-probe executable. Save its output as `panvk_vrs_render_probe.log` and also capture the same process's Winlator/Wine or Android driver log containing `PANVK_VRS_DIAG`. Keep the capability-probe log as a separate successful API/device-create result; do not confuse it with the render-probe result.
+
+This correction supersedes the previous sentence in the 2026-11-07 continuation that called artifact `13528824074` the matching render probe. No source or binary was changed by this correction.
