@@ -4412,3 +4412,11 @@ Android-only workflow run `42137897031` for commit `3ea2dd468ec9bdb10ffbaa2b7132
 - Flat Winlator/Adrenotools package built and uploaded successfully.
 
 This package predates the final FSR rate/sample-count table refinements and must not be given to the user. The exact current source head `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a` still needs its own Android-only package run and audit.
+
+
+### User benchmark/log result — 2026-11-06
+
+- Latest descriptor-heap package benchmark supplied by user: Min 7.9 FPS, Max 18.0 FPS, Avg 13.6 FPS.
+- User supplied `TombRaider_logs_2026-11-06_01-24-09.zip`; the run is the existing DX11 Tomb Raider / DXVK 1.7.2 path.
+- This DXVK path does not request or use `VK_KHR_fragment_shading_rate`, so the new FSR feature should not be expected to increase this game's FPS. The VRS probe is for confirming API extension/feature/device-create/command-recording support. A D3D12/VKD3D title or a Vulkan VRS test is required to exercise VRS rendering.
+- Keep the Tomb Raider benchmark as a regression check only. Do not interpret a similar FPS result as evidence that VRS failed; the application must issue VRS state for the feature to affect rendering.
