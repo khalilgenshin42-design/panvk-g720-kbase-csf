@@ -5384,3 +5384,58 @@ Interpretation:
 - Therefore it does not resolve the separately reproduced stall at `vkCreateGraphicsPipelines rate=2x2 begin`, and it does not prove VRS rendering correctness or performance.
 - Keep the prior 1x1 render control PASS and the 2x2 static pipeline-creation stall as separate evidence. Do not disable VRS based on this result; do not claim 2x2 rendering works; do not run a game benchmark yet.
 - No driver source or package was changed in response to this log. Next investigation remains the exact static-FSR pipeline compilation boundary using the instrumented render-probe build. Confirm the user has run the matching `panvk-vrs-render-probe.exe` before requesting another test; if the uploaded file is the only available output, explain the distinction and provide the correct matching probe artifact.
+
+
+### 2026-11-07 continuation — canonical handoff re-read and pipeline compiler-boundary audit
+
+At the user's request, the complete canonical `PROJECT_CONTINUITY_HANDOFF.md` was fetched and read from its first byte through EOF before continuing. The fetched document was 533,817 characters; current blob SHA before this addendum: `c676b0726f08d543e0caa2470d3932dab1660972`. The canonical file remains on `docs/project-continuity-handoff-2026-11-03`. No divergent handoff copy was created.
+
+#### Live branch/source verification
+
+- Repository: `khalilgenshin42-design/panvk-g720-kbase-csf`.
+- Live feature branch `experiment/g720-fragment-shading-rate` still points to `fa4ae716d1e643f680a4109db81470aba23492ea`.
+- The matching Android-only workflow `42271462292` is completed successfully; matching Android wrapper + Windows probe workflow `42271462129` is also completed successfully.
+- The current package/probe are diagnostic builds, not a VRS performance release. Do not substitute the older capability-only `panvk_vrs_probe.exe` for the render probe.
+
+#### Fresh source-path audit
+
+Re-fetched the current feature-branch source at the live HEAD:
+
+1. `src/vulkan/runtime/vk_pipeline.c::vk_create_graphics_pipeline()` logs:
+   - graphics-pipeline entry;
+   - parsed static FSR dimensions and combiner operations;
+   - each generic runtime shader-precompile begin/end and VkResult;
+   - generic shader-compile callback begin/end and VkResult.
+
+2. `vk_pipeline_precompile_shader()` performs SPIR-V-to-NIR conversion, optional driver NIR preprocessing, generic descriptor-heap lowering, precompile-object creation/cache insertion, and cleanup. It does not receive the static graphics FSR state as an argument to the driver's `preprocess_nir` callback.
+
+3. `vk_graphics_pipeline_compile_shaders()` eventually calls `vk_compile_shaders()` with `compile_info->state`, so the static FSR state is passed to the PanVK shader callback after generic precompilation.
+
+4. `src/panfrost/vulkan/panvk_vX_shader.c::panvk_compile_shaders()` logs callback entry with rate/combiner/dynamic-state values, then invokes `compile_shaders()` under PanVK's compiler lock. The per-stage loop logs stage begin/end and VkResult.
+
+5. `panvk_compile_nir()` logs entry with the stage and FSR state, performs PanVK shader/NIR preparation (including `panvk_lower_nir()`, IO lowering, post-processing, sysval and push-constant lowering), then logs immediately before and after `pan_shader_compile()`. This provides a clear boundary around the Mali compiler itself.
+
+#### Diagnostic interpretation for the next render-probe log
+
+Use the last `PANVK_VRS_DIAG` marker to localize the 2x2 pipeline stall:
+
+- No runtime precompile end: inspect generic SPIR-V/NIR precompile, driver preprocess, descriptor-heap lowering, or precompile cache.
+- Runtime precompile completes but shader-compile begin has no callback begin: inspect generic runtime transition/dispatch.
+- Callback begins but no stage-compile begin: inspect PanVK compiler-lock/setup and stage-link preparation.
+- Stage compile begins but no `compile_nir begin`: inspect per-stage PanVK shader setup.
+- `compile_nir begin` appears but `pan_shader_compile begin` does not: stall is in PanVK NIR lowering/preparation, not the Mali compiler.
+- `pan_shader_compile begin` appears without its matching end: investigate the Mali compiler path with the exact stage/NIR dump.
+- `pan_shader_compile end` appears but stage compile does not end: inspect binary allocation/copy and shader upload.
+- Stage/callback complete but generic runtime shader-compile end is absent: inspect generic shader cache/link/post-callback handling.
+
+The 1x1 render remains the passing control. The reproducible 2x2 stall remains bounded to `vkCreateGraphicsPipelines`; there is still no evidence of a queue submit, fence, Kbase mapping, or GPU execution failure in the failing 2x2 path. Do not change Kbase mappings, queue synchronization, shader-core dispatch, descriptor heap topology, or VRS feature exposure based on the current evidence.
+
+#### Current next gate
+
+No additional source change is justified before seeing the instrumented run's actual markers. The next user-dependent evidence is the matching `panvk-vrs-render-probe.exe` run against the matching diagnostic PanVK package, with:
+- complete `panvk_vrs_render_probe.log` output; and
+- the Winlator/Wine or Android driver log containing `PANVK_VRS_DIAG` messages from the same process.
+
+The current diagnostic build identifiers are Android artifact `13529083912` and Windows probe artifact `13528824074`, both from source `fa4ae716d1e643f680a4109db81470aba23492ea`. Import only the nested `PanVK-G720-experimental.zip` from the Android Actions artifact. Keep the existing wrapper/container unchanged and never replace the Android system/vendor Vulkan driver.
+
+No runtime source change, new package, benchmark, or VRS rendering pass is claimed in this continuation.
