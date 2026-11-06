@@ -1333,7 +1333,7 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
 #endif
    pan_shader_compile(nir, &input, &binary, &shader->info);
 #if PAN_ARCH >= 12
-   mesa_logi("PANVK_VRS_DIAG pan_shader_compile end stage=%u bytes=%u",
+   mesa_logi("PANVK_VRS_DIAG pan_shader_compile end stage=%u bytes=%zu",
              nir->info.stage, util_dynarray_num_elements(&binary, uint8_t));
 #endif
 
