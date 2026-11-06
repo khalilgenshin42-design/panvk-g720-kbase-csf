@@ -4340,3 +4340,15 @@ Implementation branch: `experiment/g720-fragment-shading-rate`, based on descrip
 Build status at handoff update: Android wrapper CI for final source commit `3994fda27c318e05fb00b1253401e35fecc528a9` is running in GitHub Actions run `42137623250` (release and debugoptimized jobs). This is not yet a passed build. The Android-only package workflow is not yet triggered for this new branch. Do not ship or test this source until CI compile and package audits pass.
 
 Reference implementation comparison: a newer PanVK source tree gates its FSR implementation at `PAN_ARCH >= 14`, but the v12 GenXML itself contains the pipeline draw-rate and combiner fields. This branch deliberately implements only pipeline FSR for v12 and must be treated as experimental until the compile, Vulkan CTS, and device runtime tests establish correctness. The fact that GenXML contains fields is hardware programming evidence, not by itself proof of every API semantic.
+
+
+### FSR conformance correction — mandatory rates and sample-count limits
+
+The first pipeline-FSR draft under-reported the KHR-mandated rate/sample combinations. Before treating it as testable, the query/property values were corrected:
+- Required 2x2 and 2x1 rates now report sample counts 1x and 4x.
+- Required 1x1 reports all sample counts (`~0u`), still subject to the device's normal MSAA limits.
+- Optional 4x4 and 4x2 rates report 1x only; 2x4 reports 1x/2x; 1x2 reports 1x/2x/4x.
+- `maxFragmentShadingRateCoverageSamples = 16` and `maxFragmentShadingRateRasterizationSamples = VK_SAMPLE_COUNT_4_BIT`, consistent with 4x4@1x and the required 2x2@4x combination.
+- `maxFragmentSizeAspectRatio = 2`; no 4x1 or 1x4 rate is advertised.
+
+This follows the Khronos extension's required minimum rate list and the newer PanVK reference's conservative sample-count table. Latest source commit for this correction: `2a1dc018f29795835e3002f681be0f10943e3fc3`. Android wrapper and Android-only package workflows for this commit are queued; no build pass is claimed yet.
