@@ -2323,6 +2323,39 @@ panvk_get_external_image_format_properties(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
+panvk_GetPhysicalDeviceFragmentShadingRatesKHR(
+   VkPhysicalDevice physicalDevice, uint32_t *pFragmentShadingRateCount,
+   VkPhysicalDeviceFragmentShadingRateKHR *pFragmentShadingRates)
+{
+   VK_FROM_HANDLE(panvk_physical_device, pdev, physicalDevice);
+   assert(pan_arch(pdev->kmod.dev->props.gpu_id) >= 12);
+
+   VK_OUTARRAY_MAKE_TYPED(VkPhysicalDeviceFragmentShadingRateKHR, out,
+                          pFragmentShadingRates, pFragmentShadingRateCount);
+
+   /* The v12 PRIMITIVE_FLAGS_2 VRS rate field supports all nine power-of-two
+    * width/height combinations. This first implementation deliberately
+    * restricts rasterization to single-sample pipelines. */
+   static const VkExtent2D rates[] = {
+      {4, 4}, {4, 2}, {2, 4}, {2, 2}, {4, 1},
+      {1, 4}, {2, 1}, {1, 2}, {1, 1},
+   };
+
+   for (uint32_t i = 0; i < ARRAY_SIZE(rates); i++) {
+      vk_outarray_append_typed(VkPhysicalDeviceFragmentShadingRateKHR, &out,
+                               r) {
+         *r = (VkPhysicalDeviceFragmentShadingRateKHR) {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR,
+            .sampleCounts = VK_SAMPLE_COUNT_1_BIT,
+            .fragmentSize = rates[i],
+         };
+      }
+   }
+
+   return vk_outarray_status(&out);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
 panvk_GetPhysicalDeviceImageFormatProperties2(
    VkPhysicalDevice physicalDevice,
    const VkPhysicalDeviceImageFormatInfo2 *base_info,
