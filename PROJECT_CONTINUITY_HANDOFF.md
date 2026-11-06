@@ -4897,3 +4897,21 @@ Next sequence:
 6. Do not claim VRS rendering correctness or performance until a draw is submitted and validated. Tomb Raider/DXVK 1.7.2 remains a regression test only.
 
 No new PanVK runtime source changes, no system-driver replacement, and no VRS performance claims were made in this continuation.
+
+
+### Expanded Winlator probe built and independently inspected
+
+The minimal MinGW package correction worked:
+- Source/workflow commit: `bfd2e522f52986024c7a8fc5eef2ec6ee89da12d`.
+- Wrapper/probe workflow run: `42220312994`; Windows probe job `127900417338`: **SUCCESS**.
+- Artifact: `13503216545`, `panvk-vrs-probe-win64`, GitHub SHA-256 `4bb3b7a95dcead9ead19061e04cc1de596e06c09a55ba2ebfb1e49a96efabceb`.
+- Downloaded and inspected the artifact ZIP: it contains one file, `panvk-vrs-probe.exe`, 274,278 bytes. The executable is PE32+ x86-64; extracted EXE SHA-256 is `4f8462e3d70b960b4a36cc16717a16ba57d7994088b09e712e359b29ec4fb1ca`.
+- Binary strings confirm the expanded diagnostics are present: Vulkan vendorID/deviceID, driverVersion, device extension enumeration result/count, and the complete extension-list output. This is a diagnostic probe, not a rendering test.
+- Android wrapper Release and Debugoptimized jobs in the same run were still compiling at the last poll; they are not required for the Windows probe result.
+- The older run `42218076595` remains stalled at the broad `mingw-w64` package install; use the new probe artifact, not a probe from that old job.
+
+### Latest custom-wrapper build status
+
+- The dedicated GameNative strict-filter-disabled wrapper workflow is run `42220780814`, job `127901980165`, on source/workflow commit `0b3ac80e49fb6e594d91de9f72a8fa48407fc961`.
+- Pinned GameNative source checkout and dependency installation completed. At the latest poll, the job had advanced to **Build and package GameNative wrapper**; strict=false Meson verification and artifact upload were still pending.
+- No custom `wrapper-gamenative.tzst` artifact exists yet. Do not ask the user to replace the wrapper until this job passes and the package is downloaded/verified.
