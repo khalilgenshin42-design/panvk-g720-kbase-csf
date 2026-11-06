@@ -1275,6 +1275,19 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
    /* We're going to modify this so make our own copy to be nicer to callers */
    struct pan_compile_inputs input = *compile_input;
 
+#if PAN_ARCH >= 12
+   if (state && state->fsr) {
+      mesa_logi("PANVK_VRS_DIAG compile_nir begin stage=%u rate=%ux%u ops=%u,%u dynamic=%u",
+                nir->info.stage, state->fsr->fragment_size.width,
+                state->fsr->fragment_size.height, state->fsr->combiner_ops[0],
+                state->fsr->combiner_ops[1],
+                BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR));
+   } else {
+      mesa_logi("PANVK_VRS_DIAG compile_nir begin stage=%u fsr=none",
+                nir->info.stage);
+   }
+#endif
+
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       if (state && state->ms && state->ms->sample_shading_enable)
          nir->info.fs.uses_sample_shading = true;
@@ -1314,7 +1327,15 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
    input.fau.promote_immediates = true;
 
    struct util_dynarray binary = UTIL_DYNARRAY_INIT;
+#if PAN_ARCH >= 12
+   mesa_logi("PANVK_VRS_DIAG pan_shader_compile begin stage=%u",
+             nir->info.stage);
+#endif
    pan_shader_compile(nir, &input, &binary, &shader->info);
+#if PAN_ARCH >= 12
+   mesa_logi("PANVK_VRS_DIAG pan_shader_compile end stage=%u bytes=%u",
+             nir->info.stage, util_dynarray_num_elements(&binary, uint8_t));
+#endif
 
    /* Propagate potential additional FAU values into the panvk info struct. */
    /* FAU consts are pushed as 32bit values, but total_count is for 64bit
@@ -2875,10 +2896,18 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
       const int prev_cull_count =
          direct_vs_fs ? direct_vs_cull_count : 0;
 
+#if PAN_ARCH >= 12
+      mesa_logi("PANVK_VRS_DIAG stage_compile begin index=%d stage=%u",
+                i, infos[i].stage);
+#endif
       result = panvk_compile_shader(dev, &infos[i], state, vs_varying_layout,
                                     prev_clip_count, prev_cull_count,
                                     noperspective_varyings_ptr, pAllocator,
                                     &shaders_out[i]);
+#if PAN_ARCH >= 12
+      mesa_logi("PANVK_VRS_DIAG stage_compile end index=%d stage=%u result=%d",
+                i, infos[i].stage, result);
+#endif
 
       if (result != VK_SUCCESS)
          goto err_cleanup;
@@ -2931,6 +2960,18 @@ panvk_compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
                       const VkAllocationCallbacks *pAllocator,
                       struct vk_shader **shaders_out)
 {
+#if PAN_ARCH >= 12
+   if (state && state->fsr) {
+      mesa_logi("PANVK_VRS_DIAG callback begin stages=%u rate=%ux%u ops=%u,%u dynamic=%u",
+                shader_count, state->fsr->fragment_size.width,
+                state->fsr->fragment_size.height, state->fsr->combiner_ops[0],
+                state->fsr->combiner_ops[1],
+                BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR));
+   } else {
+      mesa_logi("PANVK_VRS_DIAG callback begin stages=%u fsr=none",
+                shader_count);
+   }
+#endif
    panvk_per_arch(compiler_lock)();
 
    VkResult result = compile_shaders(vk_dev, shader_count, infos, state,
@@ -2938,6 +2979,9 @@ panvk_compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
                                      shaders_out);
 
    panvk_per_arch(compiler_unlock)();
+#if PAN_ARCH >= 12
+   mesa_logi("PANVK_VRS_DIAG callback end result=%d", result);
+#endif
 
    return result;
 }
