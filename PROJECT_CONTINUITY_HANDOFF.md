@@ -5559,3 +5559,10 @@ If the build succeeds, import only the inner `PanVK-G720-experimental.zip` produ
 2. the same process's Winlator/Wine or Android driver log, checking for `PANVK_VRS_DIAG static frag-center lowering rate=2x2 encoded=0x5` and absence of `Unhandled intrinsic load_frag_shading_rate`.
 
 A successful compile is only a build gate. A successful 2x2 pipeline creation is only an intermediate runtime gate. The final gate is correct readback/pixel-pattern verification. No performance gain is claimed. Dynamic FSR and non-KEEP combiner semantics remain open work.
+
+
+### 2026-11-07 CI recheck — host-tool generation underway, package not ready
+
+A fresh check of workflow run `42313022389` (source SHA `00ed7243e5dea048361a1682753b7e4630450bb8`) confirms that dependency installation has completed successfully and the job has advanced to **Generate host tools**. The Android ARM64 libdrm build, Android-only Meson configure, PanVK compile/staging, dependency audit, flat Winlator package, and artifact upload are still pending. The run remains `in_progress`; GitHub's run `updated_at` timestamp remained `2026-11-06T23:36:23Z` across repeated reads, so this backend status may be stale or stalled. The job-log download endpoint currently returns 404 while the job is active, so there is no further diagnostic output to inspect.
+
+No artifact ID, ZIP, driver SHA256, successful build, or device validation exists for this commit yet. **Do not ask the user to download or test anything at this stage.** Continue polling the same run; if it completes, inspect the conclusion, job steps/logs and uploaded artifact before issuing any test request. If it remains stuck, report the CI blockage rather than claiming a build or inventing a package. The previous device-test acceptance criteria remain unchanged.
