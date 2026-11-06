@@ -1278,7 +1278,7 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
 #if PAN_ARCH >= 12
    if (state && state->fsr) {
       mesa_logi("PANVK_VRS_DIAG compile_nir begin stage=%u rate=%ux%u ops=%u,%u dynamic=%u",
-                nir->info.stage, state->fsr->fragment_size.width,
+                (unsigned)nir->info.stage, state->fsr->fragment_size.width,
                 state->fsr->fragment_size.height, (unsigned)state->fsr->combiner_ops[0],
                 state->fsr->combiner_ops[1],
                 BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR));
@@ -1334,7 +1334,7 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
    pan_shader_compile(nir, &input, &binary, &shader->info);
 #if PAN_ARCH >= 12
    mesa_logi("PANVK_VRS_DIAG pan_shader_compile end stage=%u bytes=%zu",
-             nir->info.stage, util_dynarray_num_elements(&binary, uint8_t));
+             (unsigned)nir->info.stage, util_dynarray_num_elements(&binary, uint8_t));
 #endif
 
    /* Propagate potential additional FAU values into the panvk info struct. */
@@ -2898,7 +2898,7 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
 
 #if PAN_ARCH >= 12
       mesa_logi("PANVK_VRS_DIAG stage_compile begin index=%d stage=%u",
-                i, infos[i].stage);
+                i, (unsigned)infos[i].stage);
 #endif
       result = panvk_compile_shader(dev, &infos[i], state, vs_varying_layout,
                                     prev_clip_count, prev_cull_count,
@@ -2906,7 +2906,7 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
                                     &shaders_out[i]);
 #if PAN_ARCH >= 12
       mesa_logi("PANVK_VRS_DIAG stage_compile end index=%d stage=%u result=%d",
-                i, infos[i].stage, result);
+                i, (unsigned)infos[i].stage, (int)result);
 #endif
 
       if (result != VK_SUCCESS)
