@@ -4764,3 +4764,17 @@ Do not yet claim VRS is device-validated. No FSR rendering draw has been submitt
 - Earlier Android-only run `42217026789` completed successfully and uploaded artifact `13501453528` (`panvk-g720-android-only-experimental-package`, SHA-256 `15274e447777e4c3a35a2751ca28e4f87408c785b65951098f239008e107c4e8`). Its source SHA is `5df8d3fb0243e1e3691b5b10ccaa1e73c180ab80`; it was built before the `-Dandroid-strict=false` workflow correction and is **not** the package to test for the VRS enumeration fix.
 - Wrapper/probe run `42217026859`: Android wrapper Release and Debugoptimized jobs both completed successfully. Artifacts: Release `13502460833` (SHA-256 `5b3863a7889f1908165ee913f0d266eed19199994b30c19db49c649aadf232fb`), Debugoptimized `13502630575` (SHA-256 `fe077345b532ece9a6fcae5c6c22ee97f46219a01fb17f29be203c049bd01a69`). The Windows probe job remained in progress at MinGW installation; no probe artifact yet.
 - The authoritative corrected workflow file is on source branch head `cf078c491c86b01c452542cde014439410277182`. Its Android-only job must be allowed to complete before choosing a package. The earlier strict/API-30 package is explicitly superseded for this diagnostic.
+
+
+
+### Wrapper-side Android strict-filter risk (must not overlook)
+
+A second possible filtering layer was identified while checking the exact GameNative/FristOneRR wrapper source:
+- Its `wrapper_setup_device_extensions()` copies underlying ICD extension names into the wrapper's own supported table and does not explicitly blacklist `VK_KHR_fragment_shading_rate`.
+- Its `WRAPPER_EnumerateDeviceExtensionProperties` calls `vk_common_EnumerateDeviceExtensionProperties()`.
+- That common runtime enumerator has the same `#ifdef ANDROID_STRICT` allowlist filter. Therefore, if the *installed Winlator wrapper binary* was built with `android-strict=true` and `ANDROID_API_LEVEL=30`, it could hide FSR even after the PanVK ICD itself is rebuilt with strict filtering disabled.
+- The external wrapper's `android/mesa3d_cross.mk` passes `-Dplatform-sdk-version=$(PLATFORM_SDK_VERSION)` and allows `BOARD_MESA3D_MESON_ARGS`; it does not itself show an explicit `-Dandroid-strict=false`. The exact installed wrapper build's Meson args/API level have not been verified, so do not assert that the user's wrapper definitely filters FSR.
+- The `libvulkan_wrapper-aarch64-release/debugoptimized` artifacts produced by this project's `.github/workflows/build.yml` are misleadingly named: that workflow actually uploads `build/src/panfrost/vulkan/libvulkan_panfrost.so`, i.e. alternate PanVK ICD builds, not the GameNative wrapper library. Do not tell the user these are wrapper binaries.
+- After the corrected PanVK package is installed, compare PanVK's startup capability-audit line with the probe's extension list. If PanVK logs `KHR_fragment_shading_rate=1` but the wrapper-visible probe still omits FSR, then the installed wrapper is the remaining suspect. At that point, obtain/verify the exact wrapper build or produce a separate wrapper build with `-Dandroid-strict=false`; do not modify PanVK's hardware gate.
+
+This distinction is now part of the diagnostic decision tree. The driver-side allowlist fix is necessary, but wrapper-side filtering remains an unverified possible second gate.
