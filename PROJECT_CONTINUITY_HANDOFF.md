@@ -4375,3 +4375,10 @@ GitHub Actions run `42137547230` for feature commit `f651e48768a0110b811e874cf3c
 - Both Meson configure and full project compile steps passed.
 
 This commit already contained the extension/feature exposure, rate query, CSF `PRIMITIVE_FLAGS_2` programming, and fragment sample-center lowering. Later commits only refined physical-device property/rate sample-count reporting and CI checks. Exact-head validation is still pending on `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`; do not treat the early compile as a final package pass.
+
+
+### Additional CI progress
+
+- Wrapper workflow run `42137715709` for commit `9330fc2c5666bccf0a0be7ee53b7adf23a914e19`: release build and artifact upload succeeded; debugoptimized compile is still running at the time of this update.
+- Android-only package workflow run `42137897031` for commit `3ea2dd468ec9bdb10ffbaa2b71326d98f5b39e94`: static source verification, host tools, Android ARM64 libdrm build, and Meson configure all passed; Android ARM64 driver compile/stage is in progress.
+- These runs cover the implementation but predate the final sample-count table change. Exact current head remains `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a` and must pass its own builds.
