@@ -717,16 +717,21 @@ fs_may_use_vrs(const struct vk_features *features,
 }
 
 static bool
-lower_vrs_frag_center(nir_builder *b, nir_intrinsic_instr *intr,
-                      UNUSED void *data)
+lower_vrs_frag_center(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
    if (intr->intrinsic != nir_intrinsic_load_sample_pos_or_center)
       return false;
 
+   /*
+    * Panfrost's Bifrost/Valhall compiler does not currently implement
+    * nir_load_frag_shading_rate(). For a static pipeline rate with KEEP
+    * combiners, PanVK can provide the equivalent NIR rate bitfield as an
+    * immediate. Bits 0..1 encode log2(height), bits 2..3 log2(width).
+    */
+   const uint32_t rate_value = *(const uint32_t *)data;
+
    b->cursor = nir_before_instr(&intr->instr);
-   nir_def *rate = nir_load_frag_shading_rate(b);
-   BITSET_SET(b->shader->info.system_values_read,
-              SYSTEM_VALUE_FRAG_SHADING_RATE);
+   nir_def *rate = nir_imm_int(b, rate_value);
    nir_def *log2_size =
       nir_vec2(b, nir_iand_imm(b, nir_ushr_imm(b, rate, 2), 3),
                nir_iand_imm(b, rate, 3));
@@ -1293,9 +1298,40 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
          nir->info.fs.uses_sample_shading = true;
 #if PAN_ARCH >= 12
       if (!nir->info.fs.uses_sample_shading &&
-          fs_may_use_vrs(&dev->vk.enabled_features, state))
-         NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_vrs_frag_center,
-                  nir_metadata_control_flow, NULL);
+          fs_may_use_vrs(&dev->vk.enabled_features, state)) {
+         /*
+          * Static pipeline FSR can be folded into the fragment-center
+          * calculation only when both combiners KEEP the pipeline rate.
+          * Dynamic FSR and non-KEEP combiners need the hardware
+          * load_frag_shading_rate system value, which the current Mali
+          * compiler does not implement. Leave the original sample-center
+          * intrinsic intact for those cases rather than sending an
+          * unsupported NIR intrinsic into the compiler.
+          */
+         if (state && state->fsr &&
+             !BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR) &&
+             state->fsr->combiner_ops[0] ==
+                VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR &&
+             state->fsr->combiner_ops[1] ==
+                VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR) {
+            const uint32_t width = state->fsr->fragment_size.width;
+            const uint32_t height = state->fsr->fragment_size.height;
+            assert(width == 1 || width == 2 || width == 4);
+            assert(height == 1 || height == 2 || height == 4);
+
+            const uint32_t log2_width = width == 4 ? 2 : width == 2 ? 1 : 0;
+            const uint32_t log2_height = height == 4 ? 2 : height == 2 ? 1 : 0;
+            const uint32_t rate =
+               (log2_height & 0x3) | ((log2_width & 0x3) << 2);
+
+            mesa_logi("PANVK_VRS_DIAG static frag-center lowering rate=%ux%u encoded=0x%x",
+                      width, height, rate);
+            NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_vrs_frag_center,
+                     nir_metadata_control_flow, (void *)&rate);
+         } else {
+            mesa_logi("PANVK_VRS_DIAG frag-center dynamic/combined rate left on native sample-center path");
+         }
+      }
 #endif
    }
 
