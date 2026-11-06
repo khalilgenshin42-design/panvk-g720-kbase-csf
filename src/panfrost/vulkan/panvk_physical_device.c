@@ -2337,8 +2337,7 @@ panvk_GetPhysicalDeviceFragmentShadingRatesKHR(
     * width/height combinations. This first implementation deliberately
     * restricts rasterization to single-sample pipelines. */
    static const VkExtent2D rates[] = {
-      {4, 4}, {4, 2}, {2, 4}, {2, 2}, {4, 1},
-      {1, 4}, {2, 1}, {1, 2}, {1, 1},
+      {4, 4}, {4, 2}, {2, 4}, {2, 2}, {2, 1}, {1, 2}, {1, 1},
    };
 
    for (uint32_t i = 0; i < ARRAY_SIZE(rates); i++) {
