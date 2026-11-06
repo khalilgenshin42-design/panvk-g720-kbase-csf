@@ -4615,3 +4615,52 @@ Further source/build audit after the first failed Winlator probe:
 - CI push run `42217026859` for diagnostic HEAD `5df8d3fb0243e1e3691b5b10ccaa1e73c180ab80` was observed in progress. Do not call it successful or ask for testing until the Android wrapper and relevant Android-only package jobs finish and artifacts are inspected.
 - Next: inspect run `42217026859` and any paired Android-only workflow run. If only wrapper/probe artifacts are built, trigger the Android-only package workflow for the same exact HEAD. Once a new Android package is successfully built, user must import that exact package (not the previous artifact) and rerun the expanded probe. Correlate its full Vulkan extension list with the startup log's `gpu_id`, `arch`, and extension-table bit.
 - Do not force the extension on, and do not change FSR feature semantics until this correlation identifies the fault.
+
+
+
+## 2026-11-06 continuation — full handoff re-read and VRS enumeration-path audit
+
+At the user's request, re-read the canonical `PROJECT_CONTINUITY_HANDOFF.md` from the first section through the latest VRS diagnostic entries, including the descriptor-heap, capability-census, clip/cull, WSI, and VRS history. The canonical file remains on `docs/project-continuity-handoff-2026-11-03`; no duplicate handoff was created on experiment branches.
+
+### Current VRS source facts re-verified
+
+Working source branch: `experiment/g720-fragment-shading-rate`.
+Current branch HEAD inspected: `5df8d3fb0243e1e3691b5b10ccaa1e73c180ab80`.
+
+- `panvk_vX_physical_device.c::get_physical_device_extensions()` explicitly sets `.KHR_fragment_shading_rate = PAN_ARCH >= 12`.
+- The matching feature initializer explicitly sets `.pipelineFragmentShadingRate = PAN_ARCH >= 12`, with primitive and attachment FSR false.
+- The v12 physical-device property initializer reports the conservative pipeline-FSR limits/rates recorded above.
+- Meson generates a `panvk_v12` entrypoint prefix and builds the `panvk_v12` static library with `-DPAN_ARCH=12`; the Android-only CI log from run `42140194412` confirmed that v12 objects were compiled. The v12 backend is not simply omitted from the build.
+- `panvk_physical_device_init_kbase()` computes `arch = pan_arch(device->kmod.dev->props.gpu_id)`, dispatches the architecture-specific extension table, and now logs raw `gpu_id`, decoded `arch`, and the resulting `KHR_fragment_shading_rate` bit immediately before `vk_physical_device_init()`. This is the decisive next diagnostic.
+- Kbase initialization accepts architecture 11 as well as 12/13, while the FSR gate is specifically >=12. Therefore the raw GPU ID and decoded architecture must be observed; the Winlator marketing label alone cannot settle this.
+
+### Wrapper pass-through audit
+
+Inspected the public Winlator/GameNative wrapper source in `FristOneRR-Admin/FristOneRR-Wrapperv1`, branch `fristonerr-wrapper-v1`:
+- `include/vulkan/vulkan_core.h` contains `VK_KHR_fragment_shading_rate`.
+- `wrapper_setup_device_extensions()` queries the underlying ICD's device-extension list and copies each known extension into the wrapper's supported-extension table unless that extension is explicitly in `wrapper_filter_extensions`.
+- The checked default filter table contains HDR metadata, Google display timing, shared-presentable-image, and image-compression-control-swapchain; it does **not** filter `VK_KHR_fragment_shading_rate`.
+- `wrapper_EnumerateDeviceExtensionProperties` returns the wrapper's common supported-extension table. Thus the inspected wrapper source has no intentional VRS blacklist. If PanVK's new startup diagnostic reports the extension bit as true but the probe's wrapper-visible list omits it, the next step is to verify the exact wrapper build/source and inspect its underlying extension enumeration/blacklist environment rather than changing PanVK's feature gate blindly.
+- The wrapper's `WRAPPER_EXTENSION_BLACKLIST` environment option can remove extensions dynamically; the user's previous captured environment did not list it, but confirm only if the PanVK startup bit is true and wrapper enumeration still omits VRS.
+- The wrapper registry header contains the extension macro, so a missing macro in that checked source revision is not the explanation.
+
+### Latest diagnostic CI state (polled 2026-11-06 13:24 CET)
+
+- Android-only PanVK diagnostic package run `42217026789`: host tools, Android ARM64 libdrm, configure all succeeded; Android compile/stage was still in progress. ELF/dependency/package audits and artifact upload had not started.
+- Wrapper/probe run `42217026859`:
+  - Windows probe job: MinGW installation still in progress; compile/upload pending.
+  - Android wrapper Release: SUCCESS, including compile and artifact upload.
+  - Android wrapper Debugoptimized: compile in progress.
+- The Android-only diagnostic source contains the Kbase GPU-ID/architecture/extension-bit log. The Windows probe source at branch HEAD `5df8d3f...` prints vendorID/deviceID, driverVersion, extension enumeration result/count, and the complete wrapper-visible device extension list.
+- No new artifact is available yet. Do not ask the user to run another probe until the Android package containing the diagnostic log and the expanded Windows probe artifact are both complete and independently inspected.
+
+### Decision
+
+No runtime source or feature-gate change was made during this audit. Do not force-enable VRS. The next evidence correlation is:
+1. PanVK startup: raw GPU ID, decoded architecture, and supported-extension-table bit.
+2. Probe: vendor/device IDs, driver identity, extension count, and full extension list.
+3. If raw architecture is 11, investigate GPU-ID decoding/device identification and whether the kernel reports the expected product ID before changing any gate.
+4. If architecture is 12 and PanVK's table bit is 1 but the wrapper list omits the extension, investigate wrapper enumeration, extension blacklist, and the actual wrapper build.
+5. If architecture is 12 but the table bit is 0, inspect dispatch/compiled per-architecture object selection and the exact loaded package.
+
+Keep the custom PanVK ICD isolated in Winlator Mali 1.2. Never replace the Android vendor/system Vulkan driver.
