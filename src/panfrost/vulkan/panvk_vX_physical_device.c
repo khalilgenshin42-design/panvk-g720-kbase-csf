@@ -1229,7 +1229,8 @@ panvk_per_arch(get_physical_device_properties)(
       .fragmentShadingRateWithConservativeRasterization = false,
       .fragmentShadingRateWithFragmentShaderInterlock = false,
       .fragmentShadingRateWithCustomSampleLocations = false,
-      .fragmentShadingRateNonTrivialCombinerOps = false,
+      /* v12 GenXML exposes Keep/Replace/Min/Max/Mul combiners. */
+      .fragmentShadingRateNonTrivialCombinerOps = PAN_ARCH >= 12,
       .fragmentShadingRateStrictMultiplyCombiner = false,
       .fragmentShadingRateClampCombinerInputs = false,
       .defaultRobustnessStorageBuffers =
