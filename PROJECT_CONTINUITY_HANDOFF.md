@@ -4400,3 +4400,15 @@ This is an API/dispatch/device-create smoke test, not a rendering correctness or
 The Winlator probe now also creates a graphics command pool/buffer, records `vkCmdSetFragmentShadingRateKHR` at 2x2 with KEEP/KEEP combiners, and ends the command buffer. It still does not submit a draw; it verifies extension dispatch and command recording only.
 
 Latest feature branch head including probe and workflow wiring: `1ec6d129897d7362e2c7b5eafd9d0c73be060924`. Its Android wrapper and Android-only workflows are queued, as is the Windows x64 probe build. Driver source itself remains unchanged from VRS source head `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`.
+
+
+### Android-only package milestone — initial VRS implementation passed
+
+Android-only workflow run `42137897031` for commit `3ea2dd468ec9bdb10ffbaa2b71326d98f5b39e94` completed successfully:
+- Static source verification passed, including VRS extension/feature/query/CSF-state checks.
+- Host tools and Android ARM64 libdrm build passed.
+- Android-only PanVK ARM64 compile and staging passed.
+- ELF, DRM symbol, manifest, staged dependency, and package audits passed.
+- Flat Winlator/Adrenotools package built and uploaded successfully.
+
+This package predates the final FSR rate/sample-count table refinements and must not be given to the user. The exact current source head `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a` still needs its own Android-only package run and audit.
