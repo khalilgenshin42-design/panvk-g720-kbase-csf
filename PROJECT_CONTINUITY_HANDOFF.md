@@ -4828,3 +4828,14 @@ Inspected the extracted nested ADPKG itself (not just the pre-patched staging EL
 - `libpanvk_drm.so` has SONAME `libpanvk_drm.so` and depends only on `libc.so`.
 - No `libdrm.so` dependency remains in the nested driver. The private libdrm ABI is packaged under a private SONAME to avoid interposing on the Android platform's libdrm.
 - This confirms the flat ADPKG contains the complete private dependency pair and is relocatable as expected by the Winlator Mali 1.2 importer.
+
+
+
+### Device-test handoff — corrected package ready (2026-11-06)
+
+The first user test is now unblocked; the expanded probe job is optional for this first pass.
+- Use Android-only artifact `13502283504` from run `42218076513` (corrected strict=false build), and import the nested `PanVK-G720-experimental.zip` only.
+- The same Windows probe executable from run `42140194467` / artifact `13467578263` that generated the previous `panvk_vrs_probe.log` is sufficient for a first rerun: it checks extension presence, FSR feature/property enumeration, device creation with pipeline FSR enabled, and 2x2 KEEP/KEEP command-buffer recording.
+- The expanded probe job in run `42218076595` remains stuck/in progress at the MinGW-w64 install step; it adds vendor/device IDs and full extension-list output. Keep monitoring, but do not block the first test on it.
+- Ask the user to import the corrected custom driver into Winlator Mali 1.2, run the existing probe again, and send the new log. Do not replace the system/vendor driver.
+- Do not start a game benchmark or claim FSR performance benefit until the probe passes. If the extension still appears missing, compare the PanVK startup capability-audit line (raw GPU ID, decoded arch, extension-table bit) with the wrapper-visible probe result; the installed wrapper's Android strict setting is still an open possibility.
