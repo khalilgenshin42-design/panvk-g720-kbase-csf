@@ -5100,3 +5100,42 @@ Matching Android PanVK build gate remains open:
 - An older Windows build from source `12379968b4eca4ed074c2c72b9d8d764851cd5e4` is still in progress and is not needed because the exact latest-source Windows artifact succeeded.
 
 Do not ask the user to test yet. Wait for the Android-only PanVK package from the exact same source SHA, inspect the package contents and runtime library dependencies, and hash it. Then provide both the Windows probe and matching custom PanVK package for one controlled Winlator run. Keep the existing Winlator wrapper unchanged and do not replace the Android system/vendor driver.
+
+
+### Exact-source Android PanVK package and VRS render-probe artifacts verified (2026-11-06)
+
+The matching Android-only PanVK build and both Windows probe workflows have completed successfully for source commit `10472e2c0c22a72dd4acd32d67ee145953b3d555` on `experiment/g720-fragment-shading-rate`.
+
+**Android-only PanVK build**
+- Workflow run `42224083693`: completed, conclusion `success`; all 12 build/audit/package/upload steps succeeded.
+- Artifact `panvk-g720-android-only-experimental-package`, ID `13506052377`, size 16,816,894 bytes.
+- GitHub artifact ZIP SHA-256: `d53cab115d734b27bf7aa4f63d2fd307ef8b5d92f52a4a6d0e28a87694772adf`; independently downloaded archive hash matched.
+- Inner Winlator/Adrenotools package: `PanVK-G720-experimental.zip`, 4,148,529 bytes; SHA-256 `bdf62c9dfdec8103119ada67b4d16188b5d03d11706ba8bdbaf006f273122880`.
+- Flat package entries: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, `SHA256SUMS`. Package-internal SHA256SUMS verification passed for all three payload files.
+- Driver is ELF64 AArch64 Android (NDK r30, API 30); package metadata identifies version `26.3.0-devel-android-kbase-10472e2c0c22`, min API 30, and library `libvulkan_panfrost.so`.
+- Packaging script rewrites the driver dependency from generic `libdrm.so` to private `libpanvk_drm.so`, sets SONAME accordingly, and sets RUNPATH to `$ORIGIN`. Independently inspected final inner package: driver NEEDED entry is `libpanvk_drm.so`, RUNPATH is `$ORIGIN`; private libdrm is AArch64, SONAME `libpanvk_drm.so`, and its only NEEDED library is Android `libc.so`. Thus the final flat package does not depend on the earlier staging-only `android_stub/libdrm.so` path and avoids collision with a platform libdrm.
+- The staging audit's missing-DRM-symbol report is empty: all driver DRM undefined symbols are provided by the bundled Android-target libdrm. The package's own final linker layout was checked separately after packaging.
+- Final driver binary SHA-256 from the flat package: `8aeb33f4dbc001733522e118d020a31d4d36e842a62d8ca31589507a4841007b` (the staged pre-package driver has a different hash because the packaging script applies SONAME/NEEDED/RUNPATH edits).
+- No device runtime proof yet; static packaging and ELF dependency checks are clean.
+
+**Windows VRS real-render probe**
+- Workflow run `42224083881`: completed, conclusion `success`, exact same source SHA.
+- Artifact `panvk-vrs-render-probe-win64`, ID `13505267008`, ZIP size 109,092 bytes.
+- GitHub artifact ZIP SHA-256 `38ea69c729c3d4580d7c0e10e3e05a785157a5626c643574f04e48da8fef2ece`; independently downloaded hash matches.
+- Executable `panvk-vrs-render-probe.exe`, 267,872 bytes, PE32+ x86-64; SHA-256 `7364b581bf9bf5b4ac810a0b88ed4d62a0bbce413f2034cb08e0c715c1038506`.
+- Static import table contains only `KERNEL32.dll` and `msvcrt.dll`; Vulkan is dynamically loaded. The executable includes the full five-case offscreen draw/submit/fence/staging-readback probe, not merely the older extension-enumeration test.
+- This confirms build and packaging, not actual GPU rendering. Runtime pass still requires execution in the same Winlator container after selecting the custom PanVK ICD.
+
+**Additional wrapper workflow**
+- Workflow run `42224083920`: completed, conclusion `success`; Winlator VRS probe plus Android NDK wrapper debugoptimized and release jobs all succeeded.
+- Artifacts: `panvk-vrs-probe-win64` ID `13506636095`; `libvulkan_wrapper-aarch64-release` ID `13506587387`; `libvulkan_wrapper-aarch64-debugoptimized` ID `13505734013`.
+- These wrapper outputs are not required for the controlled test; keep the user's existing Winlator wrapper unchanged to isolate PanVK behavior.
+
+**User test gate is now open**
+1. Import `PanVK-G720-experimental.zip` (the inner flat package) through Winlator Mali 1.2's custom driver importer. Do not install or replace the Android system/vendor Vulkan driver.
+2. Keep the currently working Winlator wrapper, container, game settings, and other variables unchanged.
+3. In that same container, run `panvk-vrs-render-probe.exe` from the matching Windows artifact and capture its complete console output. Ensure the custom PanVK driver is the selected ICD for the container before running it.
+4. Send the full log, including the device/driver header and all five render-case checks. If the executable cannot start, send the exact error and any loader log instead.
+5. Do not run a game benchmark yet. First determine whether real GPU rendering, fence completion, readback, 2x2 shading signature, and MIN/MAX/MUL comparisons pass. Only after this validation should VRS be considered hardware-confirmed or used for DXVK/Winlator performance experiments.
+
+Canonical handoff updated before requesting device work. Preserve this branch and file as the single continuity source; do not create a duplicate handoff.
