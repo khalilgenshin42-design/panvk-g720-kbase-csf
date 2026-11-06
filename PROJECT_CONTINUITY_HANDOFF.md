@@ -5324,3 +5324,12 @@ The PanVK-only compiler instrumentation could not distinguish a stall during Mes
 - Together with the PanVK shader logs, this identifies whether the stall occurs in generic state parsing, SPIR-V-to-NIR precompile, PanVK per-stage compilation, or `pan_shader_compile()`.
 - This is diagnostic-only and does not alter pipeline state or GPU behavior.
 - Use build artifacts only from feature branch head `3b2cb51178ff6f22d0160375b11cd681e324790d`; earlier CI runs were superseded by the added runtime checkpoints.
+
+
+### Confirmed PanVK rate enumeration includes the probe's 2x2 configuration (2026-11-06)
+
+Inspected `src/panfrost/vulkan/panvk_physical_device.c:panvk_GetPhysicalDeviceFragmentShadingRatesKHR()`:
+- The enumerated rate list includes 2x2 with sample counts 1x, 2x, and 4x.
+- It also lists 2x1 and 1x2 at 1x/2x/4x; 2x4 at 1x/2x; 4x2 and 4x4 at 1x; and 1x1 at all sample counts.
+- The probe uses a 1x-sampled color target and requests 2x2, so the configuration is explicitly in the driver's own enumerated supported-rate list.
+- This further weakens the possibility that the test is simply requesting an unadvertised rate. The failure remains a pipeline-create stall despite the rate being enumerated and its GenXML hardware encoding being defined.
