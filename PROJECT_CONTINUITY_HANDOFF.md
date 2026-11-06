@@ -5160,3 +5160,14 @@ To isolate the exact call, instrumented `tools/panvk_vrs_render_probe_win.c` wit
 - Ask user whether the prior probe visibly exited/crashed or remained stuck only if the new diagnostic run cannot be performed; the new stage logs should identify the last successful call even after an application crash.
 
 Next: poll exact-source Android-only and Windows probe runs, inspect artifacts/hashes/dependencies, then ask user to rerun with the instrumented probe and matching ICD package. Continue to avoid declaring VRS support until the 2x2 output signature and combiner comparisons pass.
+
+
+### Stage-diagnostic Windows probe built and inspected (2026-11-06)
+
+- Diagnostic source commit: `665d86a75d94b9dc015b3de7b1959d6ef3fc9d6d`.
+- Windows probe workflow `42260680210`: compile and executable verification succeeded; artifact upload completed. Exact-source artifact ID `13525121377`, archive digest `a27bf55d180bcbba0af25e9f8b454148236597d47b5fdd371bb34a0ff2ee66a7`; independently downloaded archive hash matches.
+- Executable `panvk-vrs-render-probe.exe`, 271,968 bytes, PE32+ x86-64; SHA-256 `4e12b8e68baa0ee82afb092cc66c271737498b7bd91f291a85df307c7ab2e1e0`.
+- Binary string audit confirms all new per-stage diagnostics are present, including vkCreateImage, memory allocation/binding, image view/framebuffer, staging buffer, graphics pipeline, command pool/buffer, and fence wait.
+- Android-only package build `42260680071` for the exact same SHA is still in progress; latest state was Generate host tools, no package artifact yet.
+- Android wrapper variant run `42260680099` is also in progress but not required for this diagnostic test.
+- Do not ask user to rerun until the matching Android package for this diagnostic source is built and its flat package/ELF dependencies are independently inspected.
