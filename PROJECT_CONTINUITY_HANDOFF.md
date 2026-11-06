@@ -4810,3 +4810,11 @@ While the corrected package builds, audited the pipeline-state plumbing to ensur
 - Embedded checksums verified against the extracted library files. The CI ELF/dependency audit passed, `audit/missing-drm-symbols.txt` is empty, and the staged ICD manifest resolves the expected library. The package is structurally valid and ready for Winlator import.
 - Do not confuse this corrected package with artifact `13501453528` from pre-fix run `42217026789`; that earlier package had strict filtering enabled and is superseded.
 - Expanded Windows probe job in run `42218076595` was still in progress at this poll; wait for its artifact before asking for device testing so the test uses the full extension-list/device-ID diagnostics.
+
+
+
+### Diagnostic payload verification
+
+Extracted the corrected nested package and ran `strings` on its `libvulkan_panfrost.so`. The binary contains the exact startup diagnostic format string:
+`PanVK capability audit: gpu_id=0x%llx arch=v%u KHR_fragment_shading_rate=%u kbase=1`.
+This confirms the GPU-ID/architecture/extension-bit diagnostic was linked into the artifact, not merely present in source.
