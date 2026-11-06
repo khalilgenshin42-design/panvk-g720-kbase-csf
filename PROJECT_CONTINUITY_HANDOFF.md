@@ -4420,3 +4420,8 @@ This package predates the final FSR rate/sample-count table refinements and must
 - User supplied `TombRaider_logs_2026-11-06_01-24-09.zip`; the run is the existing DX11 Tomb Raider / DXVK 1.7.2 path.
 - This DXVK path does not request or use `VK_KHR_fragment_shading_rate`, so the new FSR feature should not be expected to increase this game's FPS. The VRS probe is for confirming API extension/feature/device-create/command-recording support. A D3D12/VKD3D title or a Vulkan VRS test is required to exercise VRS rendering.
 - Keep the Tomb Raider benchmark as a regression check only. Do not interpret a similar FPS result as evidence that VRS failed; the application must issue VRS state for the feature to affect rendering.
+
+
+### Wrapper CI completion update
+
+The previously in-progress wrapper workflow `42137715709` has now completed successfully in both release and debugoptimized configurations. This is still an early source commit (`9330fc2c5666bccf0a0be7ee53b7adf23a914e19)); exact-head validation for the final FSR rate table and current branch is still required.
