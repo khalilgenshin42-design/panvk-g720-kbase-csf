@@ -5576,3 +5576,63 @@ CI progression follow-up (same 2026-11-07 recheck): a later jobs poll shows **Ge
 A subsequent poll of workflow run `42313022389` (source `00ed7243e5dea048361a1682753b7e4630450bb8`) confirms two more successful steps: **Build real Android ARM64 libdrm** and **Configure Android-only build**. The job has advanced to **Compile and stage Android install**, currently `in_progress`. The dependency setup, host-tool generation, libdrm build, and Android-only configuration are all reported successful. Audit, flat Winlator package creation, and artifact upload remain pending; artifact listing remains empty. The run-level updated timestamp remains stale, and job-log download currently returns 404 while active.
 
 This is meaningful build progress, but not yet proof that PanVK compiled or that a package exists. No phone action is required. Continue checking the compile step, then require the symbol/dependency audit and package artifact before giving the user a download or asking for the VRS render-probe run.
+
+
+
+### 2026-11-07 VRS static-rate patch — Android package built and independently inspected
+
+The Android-only workflow for the static VRS fragment-center lowering patch has now completed successfully.
+
+#### Exact source/build provenance
+
+- Feature branch: `experiment/g720-fragment-shading-rate`
+- Source commit: `00ed7243e5dea048361a1682753b7e4630450bb8`
+- Workflow: Android-only PanVK G720 Experiment
+- Run ID: `42313022389`
+- Run URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42313022389
+- Job ID: `128218802704`, `build-android-only`
+- Run conclusion: SUCCESS.
+- All 12 substantive steps passed, including real Android ARM64 libdrm build, Android-only configure, PanVK compile/stage, driver/manifest/dependency audit, flat Winlator/Adrenotools packaging, and artifact upload.
+- Workflow artifact ID: `13549348126`
+- Artifact name: `panvk-g720-android-only-experimental-package`
+- Outer artifact size: 16,815,604 bytes.
+- Outer artifact SHA-256: `982932ef2c0a1c19f98ceab8a81f00e6328e1a908a26550c04268cc96648d0ac`
+- Artifact expires 2027-02-04.
+
+#### Independently inspected importable package
+
+The outer Actions artifact was downloaded and inspected. Its importable nested file is `PanVK-G720-experimental.zip` (do not import the outer audit artifact ZIP).
+
+- Inner flat package size: 4,151,682 bytes.
+- Inner package SHA-256: `63e4de771c1ad91cca6a89eef067d695c4d3f88dd858cc0999e255142f813e99`
+- Flat root contains exactly: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+- `meta.json` package version: `26.3.0-devel-android-kbase-00ed7243e5de`; min Android API 30; explicitly labels the driver experimental, non-conformant, and runtime compatibility unverified.
+- Driver SHA-256: `6229f669a75e38c37abd52c082cc8ecfd64fc1685d880a52ae5a07620748d6e5`
+- Private libdrm SHA-256: `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`
+- Metadata SHA-256: `6ebf440528854a687fcb6301c5dee866976906d7a45c9abbb90c19db3fc5e419`
+- All three member hashes were recomputed and match `SHA256SUMS`.
+- Driver is ELF64 AArch64 Android API 30. Its package-patched NEEDED entry is `libpanvk_drm.so`, SONAME is `libvulkan_panfrost.so`, and RUNPATH is `$ORIGIN`.
+- Private `libpanvk_drm.so` is ELF64 AArch64, SONAME `libpanvk_drm.so`, and depends only on Android `libc.so`.
+- CI's DRM ABI audit produced an empty `missing-drm-symbols.txt`; the build's DRM undefined-symbol set is covered by the bundled real Android ARM64 libdrm before package-private SONAME rewriting.
+- The staged intermediate ICD's `$ORIGIN/../../android_stub` path and libdrm stub are build-stage details; the importable flat package is separately patched and uses the private `libpanvk_drm.so` dependency as intended.
+
+#### Interpretation and device-test gate
+
+This closes the compile, link, package, checksum, architecture, and dependency-audit gates for the static-rate patch. It does **not** prove Vulkan conformance, Kbase ABI/runtime compatibility, general/dynamic FSR correctness, or performance.
+
+The next required test is now ready:
+1. Import only the inner `PanVK-G720-experimental.zip` into Winlator Mali's custom driver slot. Do not install it over Android's system/vendor driver.
+2. Keep the existing Winlator wrapper, container, and game settings unchanged.
+3. Run the already-built `panvk-vrs-render-probe.exe` (the render probe, not the capability-only `panvk-vrs-probe.exe`).
+4. Save the complete output as `panvk_vrs_render_probe.log`, and capture the same run's Winlator/Wine or Android driver log containing `PANVK_VRS_DIAG`.
+
+Acceptance requires all of the following:
+- The static 2x2 graphics pipeline creation returns successfully.
+- Queue submission, fence wait, and readback all complete.
+- The 2x2 pixel pattern matches the expected repeated-block/fragment-center behavior.
+- Driver log contains `PANVK_VRS_DIAG static frag-center lowering rate=2x2 encoded=0x5`.
+- No `Unhandled intrinsic load_frag_shading_rate` appears.
+
+Pipeline creation alone is an intermediate pass; pixel readback is the final correctness gate. If the probe hangs, fails, or pixels mismatch, provide both logs and stop; do not resume Borderlands benchmarking or alter Kbase mappings, synchronization, descriptor heaps, queue settings, or wrapper configuration. Dynamic FSR and non-KEEP combiner cases remain explicitly unresolved.
+
+No change was made to the phone's system/vendor Vulkan driver or kernel.
