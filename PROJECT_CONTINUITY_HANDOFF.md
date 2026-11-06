@@ -5064,3 +5064,18 @@ GitHub Actions runs observed for this source checkpoint:
 - All three were **queued** at the last poll. Earlier runs from intermediate commits were also queued; only the latest matching-source artifacts should be considered if they complete. The final source checkpoint is not yet compile-verified and no render-probe artifact is ready to distribute.
 
 Next: poll these exact runs, inspect the Windows build logs and Android build artifacts, and correct any compile/runtime issues before asking for a device test. The previously tested package `cf078c491c86b01c452542cde014439410277182` predates the nontrivial-combiner property correction and must not be reused to validate the updated combiner behavior.
+
+
+### VRS render-probe static audit while CI is queued (2026-11-06)
+
+A further static review was completed against the exact VRS source checkpoint `10472e2c0c22a72dd4acd32d67ee145953b3d555`:
+
+- Reviewed the complete `tools/panvk_vrs_render_probe_win.c` render path and both GLSL sources. The fragment shader writes a coordinate-dependent 8x8 color pattern, so 2x2 fragment shading should create repeated adjacent-pixel pairs in the offscreen RGBA8 readback.
+- Confirmed the render pass transitions the color target to `VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL`, then copies to a host-visible, host-coherent staging buffer. A transfer-write-to-host-read buffer barrier and fence wait precede CPU readback.
+- Confirmed the probe's 1x1 MUL/KEEP case is intentionally useful for distinguishing the strict-multiply property: both pipeline and default primitive rates are 1x1; strict multiplication leaves 1x1, while the legacy non-strict behavior combines 1 and 1 to produce 2 in that dimension. The probe compares its checksum against the 1x1 control when strict=true and against the 2x2 control when strict=false. This matches the Khronos Vulkan combiner/property definitions.
+- The 2x2 MAX/KEEP case should preserve the pipeline rate against the default 1x1 primitive rate; 2x2 MIN/KEEP should reduce to 1x1. These output comparisons are appropriate for the pipeline-only path under test.
+- No new source defect requiring an immediate edit was found in this pass. There is one cosmetic logging-format issue in the per-render "creating target" message (it may print a literal `\\n` rather than a line break); it does not affect Vulkan execution or the pass criteria and is deferred until after the current build checkpoint to avoid creating another redundant queued build.
+- Latest exact-source CI runs remain queued: Windows render probe `42224083881`, Android NDK wrapper build `42224083920`, and Android-only PanVK build `42224083693`. An earlier Windows probe build for source `12379968b4eca4ed074c2c72b9d8d764851cd5e4` (run `42223802868`) is still in progress at the shader-tool installation step; it is not a substitute for the exact latest-source build.
+- Repository-wide Actions snapshot showed 22 queued and 16 in-progress runs, consistent with runner contention. Do not push another source commit just to refresh the queue. Keep waiting for the three exact-source runs and only accept artifacts whose source SHA is `10472e2c0c22a72dd4acd32d67ee145953b3d555`.
+
+No user-device action is required yet. The Android package and Windows render probe must both be built from the exact source checkpoint, inspected, and hashed before requesting the next Winlator test.
