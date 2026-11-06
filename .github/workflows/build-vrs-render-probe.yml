@@ -1,0 +1,67 @@
+name: Build Winlator VRS render probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/g720-fragment-shading-rate
+    paths:
+      - tools/panvk_vrs_render_probe_win.c
+      - tools/vrs_probe.vert
+      - tools/vrs_probe.frag
+      - .github/workflows/build-vrs-render-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-vrs-render-probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shader compiler and MinGW
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends glslang-tools gcc-mingw-w64-x86-64-posix
+
+      - name: Compile embedded SPIR-V shaders
+        run: |
+          glslangValidator -V --target-env vulkan1.0 tools/vrs_probe.vert -o /tmp/vrs.vert.spv
+          glslangValidator -V --target-env vulkan1.0 tools/vrs_probe.frag -o /tmp/vrs.frag.spv
+          python3 - <<'PY'
+          from pathlib import Path
+          def words(path):
+              b = Path(path).read_bytes()
+              if len(b) % 4:
+                  raise SystemExit(f"{path}: SPIR-V size is not word-aligned")
+              return [int.from_bytes(b[i:i+4], "little") for i in range(0, len(b), 4)]
+          def emit(name, data):
+              rows = []
+              for i in range(0, len(data), 8):
+                  rows.append("   " + ", ".join(f"0x{x:08x}u" for x in data[i:i+8]))
+              return f"static const uint32_t {name}[] = {{\n" + ",\n".join(rows) + "\n};\n"
+          header = "#pragma once\n#include <stdint.h>\n"
+          header += emit("vrs_vert_spv", words("/tmp/vrs.vert.spv"))
+          header += emit("vrs_frag_spv", words("/tmp/vrs.frag.spv"))
+          Path("tools/vrs_probe_spv.h").write_text(header)
+          PY
+
+      - name: Build Windows probe
+        run: |
+          x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Wno-missing-field-initializers \
+            -Iinclude -Itools tools/panvk_vrs_render_probe_win.c -o panvk-vrs-render-probe.exe
+
+      - name: Verify executable
+        run: |
+          file panvk-vrs-render-probe.exe
+          x86_64-w64-mingw32-objdump -p panvk-vrs-render-probe.exe | grep -E 'Subsystem|DLL Name' || true
+          sha256sum panvk-vrs-render-probe.exe
+
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: panvk-vrs-render-probe-win64
+          path: panvk-vrs-render-probe.exe
+          if-no-files-found: error
