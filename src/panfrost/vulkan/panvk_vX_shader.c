@@ -1279,12 +1279,12 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
    if (state && state->fsr) {
       mesa_logi("PANVK_VRS_DIAG compile_nir begin stage=%u rate=%ux%u ops=%u,%u dynamic=%u",
                 nir->info.stage, state->fsr->fragment_size.width,
-                state->fsr->fragment_size.height, state->fsr->combiner_ops[0],
+                state->fsr->fragment_size.height, (unsigned)state->fsr->combiner_ops[0],
                 state->fsr->combiner_ops[1],
                 BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR));
    } else {
       mesa_logi("PANVK_VRS_DIAG compile_nir begin stage=%u fsr=none",
-                nir->info.stage);
+                (unsigned)nir->info.stage);
    }
 #endif
 
@@ -2980,7 +2980,7 @@ panvk_compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
 
    panvk_per_arch(compiler_unlock)();
 #if PAN_ARCH >= 12
-   mesa_logi("PANVK_VRS_DIAG callback end result=%d", result);
+   mesa_logi("PANVK_VRS_DIAG callback end result=%d", (int)result);
 #endif
 
    return result;

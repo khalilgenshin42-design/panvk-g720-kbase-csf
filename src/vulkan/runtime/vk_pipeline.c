@@ -2053,7 +2053,7 @@ vk_create_graphics_pipeline(struct vk_device *device,
 
    struct vk_graphics_pipeline_compile_info compile_info;
    mesa_logi("PANVK_VRS_DIAG runtime pipeline begin stages=%u library=%u",
-             pCreateInfo->stageCount, is_library);
+             pCreateInfo->stageCount, (unsigned)is_library);
    vk_get_graphics_pipeline_compile_info(
       &compile_info, device,
       is_library ? &pipeline->lib.state : &state_tmp,
@@ -2063,8 +2063,8 @@ vk_create_graphics_pipeline(struct vk_device *device,
       mesa_logi("PANVK_VRS_DIAG runtime state parsed rate=%ux%u ops=%u,%u",
                 compile_info.state->fsr->fragment_size.width,
                 compile_info.state->fsr->fragment_size.height,
-                compile_info.state->fsr->combiner_ops[0],
-                compile_info.state->fsr->combiner_ops[1]);
+                (unsigned)compile_info.state->fsr->combiner_ops[0],
+                (unsigned)compile_info.state->fsr->combiner_ops[1]);
    } else {
       mesa_logi("PANVK_VRS_DIAG runtime state parsed fsr=none");
    }
