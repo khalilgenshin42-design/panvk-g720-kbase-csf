@@ -188,7 +188,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    VkMemoryRequirements buffer_req;
    get_buffer_memory_requirements(device, staging, &buffer_req);
    uint32_t buffer_type = memory_type(mem_props, buffer_req.memoryTypeBits,
-                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
    if (buffer_type == UINT32_MAX)
       goto done;
