@@ -5079,3 +5079,24 @@ A further static review was completed against the exact VRS source checkpoint `1
 - Repository-wide Actions snapshot showed 22 queued and 16 in-progress runs, consistent with runner contention. Do not push another source commit just to refresh the queue. Keep waiting for the three exact-source runs and only accept artifacts whose source SHA is `10472e2c0c22a72dd4acd32d67ee145953b3d555`.
 
 No user-device action is required yet. The Android package and Windows render probe must both be built from the exact source checkpoint, inspected, and hashed before requesting the next Winlator test.
+
+
+### Windows VRS render-probe CI success and artifact inspection (2026-11-06)
+
+The exact latest source checkpoint `10472e2c0c22a72dd4acd32d67ee145953b3d555` has now produced a successful Windows render-probe build:
+
+- Workflow run: `42224083881` — completed, conclusion `success`.
+- All steps succeeded: dependency installation, GLSL-to-SPIR-V compilation, Windows probe compilation, executable verification, and artifact upload.
+- Artifact: `panvk-vrs-render-probe-win64`, artifact ID `13505267008`, ZIP size 109,092 bytes.
+- GitHub artifact SHA-256: `38ea69c729c3d4580d7c0e10e3e05a785157a5626c643574f04e48da8fef2ece`; independently downloaded ZIP hash matches exactly.
+- Extracted executable: `panvk-vrs-render-probe.exe`, 267,872 bytes, PE32+ x86-64.
+- Executable SHA-256: `7364b581bf9bf5b4ac810a0b88ed4d62a0bbce413f2034cb08e0c715c1038506`.
+- Static binary inspection confirms only standard `KERNEL32.dll` and `msvcrt.dll` imports; Vulkan is dynamically loaded through `vulkan-1.dll` at runtime. Expected render-pass, combiner comparison and final PASS/FAIL diagnostic strings are present.
+- This confirms the standalone probe builds and is packaged correctly. It does not yet establish GPU runtime success.
+
+Matching Android PanVK build gate remains open:
+- Android-only run `42224083693` is in progress at Configure Android-only build; no artifact yet.
+- Android NDK wrapper run `42224083920` remains queued; no artifact yet.
+- An older Windows build from source `12379968b4eca4ed074c2c72b9d8d764851cd5e4` is still in progress and is not needed because the exact latest-source Windows artifact succeeded.
+
+Do not ask the user to test yet. Wait for the Android-only PanVK package from the exact same source SHA, inspect the package contents and runtime library dependencies, and hash it. Then provide both the Windows probe and matching custom PanVK package for one controlled Winlator run. Keep the existing Winlator wrapper unchanged and do not replace the Android system/vendor driver.
