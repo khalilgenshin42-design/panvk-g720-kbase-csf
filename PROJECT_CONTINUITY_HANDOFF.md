@@ -5,8 +5,8 @@ Last updated: 2026-11-06 (UTC)
 
 This section supersedes older "next steps", queued-CI, and "no code changed" statements in the historical addenda below. Keep the historical record, but use the branch-specific state here when deciding what is current.
 
-- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file; its pre-update HEAD was `48a4b8aea923b877267876a75b396ee9e8dfacda`.
-- Current task branch: `experiment/g720-performance-audit`, HEAD `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8`. The latest code change on this branch is `a2e5ac142b4f0df71cb28204ece4337bace046de`; later commits are documentation/capability-audit updates.
+- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file; its pre-refresh HEAD was `48a4b8aea923b877267876a75b396ee9e8dfacda`; this refresh was committed as `71cd44130da9a8683136d5a2d8d764e60c14ae2d`.
+- Current task branch: `experiment/g720-performance-audit`. The exact CI/package snapshot was branch HEAD `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8`; the 2026-11-06 audit-doc refresh was committed as `3aeb3e8a441b346d231f5f25198956f542271c1f`. The latest code change remains `a2e5ac142b4f0df71cb28204ece4337bace046de`; later commits are documentation/capability-audit updates.
 - Separate 4x heap-threshold candidate: `experiment/g720-heap-renew-262k`, HEAD `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`. It changes the compiled default from 65,536 to 262,144; it is not an environment-variable propagation test.
 - Separate descriptor-heap implementation: `experiment/g720-descriptor-heaps`, HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. Its exact-head Android and wrapper builds now pass; the package is independently audited below. No device runtime test has been performed.
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
