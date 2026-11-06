@@ -4938,3 +4938,20 @@ The corrected PanVK package and expanded probe are now the only artifacts needed
 - Re-run the expanded probe and provide its `panvk_vrs_probe.log`. Correlate the full extension list with PanVK's startup `gpu_id`, decoded architecture, and `KHR_fragment_shading_rate` extension-table bit.
 - If FSR remains missing, the probe's device/vendor/driver identity and PanVK startup diagnostic now let us isolate driver architecture detection, extension table state, loader/ICD selection, or a different wrapper binary without changing more components speculatively.
 
+
+
+### Follow-up validation of the discarded wrapper workflow
+
+- The temporary wrapper workflow run `42220780814` did complete the GameNative wrapper build and package step, including archive creation and AArch64 ELF verification. It failed only in the custom Meson-option parser: the parser selected the trailing words of the option description (`CTS` / `version.`) instead of the option values. No artifact was uploaded.
+- This verifier failure does not indicate a wrapper compile failure. The workflow has already been deleted from the VRS branch; do not repair or rerun it because the corrected `with_platform_android` source audit proves that this X11 wrapper build does not define `ANDROID_STRICT` and does not apply the Android extension allowlist.
+- The VRS branch now has no wrapper-replacement workflow. Keep the installed Winlator wrapper unchanged.
+
+### Latest branch and artifact state after correction
+
+- VRS branch latest workflow/source commit after removing the unnecessary wrapper workflow: `aedf0cabc17f4a9ed1febd8d93300e1f17751282`. No PanVK runtime source changed in this cleanup.
+- Canonical handoff branch latest commit before this addendum: `a82c6aff08d432ee4160e14c2de2cb909d338e4b`.
+- Corrected PanVK artifact `13502283504` (run `42218076513`, source/workflow SHA `cf078c491c86b01c452542cde014439410277182`) remains the valid API-30 / `android-strict=false` custom ICD package. Its nested ZIP checksum is `ba54e040ed1dcd2c9f8148c74a2618f395085f477fc44d7806e67e01b67482b6`.
+- Expanded probe artifact `13503216545` (run `42220312994`, probe job `127900417338`) is complete and independently inspected. ZIP contains the PE32+ x86-64 `panvk-vrs-probe.exe`; executable SHA-256 `4f8462e3d70b960b4a36cc16717a16ba57d7994088b09e712e359b29ec4fb1ca`. It includes the full extension list and vendor/device/driver identity diagnostics.
+- The Android-only rebuild run `42220313021` and the Release/Debugoptimized jobs in wrapper run `42220312994` were still in progress at the last poll. They are not required to validate the already-built corrected PanVK artifact `13502283504` or the completed Windows probe artifact `13503216545`.
+- User device validation is now the only missing input. Ask for one probe run with the corrected PanVK package and the existing wrapper unchanged. Do not request a wrapper import, game benchmark, or VRS rendering benchmark yet.
+
