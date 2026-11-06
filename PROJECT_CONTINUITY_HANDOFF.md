@@ -4357,3 +4357,11 @@ This follows the Khronos extension's required minimum rate list and the newer Pa
 ### FSR rate-table refinement
 
 The final rate table also includes the verified 2x-MSAA combinations for 2x2 and 2x1, matching the current PanVK reference table: 2x4 at 1x/2x, 2x2 and 2x1 at 1x/2x/4x, 1x2 at 1x/2x/4x, and 1x1 at all sample counts. Latest query-table source commit: `ea9284fb58fea3c0f5861c21f7b9ff8ef2350915`. The Android build must be rerun against this exact head before packaging.
+
+
+### Current FSR implementation head
+
+Latest feature branch head after the 2x-MSAA rate-table refinement and comment update:
+`715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`.
+
+The latest exact-head wrapper and Android-only package workflows are being queued by GitHub Actions. Older in-flight runs cover earlier commits; they are useful for early compile diagnostics but do not replace a pass on this exact head. No VRS package has been approved for user testing yet.
