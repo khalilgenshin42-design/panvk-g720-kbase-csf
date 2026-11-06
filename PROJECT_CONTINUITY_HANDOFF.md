@@ -4311,3 +4311,32 @@ A public FauxVkDB validation report for a POCO X7 Pro (MT6899, Mali-G720 MC7, sy
 This is a device/SoC-matched stock-driver capability reference, not a proof that our PanVK implementation can expose these features safely. It refines the ray-tracing note above: the ordinary Mali-G720 MC7 stock driver does list ray-query and acceleration-structure extensions, but the extension list alone does not tell us whether traversal is implemented in software, which ray-query feature bits are true, or whether the same firmware/driver build exposes them on the user's Xiaomi 15T. Do not categorically claim the API extension is impossible on Mali-G720; equally, do not infer a dedicated RTU or turn on PanVK ray-query without feature/property and implementation evidence.
 
 VRS remains the nearer-term candidate because Arm's product support page explicitly documents pipeline, primitive, and attachment VRS rates up to 4x4 on Mali-G720, and the Vulkan FSR extension provides separable feature bits. For the user's immediate DX11 Tomb Raider test, neither descriptor heaps nor VRS will improve FPS unless DXVK/game actually uses the corresponding API. DXVK 1.7.2's uploaded log does not show either extension in its enabled extension list.
+
+
+### 2026-11-06 — VRS hardware packet path found; pipeline-only implementation underway
+
+Further source-level audit found that the repository's v12 GenXML already describes the relevant hardware fields:
+- `PRIMITIVE_FLAGS_2`: `VRS Draw Rate`, `VRS Combiner 0`, `VRS Combiner 1`.
+- `FRAMEBUFFER_PARAMETERS`: `VRS Image Rate` and `VRS Image Plane` (attachment mode is not being implemented in this first pass).
+- `DCD_FLAGS_0`: `Disable VRS Clamp 2x2`.
+- The Bifrost compiler backend already supports `nir_intrinsic_load_frag_shading_rate` by reading the hardware primitive flags.
+
+The next feature branch now has a narrow pipeline-only implementation:
+- `VK_KHR_fragment_shading_rate` enabled only for `PAN_ARCH >= 12`.
+- `pipelineFragmentShadingRate = true`; `primitiveFragmentShadingRate = false`; `attachmentFragmentShadingRate = false`.
+- Physical-device query enumerates conservative 1x-sample rates: 4x4, 4x2, 2x4, 2x2, 2x1, 1x2, 1x1. Aspect ratio is capped at 2; 4x1 and 1x4 are deliberately not advertised.
+- CSF `PRIMITIVE_FLAGS_2` emission consumes the common Vulkan dynamic FSR state, with sample-shading forced to 1x1.
+- Fragment shader lowering corrects `gl_SamplePosition`/sample-center semantics using `load_frag_shading_rate` when pipeline FSR may be active.
+- No primitive shader-rate output or shading-rate attachment support is advertised.
+
+Implementation branch: `experiment/g720-fragment-shading-rate`, based on descriptor-heap commit `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. Current source commits include:
+- `26ce5ea8391061275d802ea26c610b137515842a`: extension/feature/property flags.
+- `b0a8409b964c821505e5bd60bcee995d45e6c114`: rate enumeration.
+- `0f3e66828cf5f1b8ac9947b856647daeb72029b7`: CSF VRS draw-rate register emission.
+- `f651e48768a0110b811e874cf3c1157ec6a29746`: fragment sample-center lowering.
+- `4fdde1a5c979b63fe01b1d2621362a579ca4f5c8` / `3994fda27c318e05fb00b1253401e35fecc528a9`: conservative rate/property correction.
+- `9330fc2c5666bccf0a0be7ee53b7adf23a914e19`: Android package workflow branch check wiring.
+
+Build status at handoff update: Android wrapper CI for final source commit `3994fda27c318e05fb00b1253401e35fecc528a9` is running in GitHub Actions run `42137623250` (release and debugoptimized jobs). This is not yet a passed build. The Android-only package workflow is not yet triggered for this new branch. Do not ship or test this source until CI compile and package audits pass.
+
+Reference implementation comparison: a newer PanVK source tree gates its FSR implementation at `PAN_ARCH >= 14`, but the v12 GenXML itself contains the pipeline draw-rate and combiner fields. This branch deliberately implements only pipeline FSR for v12 and must be treated as experimental until the compile, Vulkan CTS, and device runtime tests establish correctness. The fact that GenXML contains fields is hardware programming evidence, not by itself proof of every API semantic.
