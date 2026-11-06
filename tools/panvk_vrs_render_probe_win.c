@@ -23,10 +23,10 @@
 #define LOAD_I(name) ((PFN_vk##name)gipa(instance, "vk" #name))
 #define LOAD_D(name) ((PFN_vk##name)get_device_proc_addr(device, "vk" #name))
 
-static FILE *logf;
+static FILE *log_file;
 static PFN_vkGetInstanceProcAddr gipa;
 
-#define LOG(...) do { if (logf) { fprintf(logf, __VA_ARGS__); fflush(logf); } } while (0)
+#define LOG(...) do { if (log_file) { fprintf(log_file, __VA_ARGS__); fflush(log_file); } } while (0)
 
 static uint32_t
 memory_type(const VkPhysicalDeviceMemoryProperties *props, uint32_t bits,
@@ -259,6 +259,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .layout = layout,
       .renderPass = render_pass,
       .subpass = 0,
+      .basePipelineIndex = -1,
    };
    if (create_graphics_pipelines(device, VK_NULL_HANDLE, 1, &pipeline_info,
                                  NULL, &pipeline) != VK_SUCCESS)
@@ -392,20 +393,20 @@ equal_neighbors(const uint8_t *p)
 int
 main(void)
 {
-   logf = fopen("panvk_vrs_render_probe.log", "w");
-   if (!logf) return 2;
+   log_file = fopen("panvk_vrs_render_probe.log", "w");
+   if (!log_file) return 2;
    LOG("PanVK VRS render probe: 1x1 control vs 2x2 pipeline rate\n");
 
    HMODULE loader = LoadLibraryA("vulkan-1.dll");
    if (!loader) {
       LOG("FAIL: LoadLibrary(vulkan-1.dll), error=%lu\n", (unsigned long)GetLastError());
-      fclose(logf); return 1;
+      fclose(log_file); return 1;
    }
    gipa = (PFN_vkGetInstanceProcAddr)GetProcAddress(loader, "vkGetInstanceProcAddr");
-   if (!gipa) { LOG("FAIL: vkGetInstanceProcAddr missing\n"); fclose(logf); return 1; }
+   if (!gipa) { LOG("FAIL: vkGetInstanceProcAddr missing\n"); fclose(log_file); return 1; }
 
    PFN_vkCreateInstance create_instance = (PFN_vkCreateInstance)gipa(VK_NULL_HANDLE, "vkCreateInstance");
-   if (!create_instance) { LOG("FAIL: vkCreateInstance missing\n"); fclose(logf); return 1; }
+   if (!create_instance) { LOG("FAIL: vkCreateInstance missing\n"); fclose(log_file); return 1; }
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .pApplicationName = "PanVK VRS render probe",
@@ -420,7 +421,7 @@ main(void)
    };
    VkInstance instance = VK_NULL_HANDLE;
    VkResult result = create_instance(&ici, NULL, &instance);
-   if (result != VK_SUCCESS) { LOG("FAIL: vkCreateInstance=%d\n", result); fclose(logf); return 1; }
+   if (result != VK_SUCCESS) { LOG("FAIL: vkCreateInstance=%d\n", result); fclose(log_file); return 1; }
 
    PFN_vkEnumeratePhysicalDevices enumerate = LOAD_I(EnumeratePhysicalDevices);
    PFN_vkGetPhysicalDeviceProperties2 get_props2 = LOAD_I(GetPhysicalDeviceProperties2);
@@ -436,17 +437,17 @@ main(void)
        !get_mem_props || !get_format_props || !create_device ||
        !get_device_proc_addr || !destroy_instance) {
       LOG("FAIL: required instance entrypoint missing\n");
-      fclose(logf); return 1;
+      fclose(log_file); return 1;
    }
 
    uint32_t pd_count = 0;
    result = enumerate(instance, &pd_count, NULL);
    if (result != VK_SUCCESS || !pd_count) {
       LOG("FAIL: no physical device, result=%d count=%u\n", result, pd_count);
-      destroy_instance(instance, NULL); fclose(logf); return 1;
+      destroy_instance(instance, NULL); fclose(log_file); return 1;
    }
    VkPhysicalDevice *pds = calloc(pd_count, sizeof(*pds));
-   if (!pds) { destroy_instance(instance, NULL); fclose(logf); return 1; }
+   if (!pds) { destroy_instance(instance, NULL); fclose(log_file); return 1; }
    enumerate(instance, &pd_count, pds);
 
    int passed = 0;
@@ -626,6 +627,6 @@ main(void)
    free(pds);
    destroy_instance(instance,NULL);
    LOG("\n%s\n",passed?"VRS GPU RENDER PASS":"VRS GPU RENDER FAIL");
-   fclose(logf);
+   fclose(log_file);
    return passed?0:1;
 }
