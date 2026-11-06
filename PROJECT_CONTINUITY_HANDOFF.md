@@ -4479,3 +4479,16 @@ Do not request device testing until the exact-head Android-only package passes a
 - A fresh probe build result has not yet been observed. Do not distribute or test a probe executable until its artifact exists and is verified.
 - Exact-head Android-only workflow `42138343360` remained in dependency installation at the last poll; host tools, Android ARM64 driver compile, dependency audit and package stages were still pending. No current importable package is available.
 - The exact source driver commit remains `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`; the workflow-only fix does not change driver source.
+
+
+### 2026-11-06 continuation — CI re-poll after probe command correction
+
+A fresh GitHub Actions poll confirms the following state (this supersedes the older dependency-install status above):
+
+- Exact-source wrapper run `42138343235` is now confirmed completed successfully in both Android ARM64 configurations: release and debugoptimized. The previously recorded artifact IDs and digests remain the successful wrapper artifacts for driver source SHA `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`. These are not the flat Winlator import package.
+- Exact-source Android-only package run `42138343360` has progressed beyond dependency installation: its active step is now **Generate host tools**. No artifact exists yet; Android ARM64 libdrm build, PanVK Android-only compile/stage, ELF/dependency audits, flat package, and upload remain unconfirmed.
+- The workflow-only probe fix commit `157418c71475b9d96170a43f24157a80673d4160` triggered fresh workflow runs: Android-only run `42140194412`, wrapper/probe run `42140194467`. Both are queued at the latest poll; no fresh probe artifact is available.
+- A documentation-branch push also queued wrapper run `42140230712`; it is redundant for driver-source validation because it does not change the feature branch source. Prefer the feature-branch runs for the probe fix and exact-source package.
+- Earlier run `42138669765` confirms the corrected driver source had a successful wrapper release job, while debugoptimized was still compiling at that earlier poll and the old probe compile job failed. Exact-source wrapper run `42138343235` is the authoritative successful pair.
+
+**Current gate:** do not ask for device testing yet. Wait for run `42138343360` to complete all Android-only package audits and upload, and for run `42140194467` to produce a verified Windows probe artifact. Keep the phone's vendor/system Vulkan driver unchanged; any eventual test is through Winlator Mali 1.2's custom importer. No current VRS package is approved for installation.
