@@ -5333,3 +5333,11 @@ Inspected `src/panfrost/vulkan/panvk_physical_device.c:panvk_GetPhysicalDeviceFr
 - It also lists 2x1 and 1x2 at 1x/2x/4x; 2x4 at 1x/2x; 4x2 and 4x4 at 1x; and 1x1 at all sample counts.
 - The probe uses a 1x-sampled color target and requests 2x2, so the configuration is explicitly in the driver's own enumerated supported-rate list.
 - This further weakens the possibility that the test is simply requesting an unadvertised rate. The failure remains a pipeline-create stall despite the rate being enumerated and its GenXML hardware encoding being defined.
+
+
+### Diagnostic log format hardening (2026-11-06)
+
+The VRS diagnostic log arguments were reviewed for C printf type correctness. Explicit casts were added for enum, boolean, and VkResult arguments in both PanVK and Vulkan runtime checkpoints. This avoids format warnings under the Android compiler's strict warning settings.
+- Feature branch head: `f29602475f75b53665d30041c53a00c81b4f0933`
+- No functional behavior changed.
+- The build containing the final instrumented source must use this exact feature-branch head.
