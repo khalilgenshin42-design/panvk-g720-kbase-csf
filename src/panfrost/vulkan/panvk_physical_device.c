@@ -2333,7 +2333,7 @@ panvk_GetPhysicalDeviceFragmentShadingRatesKHR(
    VK_OUTARRAY_MAKE_TYPED(VkPhysicalDeviceFragmentShadingRateKHR, out,
                           pFragmentShadingRates, pFragmentShadingRateCount);
 
-   /* Required KHR rates are 2x2 and 2x1 at 1x/4x MSAA, plus 1x1 at
+   /* Required KHR rates are 2x2 and 2x1 at 1x/4x MSAA (also 2x here), plus 1x1 at
     * every supported sample count. The larger 4x4/4x2 and 2x4/1x2 rates
     * are exposed conservatively at 1x MSAA only. */
    static const struct {
