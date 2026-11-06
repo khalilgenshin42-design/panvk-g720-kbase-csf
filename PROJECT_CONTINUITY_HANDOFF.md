@@ -4577,3 +4577,26 @@ No extension flags or driver source were changed during this audit. Next impleme
 - Corrected Windows x64 VRS probe job in run `42140194467`: SUCCESS; artifact ID `13467578263`, SHA-256 `618ca16d798d97ecc0ba3c316f1fbbca831578ac271adbc41790bd0bd761306f`. Probe performs extension/feature/property enumeration, device creation with pipeline FSR enabled, and records a 2x2 KEEP/KEEP command buffer; it does not submit a draw and is not a rendering/performance test.
 - In the same run, Android wrapper Release job is SUCCESS; Debugoptimized job was still in dependency installation at the latest poll. Do not report the latter as passed until complete.
 - No device testing has been requested yet in this update. Package and probe artifacts are available but should be checked together before asking the user to test.
+
+## VRS device-probe result — 2026-11-06
+
+User ran the Windows x64 VRS probe in Winlator Mali 1.2 and supplied `panvk_vrs_probe.log`. Exact output:
+
+```
+PanVK VRS probe: VK_KHR_fragment_shading_rate
+
+Device 0: Wrapper(Mali-G720 MC7)
+  API version: 1.3.354
+  Driver: panvk (Mesa 26.3.0-devel (git-157418c714))
+  VK_KHR_fragment_shading_rate: missing
+
+VRS PROBE FAIL
+```
+
+Interpretation:
+- The probe enumerated a PanVK device identified by the wrapper as Mali-G720 MC7 and driver build string `git-157418c714`, matching the VRS workflow snapshot.
+- The loaded runtime does **not** enumerate `VK_KHR_fragment_shading_rate`. Thus the earlier CI success proved the probe executable built, not that the runtime driver exposed VRS. Pipeline VRS is not device-validated and no VRS rendering/performance test should be attempted yet.
+- The source branch snapshot inspected after the result has `.KHR_fragment_shading_rate = PAN_ARCH >= 12` in `panvk_vX_physical_device.c`, and `.pipelineFragmentShadingRate = PAN_ARCH >= 12` while primitive/attachment features are false. The missing extension therefore needs root-cause investigation rather than assuming the feature bits or command recording are correct.
+- Possible causes to discriminate: wrong/old Android custom-driver package actually imported; runtime PanVK architecture macro/compiled vX path not >=12; extension table registration/dispatch generation or build configuration; probe loading a different ICD/library than expected. The driver string alone does not prove the exact Android package artifact was imported.
+- Next audit: verify which Android package is installed in Winlator and its hash/build identity; inspect the exact VRS build's generated extension/entrypoint registration and per-arch compilation; add probe diagnostics for physical-device properties (vendorID, deviceID, driverID, driverVersion, deviceName, API version) and enumerate the full extension list. Do not change extension exposure to unconditional true as a workaround.
+- User is not yet asked for another test. First resolve the source/build/runtime discrepancy and produce a corrected Android package plus probe.
