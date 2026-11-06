@@ -1220,7 +1220,7 @@ panvk_per_arch(get_physical_device_properties)(
       .maxCombinedImageSamplerDescriptorCount = 1,
       /* VK_KHR_fragment_shading_rate: pipeline-only VRS on v12+. */
       .maxFragmentSize = {4, 4},
-      .maxFragmentSizeAspectRatio = 4,
+      .maxFragmentSizeAspectRatio = 2,
       .maxFragmentShadingRateCoverageSamples = 1,
       .maxFragmentShadingRateRasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
       .fragmentShadingRateWithShaderDepthStencilWrites = false,
