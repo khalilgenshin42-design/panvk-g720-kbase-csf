@@ -1,5 +1,5 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-07 17:35 UTC
+Last updated: 2026-11-07 18:06 UTC
 
 ## Authoritative current state — 2026-11-07
 
@@ -6298,3 +6298,93 @@ Return `panvk_vrs_keep.log` and the matching logcat archive.
 No Borderlands FPS benchmark should be run until the new package passes this
 KEEP regression check. No Android system/vendor driver, kernel, or firmware
 was modified.
+
+
+## 2026-11-07 18:06 UTC — Conservative VRS capability build completed
+
+### Compile failure and correction
+
+The first Android build attempt after adding the packed-register diagnostic failed during
+`csf/panvk_vX_cmd_draw.c` compilation because the diagnostic referred to
+`frag_w`, `frag_h`, `op0`, and `op1` outside the preprocessor/C scope
+where they were declared. This was caught by CI before any artifact was published.
+
+- Failed build run: `42398543226` (source `deeb2ab9ff7b6b26893d4c9679f85e556dfc67a3`).
+- Corrective commit: `c9d61e10a9c3489d8193a8fb0767f4b5187d79f3`.
+- The correction moves the VRS state declarations into the `PAN_ARCH >= 12`
+  scope surrounding the packing operation, and emits the diagnostic after
+  `pan_pack` has populated `tiler_flags_2`.
+- The corrected build compiled all architecture variants and passed the full
+  Android-only build, staged-file/dependency audit, and ADPKG packaging steps.
+
+### Current Android package
+
+Exact source: `c9d61e10a9c3489d8193a8fb0767f4b5187d79f3`.
+
+- Successful Android-only workflow run: `42398941271`.
+- GitHub Actions page:
+  https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42398941271
+- Outer CI artifact: `panvk-g720-android-only-experimental-package`,
+  artifact ID `13584986539`.
+- Outer artifact SHA-256:
+  `0cb6fdc5da9af10c06d8fe7efed511511686f62c34834976e0c78a26862e88e5`.
+- Inner Winlator/Adrenotools package: `PanVK-G720-experimental.zip`.
+- Inner package SHA-256:
+  `12f1ffe5f38c442b80c22cc56b93cff6fe5fead87231cf7068ceed4165a4aace`.
+- ICD SHA-256:
+  `fb7cc3b4697f82b3abc6c535cf5901380d18ea16ed593bd19e98d7dad936444e`.
+- Private DRM dependency SHA-256:
+  `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`.
+- Independently extracted and verified: valid flat ZIP; `meta.json` parses;
+  ICD is ELF64 AArch64; ICD RUNPATH is `$ORIGIN`; ICD NEEDED entry is
+  `libpanvk_drm.so`; private dependency SONAME is `libpanvk_drm.so`.
+  The packaged ICD does not depend on `libdrm.so`. All inner ZIP entries
+  passed CRC checks and match `SHA256SUMS`.
+- Import only this inner ZIP from the outer CI artifact. Do not import the
+  outer archive or the staged `stage/` tree.
+
+### Matching Windows probe
+
+The Windows probe build from source `deeb2ab9ff7b6b26893d4c9679f85e556dfc67a3`
+is compatible with the Android package above: the subsequent driver-only
+commit `c9d61e1...` did not modify the probe, shader, or Windows workflow.
+Its artifact is `panvk-vrs-render-probe-win64`, ID `13584586137`, from run
+`42398543208`:
+https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42398543208
+
+The archive SHA-256 is
+`2b08c90efc061cee7d0e0e65dde68cccfe5389df7a666b3ce8824621b33b411c`.
+It contains `panvk-vrs-render-probe.exe`, the five-case script
+`tools/run-vrs-cases.cmd`, and the new single-case script
+`tools/run-vrs-keep-check.cmd`. The executable SHA-256 is
+`e50619979a46d949212e159e959d7868123e4cb02a3f2bb4f543eba013b81d2b`
+and its PE machine field is AMD64 (`0x8664`).
+
+### Next device gate
+
+The user is needed for one final KEEP-only regression check against the new
+capability-conservative driver:
+
+1. Download both artifacts from the GitHub Actions run pages above.
+2. Import only the inner `PanVK-G720-experimental.zip` from the Android
+   artifact into Winlator Mali 1.2.
+3. Keep the existing container and wrapper unchanged; retain System Driver as
+   rollback. Do not replace or modify Android's system/vendor Vulkan driver
+   or kernel.
+4. Run `tools\\run-vrs-keep-check.cmd` from the Windows probe artifact in
+   the same container.
+5. Return `tools\\panvk_vrs_keep.log` (or the copied
+   `panvk_vrs_keep.log`) and the matching Winlator/logcat archive.
+
+Expected result: `pipelineFragmentShadingRate=1`,
+`nonTrivialCombinerOps=0`, 1x1 KEEP invocation count 4096, 2x2 KEEP
+invocation count 1024, pixel-signature PASS, invocation-reduction PASS, and
+`VRS GPU RENDER PASS`. This confirms that the safe property report did not
+regress the already-proven KEEP path. Non-KEEP operations should be skipped
+by the updated probe because they are no longer advertised.
+
+Do not resume game FPS benchmarking until this regression passes. The
+non-KEEP combiner hardware/CSF fault remains an open investigation; the
+packed `TILER_FLAGS2` diagnostic is now available if a later controlled
+test is needed. No performance gain beyond the proven KEEP invocation
+reduction is claimed.
