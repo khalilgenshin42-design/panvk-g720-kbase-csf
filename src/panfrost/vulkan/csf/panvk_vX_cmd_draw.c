@@ -3242,6 +3242,12 @@ set_tiler_idvs_flags(struct cs_builder *b, struct panvk_cmd_buffer *cmdbuf,
          cfg.vrs_combiner_1 = (enum mali_vrs_combiner)op1;
 #endif
       }
+      if (op0 != VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR ||
+          op1 != VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR) {
+         mesa_logi("PANVK_VRS_DIAG emit TILER_FLAGS2 rate=%ux%u ops=%u,%u packed=0x%08x",
+                   frag_w, frag_h, (unsigned)op0, (unsigned)op1,
+                   tiler_flags_2.opaque[0]);
+      }
       cs_move32_to(b, cs_sr_reg32(b, IDVS, TILER_FLAGS2),
                    tiler_flags_2.opaque[0]);
 #endif
