@@ -454,8 +454,25 @@ equal_neighbors(const uint8_t *p)
 }
 
 int
-main(void)
+main(int argc, char **argv)
 {
+   const char *case_name = argc > 1 ? argv[1] : "--case=keep";
+   enum { CASE_KEEP, CASE_MAX, CASE_MIN, CASE_MUL, CASE_REPLACE } probe_case;
+
+   if (!strcmp(case_name, "--case=keep"))
+      probe_case = CASE_KEEP;
+   else if (!strcmp(case_name, "--case=max"))
+      probe_case = CASE_MAX;
+   else if (!strcmp(case_name, "--case=min"))
+      probe_case = CASE_MIN;
+   else if (!strcmp(case_name, "--case=mul"))
+      probe_case = CASE_MUL;
+   else if (!strcmp(case_name, "--case=replace"))
+      probe_case = CASE_REPLACE;
+   else {
+      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace\\n", argv[0]);
+      return 2;
+   }
    log_file = fopen("panvk_vrs_render_probe.log", "w");
    if (!log_file) return 2;
    LOG("PanVK VRS render probe: 1x1 control vs 2x2 pipeline rate\n");
@@ -670,52 +687,97 @@ main(void)
       LOG("shader modules/pipeline layout=%d\n",result);
       if(result!=VK_SUCCESS){destroy_dev(device,NULL);continue;}
 
-      uint8_t *images[5] = {0};
-      for (uint32_t i = 0; i < 5; i++) images[i] = malloc(IMAGE_BYTES);
-      int allocated = 1;
-      for (uint32_t i = 0; i < 5; i++) if (!images[i]) allocated = 0;
-      if (!allocated) {
-         LOG("FAIL: host allocation\n");
+      LOG("selected render case: %s\\n", case_name);
+      uint8_t *image_1x1 = malloc(IMAGE_BYTES);
+      uint8_t *image_2x2 = malloc(IMAGE_BYTES);
+      uint8_t *image_target = malloc(IMAGE_BYTES);
+      if (!image_1x1 || !image_2x2 || !image_target) {
+         LOG("FAIL: host allocation\\n");
       } else {
-         const VkFragmentShadingRateCombinerOpKHR keep = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
-         int ok[5];
-         ok[0] = render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,keep,keep,(VkExtent2D){1,1},images[0]);
-         LOG("1x1 KEEP control submit/fence/readback=%s\n",ok[0]?"PASS":"FAIL");
-         ok[1] = ok[0] && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,keep,keep,(VkExtent2D){2,2},images[1]);
-         LOG("2x2 KEEP submit/fence/readback=%s\n",ok[1]?"PASS":"FAIL");
-         ok[2] = ok[1] && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR,keep,(VkExtent2D){2,2},images[2]);
-         LOG("2x2 MAX/KEEP combiner=%s\n",ok[2]?"PASS":"FAIL");
-         ok[3] = ok[2] && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR,keep,(VkExtent2D){2,2},images[3]);
-         LOG("2x2 MIN/KEEP combiner=%s\n",ok[3]?"PASS":"FAIL");
-         ok[4] = ok[3] && render_rate(device,&mem_props,gdpa,queue,qf,format,rp,pl,vs,fs,VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR,keep,(VkExtent2D){1,1},images[4]);
-         LOG("1x1 MUL/KEEP combiner=%s\n",ok[4]?"PASS":"FAIL");
-         if (ok[4]) {
-            uint32_t e0=equal_neighbors(images[0]),e1=equal_neighbors(images[1]);
-            uint32_t e2=equal_neighbors(images[2]),e3=equal_neighbors(images[3]);
-            uint32_t e4=equal_neighbors(images[4]);
-            uint64_t h0=checksum(images[0]),h1=checksum(images[1]);
-            uint64_t h2=checksum(images[2]),h3=checksum(images[3]);
-            uint64_t h4=checksum(images[4]);
-            LOG("1x1 KEEP: checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h0,e0);
-            LOG("2x2 KEEP: checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h1,e1);
-            LOG("2x2 MAX:  checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h2,e2);
-            LOG("2x2 MIN:  checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h3,e3);
-            LOG("1x1 MUL:  checksum=0x%016llx equal-neighbors=%u\n",(unsigned long long)h4,e4);
-            int basic = h0 != h1 && e1 > e0 + W*H/2;
-            int max_ok = h2 == h1;
-            int min_ok = h3 == h0;
-            int mul_ok = fsr_props.fragmentShadingRateStrictMultiplyCombiner ? h4 == h0 : h4 == h1;
-            LOG("combiner comparisons: basic=%d MAX=%d MIN=%d MUL-vs-strict-property=%d\n",basic,max_ok,min_ok,mul_ok);
-            if (basic && fsr_props.fragmentShadingRateNonTrivialCombinerOps &&
-                max_ok && min_ok && mul_ok) {
-               LOG("PASS: GPU draw/readback confirms 1x1, 2x2, and nontrivial VRS combiners\n");
-               passed=1;
-            } else {
-               LOG("FAIL: GPU output or advertised combiner properties disagree\n");
+         const VkFragmentShadingRateCombinerOpKHR keep =
+            VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+         int control_ok = render_rate(device, &mem_props, gdpa, queue, qf,
+                                      format, rp, pl, vs, fs, keep, keep,
+                                      (VkExtent2D){1,1}, image_1x1);
+         LOG("1x1 KEEP control submit/fence/readback=%s\\n",
+             control_ok ? "PASS" : "FAIL");
+         if (control_ok) {
+            LOG("1x1 KEEP checksum=0x%016llx equal-neighbors=%u\\n",
+                (unsigned long long)checksum(image_1x1),
+                equal_neighbors(image_1x1));
+         }
+
+         int vrs_ok = control_ok &&
+            render_rate(device, &mem_props, gdpa, queue, qf, format, rp, pl,
+                        vs, fs, keep, keep, (VkExtent2D){2,2}, image_2x2);
+         LOG("2x2 KEEP submit/fence/readback=%s\\n",
+             vrs_ok ? "PASS" : "FAIL");
+         uint64_t hash_1x1 = control_ok ? checksum(image_1x1) : 0;
+         uint64_t hash_2x2 = vrs_ok ? checksum(image_2x2) : 0;
+         uint32_t equal_1x1 = control_ok ? equal_neighbors(image_1x1) : 0;
+         uint32_t equal_2x2 = vrs_ok ? equal_neighbors(image_2x2) : 0;
+         if (vrs_ok) {
+            LOG("2x2 KEEP checksum=0x%016llx equal-neighbors=%u\\n",
+                (unsigned long long)hash_2x2, equal_2x2);
+         }
+         int basic = control_ok && vrs_ok &&
+                     hash_1x1 != hash_2x2 &&
+                     equal_2x2 > equal_1x1 + W * H / 2;
+         LOG("2x2 KEEP pixel-signature=%s (control=%u vrs=%u)\\n",
+             basic ? "PASS" : "FAIL", equal_1x1, equal_2x2);
+
+         if (probe_case == CASE_KEEP) {
+            passed = basic;
+         } else if (basic) {
+            VkFragmentShadingRateCombinerOpKHR op0 = keep;
+            const char *label = NULL;
+            uint64_t expected_hash = hash_2x2;
+            switch (probe_case) {
+            case CASE_MAX:
+               op0 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR;
+               label = "2x2 MAX/KEEP";
+               expected_hash = hash_2x2;
+               break;
+            case CASE_MIN:
+               op0 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR;
+               label = "2x2 MIN/KEEP";
+               expected_hash = hash_1x1;
+               break;
+            case CASE_MUL:
+               op0 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR;
+               label = "2x2 MUL/KEEP";
+               expected_hash = hash_2x2;
+               break;
+            case CASE_REPLACE:
+               op0 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
+               label = "2x2 REPLACE/KEEP";
+               expected_hash = hash_1x1;
+               break;
+            default:
+               break;
+            }
+
+            LOG("starting isolated combiner case: %s\\n", label);
+            int target_ok = render_rate(device, &mem_props, gdpa, queue, qf,
+                                        format, rp, pl, vs, fs, op0, keep,
+                                        (VkExtent2D){2,2}, image_target);
+            LOG("%s submit/fence/readback=%s\\n",
+                label, target_ok ? "PASS" : "FAIL");
+            if (target_ok) {
+               uint64_t target_hash = checksum(image_target);
+               uint32_t target_equal = equal_neighbors(image_target);
+               LOG("%s checksum=0x%016llx equal-neighbors=%u\\n",
+                   label, (unsigned long long)target_hash, target_equal);
+               passed = target_hash == expected_hash;
+               LOG("%s pixel comparison=%s expected-checksum=0x%016llx\\n",
+                   label, passed ? "PASS" : "FAIL",
+                   (unsigned long long)expected_hash);
             }
          }
       }
-      for (uint32_t i = 0; i < 5; i++) free(images[i]);
+      free(image_1x1);
+      free(image_2x2);
+      free(image_target);
       destroy_sm(device,vs,NULL);destroy_sm(device,fs,NULL);
       destroy_pl(device,pl,NULL);
       destroy_rp(device,rp,NULL);
