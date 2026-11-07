@@ -5967,3 +5967,56 @@ Audit record: `experiment/g720-performance-audit` documentation update
 `a8a6e5b904de570dc9984d45b5b0890c7ad98a0d`. No driver source, Vulkan
 semantics, allocator policy, queue sizing, shader scheduling, Kbase ABI,
 kernel, or Android system/vendor driver was changed. No FPS gain is claimed.
+
+
+## 2026-11-07 14:55 UTC — static FSR lowering build and package audit completed
+
+The previously pending Android-only build for the targeted static fragment-shading-rate lowering fix has completed successfully.
+
+### Exact source and CI
+
+- Source branch: `experiment/g720-fragment-shading-rate`.
+- Exact source HEAD: `4fdb9968d407618cfe3f8101d409fd803574bba3`.
+- Android-only workflow run: `42318330286`; job `128236433525`; conclusion SUCCESS.
+- All 12 substantive workflow steps passed: checkout and source verification, Python/dependency setup, host tools, real Android ARM64 libdrm build, Android-only Meson configure, compile/stage, driver/manifest/dependency audit, flat Winlator/Adrenotools package build, artifact upload.
+- The exact source compiled; this is not a build of the earlier diagnostic-only commit.
+
+### Artifact and independent package inspection
+
+- Outer Actions artifact: `panvk-g720-android-only-experimental-package`, ID `13552276626`.
+- Download URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42318330286/artifacts/13552276626
+- Outer artifact SHA-256: `077b3ee72f907fac75c6a3ef3b4ba13370fc23fbd7c4673aae696785644a9cf1`.
+- Outer artifact is an audit bundle. The importable file is the nested `PanVK-G720-experimental.zip`; do not import the outer archive or the `stage/` copy.
+- Inner package SHA-256, independently recomputed: `0d4f2de29220a291d582109cd872d8267e5a5a883fd9d82e577a0fb91bfc47f2`.
+- Inner ZIP contains exactly four flat-root members: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+- Embedded SHA-256 values independently match:
+  - `libvulkan_panfrost.so`: `957339ac7e762db884507b81fdb69dbae93c2c1aa79e1f40988f16dc5d89899c`.
+  - `libpanvk_drm.so`: `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`.
+  - `meta.json`: `c84f842179793c2260980b38d9ec46faede0b39508d47bcbbba41d472b574003`.
+- Both packaged libraries are ELF64 little-endian AArch64. The packaged Vulkan ICD's dynamic section has RUNPATH `$ORIGIN`, NEEDED `libpanvk_drm.so`, SONAME `libvulkan_panfrost.so`. The private DRM library has SONAME `libpanvk_drm.so` and depends only on Android `libc.so`.
+- This is important: the workflow's outer `stage/` diagnostic copy retains the pre-package `libdrm.so` dependency and its staged RUNPATH. The package script patches separate copies for the inner ADPKG. The inner package was independently extracted and inspected and has the correct private dependency and flat layout. Import only that inner ZIP.
+- The packaging script is `.github/scripts/package-panvk-adpkg.sh`; it checks AArch64, SONAME, NEEDED, RUNPATH, metadata, and flat archive members.
+- Metadata identifies package version `26.3.0-devel-android-kbase-4fdb9968d407`, min Android API 30, and explicitly labels the driver experimental/non-conformant with device/game compatibility unverified.
+- The workflow's DRM symbol audit found no missing symbols. This is static linker/package validation, not device runtime proof.
+
+### Matching Windows probe
+
+- Enum-audited Windows probe artifact from run `42318169016`, artifact ID `13551667465`.
+- URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42318169016/artifacts/13551667465
+- Artifact SHA-256: `4788e5111be1a13b01f96b61831bda12069bd7700b34453b0a3e0fa0aeb30ddc`.
+- Contains `panvk-vrs-render-probe.exe` and `tools/run-vrs-cases.cmd`; compile-time assertions cover KEEP=0, REPLACE=1, MIN=2, MAX=3, MUL=4.
+- This probe is intended to exercise the five static combiner cases and capture per-case logs. Its source commit is `a2ca300629f0f38ce5aa048c92546aed06abea2f`; the Android driver is the later static-lowering fix commit above.
+
+### Device test gate
+
+The package is ready for a controlled Winlator runtime test. Import only the inner `PanVK-G720-experimental.zip` using Winlator Mali's custom driver importer. Keep the current wrapper and container unchanged; retain System Driver as rollback. Do not replace or patch the phone's Android system/vendor Vulkan driver or kernel.
+
+Run `tools\\run-vrs-cases.cmd` from the Windows probe artifact in the same container and return all five logs plus the matching logcat/Wine archive. Expected effective rates for the probe's 2x2 pipeline rate with implicit 1x1 primitive and attachment rates:
+- MAX (3,0): 2x2; expected pixel signature matches 2x2 KEEP.
+- MIN (2,0): 1x1; expected signature matches 1x1 KEEP.
+- MUL (4,0): 2x2 under the currently advertised non-strict multiply behavior; expected signature matches 2x2 KEEP.
+- REPLACE (1,0): 1x1; expected signature matches 1x1 KEEP.
+
+A valid pass requires successful target readback and matching checksums, not just submit/fence completion. Capture whether the driver logs the resolved effective rate and numeric combiner operations. If any case faults, retain its full logcat timestamps and CSF exception/sideband. Do not resume game FPS benchmarking until all static cases produce correct pixel signatures.
+
+No device runtime test has yet been performed for this package. No system/vendor driver, kernel, or phone firmware was modified.
