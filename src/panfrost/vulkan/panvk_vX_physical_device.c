@@ -1230,7 +1230,8 @@ panvk_per_arch(get_physical_device_properties)(
       .fragmentShadingRateWithFragmentShaderInterlock = false,
       .fragmentShadingRateWithCustomSampleLocations = false,
       /* v12 GenXML exposes Keep/Replace/Min/Max/Mul combiners. */
-      .fragmentShadingRateNonTrivialCombinerOps = PAN_ARCH >= 12,
+      /* G720 runtime probes fault on every non-KEEP combiner. */
+      .fragmentShadingRateNonTrivialCombinerOps = false,
       .fragmentShadingRateStrictMultiplyCombiner = false,
       .fragmentShadingRateClampCombinerInputs = false,
       .defaultRobustnessStorageBuffers =
