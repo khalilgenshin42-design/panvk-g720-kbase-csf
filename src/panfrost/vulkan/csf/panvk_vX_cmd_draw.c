@@ -3216,25 +3216,26 @@ set_tiler_idvs_flags(struct cs_builder *b, struct panvk_cmd_buffer *cmdbuf,
 
       cs_move32_to(b, cs_sr_reg32(b, IDVS, TILER_FLAGS), tiler_idvs_flags.opaque[0]);
 #if PAN_ARCH >= 11
+#if PAN_ARCH >= 12
+      const struct vk_fragment_shading_rate_state *fsr = &dyns->fsr;
+      uint32_t frag_w = fsr->fragment_size.width;
+      uint32_t frag_h = fsr->fragment_size.height;
+      VkFragmentShadingRateCombinerOpKHR op0 = fsr->combiner_ops[0];
+      VkFragmentShadingRateCombinerOpKHR op1 = fsr->combiner_ops[1];
+
+      /* Sample-rate shading and fragment-rate shading are mutually
+       * exclusive. Keep the hardware at 1x1 for sample-shaded pipelines. */
+      if (fs && fs->info.fs.sample_shading) {
+         frag_w = frag_h = 1;
+         op0 = op1 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+      }
+#endif
       struct mali_primitive_flags_2_packed tiler_flags_2;
       pan_pack(&tiler_flags_2, PRIMITIVE_FLAGS_2, cfg) {
 #if PAN_ARCH >= 14
          cfg.view_mask = cmdbuf->state.gfx.render.view_mask;
 #endif
 #if PAN_ARCH >= 12
-         const struct vk_fragment_shading_rate_state *fsr = &dyns->fsr;
-         uint32_t frag_w = fsr->fragment_size.width;
-         uint32_t frag_h = fsr->fragment_size.height;
-         VkFragmentShadingRateCombinerOpKHR op0 = fsr->combiner_ops[0];
-         VkFragmentShadingRateCombinerOpKHR op1 = fsr->combiner_ops[1];
-
-         /* Sample-rate shading and fragment-rate shading are mutually
-          * exclusive. Keep the hardware at 1x1 for sample-shaded pipelines. */
-         if (fs && fs->info.fs.sample_shading) {
-            frag_w = frag_h = 1;
-            op0 = op1 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
-         }
-
          cfg.vrs_draw_rate =
             (util_logbase2(MAX2(frag_w, 1)) << 2) |
             util_logbase2(MAX2(frag_h, 1));
@@ -3242,12 +3243,14 @@ set_tiler_idvs_flags(struct cs_builder *b, struct panvk_cmd_buffer *cmdbuf,
          cfg.vrs_combiner_1 = (enum mali_vrs_combiner)op1;
 #endif
       }
+#if PAN_ARCH >= 12
       if (op0 != VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR ||
           op1 != VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR) {
          mesa_logi("PANVK_VRS_DIAG emit TILER_FLAGS2 rate=%ux%u ops=%u,%u packed=0x%08x",
                    frag_w, frag_h, (unsigned)op0, (unsigned)op1,
                    tiler_flags_2.opaque[0]);
       }
+#endif
       cs_move32_to(b, cs_sr_reg32(b, IDVS, TILER_FLAGS2),
                    tiler_flags_2.opaque[0]);
 #endif
