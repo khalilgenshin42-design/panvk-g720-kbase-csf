@@ -1,7 +1,7 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-07 12:15 UTC
+Last updated: 2026-11-07 17:35 UTC
 
-## Authoritative current state — 2026-11-06
+## Authoritative current state — 2026-11-07
 
 This section supersedes older "next steps", queued-CI, and "no code changed" statements in the historical addenda below. Keep the historical record, but use the branch-specific state here when deciding what is current.
 
@@ -11,6 +11,8 @@ This section supersedes older "next steps", queued-CI, and "no code changed" sta
 - Separate descriptor-heap implementation: `experiment/g720-descriptor-heaps`, HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. Its exact-head Android and wrapper builds now pass; the package is independently audited below. No device runtime test has been performed.
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
 - Separate fragment-shading-rate work: `experiment/g720-fragment-shading-rate`, HEAD `157418c71475b9d96170a43f24157a80673d4160`; driver-source commit `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`. Android package, Android wrapper variants, and the Windows VRS capability probe all pass CI; package and probe artifacts were independently inspected. No device runtime test has been performed.
+
+- Current VRS continuation: `experiment/g720-fragment-shading-rate` now contains the static-combiner lowering driver commit `4fdb9968d407618cfe3f8101d409fd803574bba3`, with an independently audited Android package (artifact `13552276626`, inner SHA-256 `63e4de771c1ad91cca6a89eef067d695c4d3f88dd858cc0999e255142f813e99`). That package has not yet been runtime-tested. The latest probe-only branch head is `7061318e2a431e1a0a05dc2b55c49f4610929636`; it adds an SSBO atomic fragment-invocation counter. Its exact-head Windows build/artifact has not yet been verified. Do not ask for device testing until that probe artifact is available and inspected.
 - These branches are parallel experiments. Do not merge or substitute their packages for one another without an explicit compatibility review.
 
 ### Current implementation state
