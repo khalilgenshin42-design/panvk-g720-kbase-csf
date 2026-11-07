@@ -5636,3 +5636,43 @@ Acceptance requires all of the following:
 Pipeline creation alone is an intermediate pass; pixel readback is the final correctness gate. If the probe hangs, fails, or pixels mismatch, provide both logs and stop; do not resume Borderlands benchmarking or alter Kbase mappings, synchronization, descriptor heaps, queue settings, or wrapper configuration. Dynamic FSR and non-KEEP combiner cases remain explicitly unresolved.
 
 No change was made to the phone's system/vendor Vulkan driver or kernel.
+
+
+### 2026-11-07 VRS render-probe follow-up — static 2x2 KEEP reaches readback; MAX triggers CS error
+
+The user supplied a fresh render-probe output and the matching Winlator log archive:
+- `panvk_vrs_render_probe.log`: 4,924 bytes, 124 lines.
+- `[Community] Tomb Raider (1) (copy)_logs_2026-11-07_00-57-07.zip`: contains `logcat.log` (589,332 bytes, 4,149 lines) and `wine_debug.log` (13,603 bytes, 199 lines). Both members were read and correlated with the probe output.
+- The launched executable is `D:\\panvk-vrs-render-probe-win64\\panvk-vrs-render-probe.exe`, not Tomb Raider. The archive filename is the Winlator log bundle name; this run is the standalone VRS render probe.
+
+#### Device and package identity confirmed again
+
+The logcat startup diagnostic appears for the same process:
+`PanVK capability audit: gpu_id=0xc8700010 arch=v12 KHR_fragment_shading_rate=1 kbase=1`.
+The probe reports `Wrapper(Mali-G720 MC7)`, PanVK Mesa `26.3.0-devel (git-00ed7243e5)`, Vulkan API 1.3.354. This confirms the intended Mali-G720 v12 custom PanVK ICD and Kbase backend are active. The same process prints the static lowering marker:
+`PANVK_VRS_DIAG static frag-center lowering rate=2x2 encoded=0x5`.
+
+#### Exact test results
+
+1. **1x1 KEEP/KEEP control: completed successfully.** Image allocation/binding, pipeline creation, command recording, queue submission, 30-second fence wait, host mapping/readback and cleanup all succeeded.
+2. **2x2 KEEP/KEEP: reached successful GPU completion and host readback.** The 2x2 image, memory, view, framebuffer and staging buffer all create/bind successfully. The static 2x2 graphics pipeline now compiles: vertex and fragment stages complete, with the fragment stage taking the constant-lowering path and reporting encoded rate 0x5. Queue submit returns VK_SUCCESS, fence wait returns VK_SUCCESS, and host mapping/readback returns VK_SUCCESS. Probe prints `2x2 KEEP submit/fence/readback=PASS`.
+3. **Important probe-criteria qualification:** this build of `tools/panvk_vrs_render_probe_win.c` only calculates/prints checksums and equal-neighbour counts after all five render cases succeed. The 2x2 KEEP case's PASS therefore proves submit/fence/readback, but the uploaded log does **not** contain its pixel checksum/equal-neighbour signature. Do not yet call the 2x2 pixel pattern validated.
+4. **2x2 MAX/KEEP: pipeline compilation succeeds, GPU execution fails.** Runtime logs show parsed state `rate=2x2 ops=3,0 dynamic=0`; both generic precompile stages complete; the PanVK vertex stage compiles; the fragment stage deliberately remains on the native sample-center path (the static KEEP-only lowering is not applied), and Mali shader compilation returns successfully. The callback and generic pipeline compile both return success. Queue submission returns VK_SUCCESS, but fence wait returns `-4` (VK_ERROR_DEVICE_LOST). Logcat reports `kbase: CS error 0x1 on subqueue 0` twice and `kbase_queue_wait_current: failed to wait for subqueue 0 seqno 5`.
+5. **MIN and MUL were not independently run.** The probe source gates them behind the previous result (`ok[3] = ok[2] && render_rate(...)`, etc.). Once MAX fails, MIN and MUL are skipped; their printed FAIL labels are consequences of short-circuiting, not separate hardware test results.
+
+#### Source correlation and current interpretation
+
+- The static fragment-center compiler failure is fixed for the tested static 2x2 KEEP/KEEP case: the unsupported `nir_load_frag_shading_rate()` is replaced by a constant NIR rate bitfield; the exact marker and successful fragment compiler exit are present in the new log.
+- The architecture-12 CSF draw path in `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c::set_tiler_idvs_flags()` writes `PRIMITIVE_FLAGS_2` fields `vrs_draw_rate`, `vrs_combiner_0`, and `vrs_combiner_1` from `dyns->fsr`. For this MAX case the logged Vulkan combiner value 3 is written to hardware combiner 0.
+- `src/panfrost/genxml/v12.xml` declares VRS combiner values Keep=0, Replace=1, Min=2, Max=3, Mul=4 and places the combiner fields in `Primitive Flags 2`. The C enum cast and XML values match numerically. This source-level enum match does not prove the non-KEEP operation is accepted or behaves correctly on the device.
+- The observed `cell->error` path in `kbase_subqueue_wait_seqno()` turns the queue into VK_ERROR_DEVICE_LOST. The log currently exposes only error value 0x1 and subqueue 0; it does not include a decoded CS exception/status payload or the failing command-stream ring contents. The log is therefore insufficient to attribute the fault definitively to the MAX encoding, the native sample-center shader path, or another command-stream state interaction.
+- The failure occurs after pipeline compilation and submit, during GPU/CSF execution. Do not return to the earlier unsupported-NIR-intrinsic diagnosis for this new failure. Do not modify Kbase virtual-memory mappings, descriptor heaps, generic queue synchronization, or shader-core dispatch as a speculative response.
+
+#### Next engineering work — no user retest requested yet
+
+1. Improve the PanVK Kbase diagnostic path so that when `cell->error` is observed, it also emits `kbase_log_subqueue_state(queue, subqueue, "CS error")` (or equivalent guarded diagnostics): completion/progress markers, insert/extract/active state, error value, last-job metadata, and ring-buffer qwords. Where safely available, drain/log the corresponding Kbase CSF notification so the real exception type/status/sideband are not lost behind the local error latch.
+2. Improve the Windows render probe: emit checksum and equal-neighbour results immediately after each successful readback, even if a later case fails. Make each non-KEEP combiner case independently selectable/run in a fresh process/device so a device-lost MAX case cannot short-circuit MIN and MUL. Include an explicit 2x2 KEEP pixel-signature result as its own acceptance gate.
+3. Inspect the VT/tiler subqueue command stream and register programming around `PRIMITIVE_FLAGS_2` for the MAX case. Preserve the passing 1x1 and 2x2 KEEP controls. Compare KEEP versus MAX with the smallest possible one-draw workload before changing hardware-state programming.
+4. Build and statically audit the diagnostic Android package and independent Windows probe from the same exact source checkpoint. Only then ask the user for another controlled Winlator test. Keep the existing wrapper and container unchanged.
+
+Current feature branch source for this test is `experiment/g720-fragment-shading-rate` at commit `00ed7243e5dea048361a1682753b7e4630450bb8`. This user run validates the build's static 2x2 KEEP pipeline compilation, submit, fence, and readback, but does not yet validate its pixel signature or any non-KEEP combiner. No performance result is claimed. The Android system/vendor driver and kernel remain untouched.
