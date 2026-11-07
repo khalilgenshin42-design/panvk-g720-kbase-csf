@@ -7,6 +7,7 @@ on:
       - experiment/g720-fragment-shading-rate
     paths:
       - tools/panvk_vrs_render_probe_win.c
+      - tools/run-vrs-cases.cmd
       - tools/vrs_probe.vert
       - tools/vrs_probe.frag
       - .github/workflows/build-vrs-render-probe.yml
@@ -63,5 +64,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: panvk-vrs-render-probe-win64
-          path: panvk-vrs-render-probe.exe
+          path: |
+            panvk-vrs-render-probe.exe
+            tools/run-vrs-cases.cmd
           if-no-files-found: error
