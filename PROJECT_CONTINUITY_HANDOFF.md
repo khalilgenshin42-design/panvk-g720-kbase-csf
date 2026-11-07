@@ -6020,3 +6020,80 @@ Run `tools\\run-vrs-cases.cmd` from the Windows probe artifact in the same conta
 A valid pass requires successful target readback and matching checksums, not just submit/fence completion. Capture whether the driver logs the resolved effective rate and numeric combiner operations. If any case faults, retain its full logcat timestamps and CSF exception/sideband. Do not resume game FPS benchmarking until all static cases produce correct pixel signatures.
 
 No device runtime test has yet been performed for this package. No system/vendor driver, kernel, or phone firmware was modified.
+
+
+## 2026-11-07 18:20 UTC — VRS source audit: hardware path confirmed; probe coverage gap identified
+
+A follow-up source audit was performed after the Android package was built.
+
+### Hardware VRS programming is present
+
+The v12 CSF draw implementation contains actual hardware programming in
+`src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c`, function
+`set_tiler_idvs_flags()`:
+- It marks `FSR` as a dynamic graphics state dirty bit.
+- For PAN_ARCH >= 12 it reads `dyns->fsr.fragment_size` and both combiner ops.
+- It packs `cfg.vrs_draw_rate`, `cfg.vrs_combiner_0`, and
+  `cfg.vrs_combiner_1` into `PRIMITIVE_FLAGS_2`, then writes
+  `TILER_FLAGS2`.
+- If the fragment shader uses sample shading, it forces the hardware rate to
+  1x1 and both combiners to KEEP.
+
+The generated v12 XML confirms the hardware descriptor fields:
+`VRS Draw Rate`, `VRS Combiner 0`, `VRS Combiner 1` in
+`PRIMITIVE_FLAGS_2`. This confirms the driver has a real hardware VRS
+programming path; it is not solely a fragment-coordinate software emulation.
+
+### Compiler behavior and feature scope
+
+- `panvk_vX_shader.c` resolves static pipeline FSR rates against implicit
+  1x1 primitive and attachment rates for fragment-centre NIR lowering.
+- Dynamic FSR state is explicitly excluded from that static lowering and
+  currently remains on the native sample-centre path. The compiler patch
+  therefore does not establish correct dynamic-FSR shader system-value
+  behavior.
+- The extension and `pipelineFragmentShadingRate` feature are exposed on
+  PAN_ARCH >= 12; primitive and attachment features remain false.
+- Do not claim full extension conformance or enable dynamic FSR in application
+  workloads until the dynamic shader-centre path is separately validated.
+- The static command path does program the hardware VRS rate and combiners.
+  The compiler's static effective-rate calculation is intended to keep
+  fragment-centre values consistent with the hardware-combined rate.
+
+### Probe coverage gap
+
+The current Windows render probe checks pixel-pattern signatures and successful
+GPU submit/fence/readback. Its fragment shader only writes a colour derived
+from `gl_FragCoord`; it does not count fragment shader invocations.
+Consequently, a matching 2x2 repeated-pixel signature proves fragment-centre
+behavior but does not, by itself, prove the hardware reduced invocation count
+from 1x1 to 2x2.
+
+Next probe revision should add a fragment-shader storage-buffer atomic counter
+(or another independently validated invocation counter), capture counts for
+1x1 and 2x2 KEEP, and require a substantial invocation reduction for 2x2.
+Combiner cases should match both the expected pixel checksum and the expected
+invocation count. If storage atomics alter or disable VRS behavior on this
+implementation, that limitation must be recorded and a different reliable
+counter path found; do not infer invocation reduction from colour repetition.
+
+### Combiner semantics correction
+
+A preliminary concern that the non-strict MUL exception should be applied to
+the complete 2D pair was incorrect. Khronos specifies the exception per
+component: when both input values are 1 in a given dimension, that dimension's
+result is 2. The existing component-wise test
+`a == 0 && b == 0` in log2 space is consistent with that rule. No source
+change was made for this concern.
+
+### Current test status
+
+The Android package from source HEAD
+`4fdb9968d407618cfe3f8101d409fd803574bba3` remains statically audited and
+ready for a controlled static-FSR test, but it has not yet had device runtime
+validation. The prior enum-audited probe remains valid for testing static
+combiner/pixel signatures, but invocation reduction remains unproven. A new
+invocation-counting probe should be prepared before interpreting a pixel-only
+PASS as proof of true coarse fragment execution.
+
+No system/vendor driver, kernel, or firmware was modified.
