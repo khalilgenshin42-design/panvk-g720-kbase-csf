@@ -5861,3 +5861,14 @@ This is a focused hypothesis-driven compiler fix; no Kbase memory mapping, descr
 - Do not resume game FPS benchmarking until the non-KEEP fault is resolved and pixel signatures are correct.
 
 No Android system/vendor driver or kernel was modified.
+
+
+#### Diagnostic precision correction — distinguish inherited CSI faults from the primary exception
+
+A closer timestamp-by-timestamp correlation of the first test batch refines the summary above:
+- First batch MAX (ops=3) and MIN (ops=2) produce the primary CSI 0 `DATA_INVALID_FAULT` (`0x58`, sideband `0x5fff39c1a8`).
+- The subsequent first-batch MUL/REPLACE process failures include `0x4b` `CS_INHERIT_FAULT` notifications after the subqueue/CSG has already faulted. These are inherited/secondary and must not be counted as independent primary `0x58` events.
+- The second complete batch independently records `0x58` on CSI 0 for MAX (3), MIN (2), MUL (4), and REPLACE (1), each with the same sideband `0x5fff39c1a8`. This second batch is the evidence that every non-KEEP static combiner reproduces the primary data-invalid fault.
+- CSI 1 `0x0f` is `CS_RESOURCE_TERMINATED`; `0x4b` is `CS_INHERIT_FAULT`. Neither should be conflated with the primary `0x58` event.
+
+The targeted static pipeline-only NIR lowering fix remains justified by the second batch and by the repeated difference between the successful KEEP compiler path and the failing native sample-center path.
