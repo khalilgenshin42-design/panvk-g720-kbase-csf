@@ -5722,3 +5722,21 @@ At the latest poll these runs were queued; earlier runs for intermediate commits
 #### Next user gate
 
 Do not ask for another device run until both exact-HEAD artifacts are available and independently checked. Then provide the GitHub Actions artifact links (not a guessed local file path). User should extract the Windows probe artifact, run `tools\\run-vrs-cases.cmd` inside the existing Winlator container with the diagnostic PanVK package installed, and send all five per-case logs plus the matching Winlator/logcat archive. Keep wrapper and container settings unchanged. This is a correctness/diagnostics run only; do not restart Tomb Raider/Borderlands performance benchmarking yet.
+
+
+### 2026-11-07 CI update — refreshed Windows VRS probe artifact available
+
+The exact-HEAD Windows render-probe workflow completed successfully:
+- Run: `42315974283`
+- Job: `128228539539`, `build-vrs-render-probe`
+- Source: feature branch `experiment/g720-fragment-shading-rate`, commit `c0e807c899b93ae76093f56ccc59a1395a237202`
+- Artifact: `panvk-vrs-render-probe-win64`, ID `13551136207`
+- Artifact SHA-256: `e15e23538a3d8b7839d18392681f8aba1ce2731205b17d78bc8f100fddac1046`
+- Direct GitHub artifact URL: `https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42315974283/artifacts/13551136207`
+- Artifact expires 2027-02-05.
+
+This is the rebuilt probe with `--case=keep|max|min|mul|replace`, per-readback checksum/equal-neighbour output, and the `tools/run-vrs-cases.cmd` runner. The workflow completed compilation, executable verification and artifact upload successfully.
+
+The matching Android-only PanVK package workflow `42315974348` is still in progress. At the latest poll, Android configuration and dependency preparation had passed and the ARM64 driver compile/stage step was running. No updated Android package is available or approved for device testing yet. Continue to wait for compile, ABI/dependency audit, flat package creation, upload, and independent artifact inspection before requesting another Winlator run.
+
+The separate wrapper workflow `42315974403` has its VRS capability probe completed, but its release/debugoptimized Android wrapper builds remain in progress. These wrapper outputs are not the PanVK driver package and are not required for the current VRS diagnosis; do not substitute them for the custom PanVK ICD.
