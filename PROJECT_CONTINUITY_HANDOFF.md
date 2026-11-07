@@ -6190,3 +6190,111 @@ Import the inner `PanVK-G720-experimental.zip` in Winlator Mali 1.2's custom dri
 
 Return all five generated logs (`panvk_vrs_keep.log`, `panvk_vrs_max.log`, `panvk_vrs_min.log`, `panvk_vrs_mul.log`, `panvk_vrs_replace.log`) and the matching Winlator/logcat archive. Do not run Borderlands FPS benchmarks yet: first establish whether all static cases render correctly and whether the SSBO invocation counter detects a greater-than-2x reduction for 2x2 KEEP. A counter result without a reduction may be affected by the atomic instrumentation itself and must not be treated as conclusive evidence that VRS hardware is absent.
 
+
+
+## 2026-11-07 — Device VRS results: KEEP proven; non-KEEP combiner path faults
+
+### Uploaded device test results
+
+The user ran the exact-head probe and Android package from source
+`7061318e2a431e1a0a05dc2b55c49f4610929636` on Xiaomi 15T / Mali-G720 MC7,
+Android 16, Winlator Mali 1.2.1.
+
+The probe identified:
+- Device: `Wrapper(Mali-G720 MC7)`
+- Driver: `panvk (Mesa 26.3.0-devel (git-7061318e2a))`
+- Vulkan API: 1.3.354
+- `pipelineFragmentShadingRate=1`
+- `fragmentStoresAndAtomics=1`
+
+**KEEP is a real hardware VRS pass, including measured fragment invocation reduction:**
+- 1x1 KEEP: successful submit/fence/readback; checksum
+  `0x06d78d985ad50383`; equal-neighbour count 0; fragment invocations 4096.
+- 2x2 KEEP: successful submit/fence/readback; checksum
+  `0xcad734dde7920383`; equal-neighbour count 4096; fragment invocations 1024.
+- Pixel signature passed.
+- Invocation reduction passed: 4096 -> 1024 = 4x fewer invocations (75% reduction).
+- `panvk_vrs_render_probe.log` ended with `VRS GPU RENDER PASS`.
+
+This is the first direct runtime proof in this project that the G720 v12 VRS draw-rate path actually reduces fragment shader invocation count. The SSBO atomic counter did not prevent coarse execution for KEEP.
+
+### Non-KEEP combiner failures
+
+The isolated MAX, MIN, MUL, and REPLACE cases all failed at
+`vkWaitForFences` with `VkResult=-4` (device lost). They passed image,
+pipeline, command-buffer, and queue-submit creation; failure occurred during
+GPU execution.
+
+The matching Winlator logcat records CSF recoverable faults during the
+non-KEEP tests:
+- Three occurrences of exception `0x58` (`DATA_INVALID_FAULT`), followed by
+  CSI 1 `0x0f` resource-terminated notifications.
+- One occurrence of exception `0x4b` (`CS_INHERIT_FAULT`).
+- The CS error reports identify subqueue 0 and show the sideband address
+  associated with the CS stream for the `0x58` failures.
+
+Do not attribute these faults to the fragment SSBO atomic alone: the earlier
+pixel-only probe also faulted on non-KEEP operations, and the current trace
+reports the first `0x58` fault on CSI 0 before the secondary CSI 1
+resource-termination notification. The precise offending CS state/register
+still needs isolation.
+
+The checked-in v12 GenXML defines VRS combiner values
+KEEP=0, REPLACE=1, MIN=2, MAX=3, MUL=4 and places them in
+`PRIMITIVE_FLAGS_2`; the v12 register map includes `TILER_FLAGS2`.
+Thus the Vulkan enum numeric values match the declared hardware enum values.
+See the v12 definitions in `src/panfrost/genxml/v12.xml`; do not “fix” this
+by changing enum numbers without new evidence.
+
+### Conservative capability correction in progress
+
+Because all four non-KEEP modes fault on the actual G720 device, the current
+source no longer advertises `fragmentShadingRateNonTrivialCombinerOps`.
+Pipeline VRS with KEEP remains enabled. This prevents compliant applications
+from assuming non-KEEP combiners work while preserving the proven 2x2 KEEP
+path.
+
+Source commits on `experiment/g720-fragment-shading-rate`:
+- `a1ffee93892b25a05faa0eb558dc46331093c3b8`: report
+  `fragmentShadingRateNonTrivialCombinerOps=false` on this experimental
+  PanVK build, with a comment documenting the observed device fault.
+- `098d62ef7814852dd2096721d38bbb033abd16fc`: log the actual packed
+  `TILER_FLAGS2` word and the requested rate/combiner values whenever a
+  non-KEEP state reaches draw emission.
+- `955fcede05c0381e73fc79f78e15f5ea65a9fdd4`: make the Windows probe skip
+  non-KEEP tests when the property is not advertised, rather than knowingly
+  issuing unsupported operations.
+- `9088e0326a9e398209b2c5500655f293e6f8adf0`: add
+  `tools/run-vrs-keep-check.cmd`.
+- `af52d3d5e9a3eeadfa836da95ec6771ac11bcbf8`: update the Windows workflow to
+  package the KEEP-only regression script.
+- `deeb2ab9ff7b6b26893d4c9679f85e556dfc67a3`: fix the probe's SKIP log
+  newline. This is the exact current source checkpoint for the next package.
+
+### Build state and next gate
+
+The updated Windows probe workflow completed its compile and upload steps for
+exact source `deeb2ab9ff7b6b26893d4c9679f85e556dfc67a3`:
+- Run: `42398543208`
+- Artifact: `panvk-vrs-render-probe-win64`, ID `13584586137`
+- Artifact SHA-256:
+  `2b08c90efc061cee7d0e0e65dde68cccfe5389df7a666b3ce8824621b33b411c`
+- It includes both `tools/run-vrs-cases.cmd` and
+  `tools/run-vrs-keep-check.cmd`.
+
+The matching Android-only package build for the same exact source checkpoint
+is run `42398543226`; at the time of this handoff update it is still running
+and has not uploaded an artifact. Do not ask the user to test the new package
+until that exact-head Android build and package audit complete successfully.
+
+Once available, import only the inner `PanVK-G720-experimental.zip` from the
+outer CI artifact, keep the Winlator container and wrapper unchanged, and run
+`tools\\run-vrs-keep-check.cmd`. Expected: the device still reports
+`pipelineFragmentShadingRate=1`, now reports
+`nonTrivialCombinerOps=0`, and repeats the KEEP pixel signature and
+4096-to-1024 invocation reduction without submitting any non-KEEP combiner.
+Return `panvk_vrs_keep.log` and the matching logcat archive.
+
+No Borderlands FPS benchmark should be run until the new package passes this
+KEEP regression check. No Android system/vendor driver, kernel, or firmware
+was modified.
