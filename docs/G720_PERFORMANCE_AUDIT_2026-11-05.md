@@ -1019,3 +1019,64 @@ Wrapper artifacts from run `42215758167`:
 - Classification: **build passed / raw ELF checked**, not independently package-validated or proven self-contained. External dependency resolution must be validated in the intended wrapper runtime.
 
 No source or workflow changes were made. This monitoring addendum is documentation-only; commit message uses `[skip ci]` to avoid triggering another build. Keep the Android-only package separate in Winlator; never replace the phone's system/vendor Vulkan driver or modify the live kernel.
+
+
+## 2026-11-07 12:15 UTC — scheduled CI and artifact revalidation
+
+The branch `experiment/g720-performance-audit` is at documentation-only HEAD
+`d9394de49dc560fe2212a92b71280c372e66b0e6`; its inspected diff only appends
+the prior monitoring record. The latest driver-source commit remains
+`a2e5ac142b4f0df71cb28204ece4337bace046de`. No build was triggered by this
+monitoring pass.
+
+The branch-filtered Actions listing contained 125 runs. The newest relevant
+runs remain:
+
+- Android-only [run 42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218),
+  job `127885224447`, source `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`:
+  completed SUCCESS. Every setup, checkout, dependency, host-tool, Android
+  ARM64 libdrm, configure, compile/stage, manifest/dependency audit, package,
+  and upload step passed. Pending 0; failed 0.
+- Wrapper [run 42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167),
+  same source:
+  - Release job `127885224388`: completed SUCCESS; all steps including
+    memfd_create patch, dependency/host-tool setup, Meson configure, compile,
+    and artifact upload passed. Pending 0; failed 0.
+  - Debugoptimized job `127885224836`: completed SUCCESS; same step set
+    passed. Pending 0; failed 0.
+
+No newer run supersedes this pair; no latest-run failure exists to diagnose.
+
+### Revalidated artifacts
+
+- Android-only artifact `13501237590`: outer ZIP SHA-256
+  `f5e58163b3caf3f9fa5791dedf56ade82fd87d17dcfdb42722cd846e51ed825a`
+  (matches GitHub digest; ZIP test passes). Embedded flat package SHA-256
+  `14f7b13ab1735daffd31a0723c1f6d949155e5c6570f1980f98291cb54383e86`
+  (ZIP test passes). Four members: `meta.json`,
+  `libvulkan_panfrost.so`, `libpanvk_drm.so`, `SHA256SUMS`; every
+  member checksum recomputed successfully. Metadata version
+  `26.3.0-devel-android-kbase-b17b98cef92f`, min API 30. ELF64 AArch64/API 30;
+  driver RUNPATH `$ORIGIN`, private NEEDED `libpanvk_drm.so`; private libdrm
+  needs only `libc.so`; missing-DRM-symbol report empty. The outer artifact
+  also contains the staged ICD JSON (API 1.4.354). Classification:
+  **static/package validated, not runtime validated**.
+- Wrapper Release artifact `13502135385`: outer SHA-256
+  `5647fe999a9225123116118eb26ef91f277eef38d4ea2c2a29e98e965d3b0f04`;
+  extracted ELF SHA-256
+  `edce8b3dd4fea68ffda7e44622d4c778cdaf0a22fc219cc2b4368335060aa80a`.
+- Wrapper Debugoptimized artifact `13502061037`: outer SHA-256
+  `fcd0b4d2dcba93c67f3c09dedb6cdc4ab843cd7eef45f34813e90916adbd4159`;
+  extracted ELF SHA-256
+  `eebdc6229236e4c91204bd01148409c2b91c71977d1cf71a44a25181b3617477`.
+- Both wrapper ZIPs contain only the ELF, which is AArch64 Android API 30.
+  RUNPATH is `$ORIGIN/../../android_stub`; NEEDED includes `libdrm.so`
+  and X11/XCB libraries. No manifest, checksums, android_stub libdrm, or
+  X11/XCB dependency closure is bundled. Classification:
+  **build passed / raw ELF hash and ABI checked; complete package/runtime
+  dependency closure not validated**.
+
+The next concrete gate remains a separate Winlator Mali import/runtime test of
+the Android-only flat package. Do not treat the wrapper ZIPs as complete
+packages until their dependency layout is proven. No system/vendor driver or
+live kernel modification is permitted.
