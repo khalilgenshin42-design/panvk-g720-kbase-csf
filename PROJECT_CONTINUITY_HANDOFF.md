@@ -5796,3 +5796,68 @@ The diagnostic package and probe are now built from the same exact feature-branc
 The run is for VRS pixel-signature and CS-fault diagnosis, not performance benchmarking. Preserve the existing 1x1 and 2x2 KEEP controls. MAX previously caused VK_ERROR_DEVICE_LOST; the new driver adds cold-error CS ring/subqueue diagnostics and queued Kbase CSF notification logging. MIN/MUL/REPLACE were not previously independently tested. Do not resume Tomb Raider or Borderlands FPS comparisons until the VRS correctness/fault investigation is complete.
 
 No system/vendor driver or kernel modification was made.
+
+
+### 2026-11-07 VRS render-probe results — KEEP pixel signature passes; all non-KEEP static combiners fault
+
+The user supplied:
+- `panvk_vrs_render_probe.log`
+- `panvk_vrs_keep.log`
+- `panvk_vrs_max.log`
+- `Container (copy)_logs_2026-11-07_01-22-19.zip`, containing `logcat.log` and `wine_debug.log`.
+
+The two KEEP logs are byte-identical. The combined logcat contains the process-by-process traces for KEEP, MAX, MIN, MUL and REPLACE, with two rounds of the non-KEEP cases. The archive therefore contains enough information to analyze all four non-KEEP operations even though the separate MIN/MUL/REPLACE output files were not attached.
+
+#### Verified pixel signature
+
+- 1x1 KEEP completed submit, fence wait and host readback. Checksum: `0x06d78d985ad50383`; equal-neighbour count: 0.
+- Static 2x2 KEEP completed submit, fence wait and host readback. Checksum: `0xcad734dde7920383`; equal-neighbour count: 4096.
+- Probe explicitly reports `2x2 KEEP pixel-signature=PASS (control=0 vrs=4096)` and `VRS GPU RENDER PASS`.
+- This is the first actual pixel-pattern validation, not merely pipeline/submit/readback success.
+
+#### All non-KEEP combiners independently reproduced the same primary fault
+
+The logcat's PanVK pipeline-state traces record the actual Vulkan combiner enum values and their corresponding queue fault:
+- MAX: `ops=3,0`, then CSI 0 recoverable fault `status 0x00011058`.
+- MIN: `ops=2,0`, same CSI 0 fault.
+- MUL: `ops=4,0`, same CSI 0 fault.
+- REPLACE: `ops=1,0`, same CSI 0 fault.
+- The sequence repeats in a second round. Every case compiles its pipeline and fragment shader, submits, then fails during GPU execution before successful target readback.
+- Fault sideband is consistently `0x0000005fff39c1a8`.
+- Kbase's later CSI 1 notification is `0x0000000f`, CS_RESOURCE_TERMINATED, a secondary termination notification after the primary fault; do not treat it as the root exception.
+- `0x58` is the CSF `DATA_INVALID_FAULT` exception, documented by Arm Kbase CSF fault-name handling as an invalid descriptor fault. This is not the previously discussed GPU shareability fault `0x88`.
+- The non-KEEP shader logs consistently state `frag-center dynamic/combined rate left on native sample-center path`; KEEP instead uses the working constant NIR lowering. The same exception across all four combiners, combined with this compiler-path difference, makes the native fragment-center/system-value path the leading hypothesis. It is not yet proven that this is the only root cause.
+
+The standalone uploaded `panvk_vrs_max.log` is inconsistent with the matching archive: it labels the selected case MAX but its pipeline trace shows `ops=4` (MUL). For operation identity, use the combined archive's process traces, which show MAX=3 and MUL=4 in separate runs. A new probe now asserts the Vulkan enum ABI at compile time and logs numeric enum values before submitting each selected case.
+
+#### Enum-audited Windows probe
+
+- Source commit: `a2ca300629f0f38ce5aa048c92546aed06abea2f`.
+- Windows probe workflow run: `42318169016`, job `128235882397`, SUCCESS.
+- Artifact ID: `13551667465`, name `panvk-vrs-render-probe-win64`.
+- URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42318169016/artifacts/13551667465
+- Outer artifact SHA-256 independently recomputed: `4788e5111be1a13b01f96b61831bda12069bd7700b34453b0a3e0fa0aeb30ddc`.
+- Contains `panvk-vrs-render-probe.exe` and `tools/run-vrs-cases.cmd`; executable PE signature verified and embedded strings confirm the enum-audit diagnostics are present.
+- The source has compile-time assertions for KEEP=0, REPLACE=1, MIN=2, MAX=3, MUL=4. Successful build proves the probe's header enum ABI matches Vulkan specification values. The executable logs all five values and the requested op0/op1 numeric values for each target case.
+
+#### Driver-side static pipeline-only lowering fix committed
+
+Commit `4fdb9968d407618cfe3f8101d409fd803574bba3` on `experiment/g720-fragment-shading-rate` changes `src/panfrost/vulkan/panvk_vX_shader.c`:
+- Adds a log2-domain combiner helper for KEEP, REPLACE, MIN, MAX and MUL.
+- Resolves both static pipeline combiners against the implicit 1x1 primitive rate and 1x1 attachment rate. This is valid for the current advertised device feature configuration: pipeline FSR enabled, primitive and attachment FSR disabled.
+- Honors the advertised `fragmentShadingRateStrictMultiplyCombiner=false` special case: multiplying 1x1 by 1x1 produces 2x2.
+- Lowers the resolved effective rate into the fragment-center NIR calculation, rather than leaving non-KEEP static pipeline rates on the native sample-center path.
+- Dynamic FSR and unsupported feature combinations are intentionally not changed and remain unresolved.
+
+This is a focused hypothesis-driven compiler fix; no Kbase memory mapping, descriptor heap, queue synchronization, or hardware register encoding was changed.
+
+#### Build gate and next action
+
+- Exact-source Android-only build run: `42318330286`, source HEAD `4fdb9968d407618cfe3f8101d409fd803574bba3`.
+- At this handoff update it is still in progress at host-tool generation. No package artifact or compile success is claimed yet.
+- Do not ask for a device retest until this exact source builds, passes the Android ELF/DRM dependency audit, and its inner flat package is independently inspected.
+- When ready, use the enum-audited Windows probe artifact above with the newly built driver. Preserve the existing wrapper/container and import only the inner `PanVK-G720-experimental.zip` through Winlator's custom driver slot.
+- The next test should capture all five individual logs and matching logcat. Expected effective rates for the probe's 2x2 pipeline rate and implicit 1x1 primitive/attachment rates: MAX=2x2, MIN=1x1, MUL=2x2, REPLACE=1x1. Success requires target readback and checksum matching the corresponding KEEP control, not merely a completed fence.
+- Do not resume game FPS benchmarking until the non-KEEP fault is resolved and pixel signatures are correct.
+
+No Android system/vendor driver or kernel was modified.
