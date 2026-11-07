@@ -5693,3 +5693,32 @@ Android-only build run:
 - Next gate: wait for Android compile, ABI/dependency audit, flat package creation and artifact upload. Reuse the existing Windows render probe for this driver-diagnostic run; no probe source change is needed to collect the new Kbase logs.
 
 Do not ask the user to install or test until this exact-source package completes and is independently inspected. On the next run, keep the wrapper/container unchanged and send both the probe output and matching logcat/Wine log. The purpose is to obtain the VT/tiler CS ring and any Kbase CSF exception details for the MAX/KEEP failure. Preserve the 1x1 and 2x2 KEEP readback results; do not treat the pixel signature as validated until a probe explicitly reports the checksum/equal-neighbour comparison.
+
+
+### 2026-11-07 follow-up — isolated combiner probe and Kbase error-state capture queued for CI
+
+After reviewing the first render-probe source, two test-quality gaps were corrected before requesting another device run.
+
+#### Windows render-probe improvements
+
+- Commit `ff80089f8ad8c6556faeafd2b065111947ec8ef3` changes `tools/panvk_vrs_render_probe_win.c` to accept one explicit case per process: `--case=keep|max|min|mul|replace`.
+- Commit `5641713220782142eeaa79908041bce86b72a88b` fixes diagnostic line endings in the generated log strings.
+- Every case first renders a 1x1 KEEP control and a 2x2 KEEP control. It immediately prints each image checksum and equal-neighbour count and checks the 2x2 repeated-block pixel signature before attempting the selected combiner.
+- Non-KEEP cases then run independently in a fresh process/device, so a MAX device loss cannot short-circuit MIN, MUL or REPLACE. Expected comparisons are MAX -> 2x2 KEEP, MIN -> 1x1 KEEP, MUL -> 2x2 KEEP, REPLACE -> 1x1 KEEP. The MUL case checks 2x2 execution with the default 1x1 primitive rate; it is not a strict-multiply property discriminator.
+- Commit `4c9d20d6c1ac7deef0ef46204a7a3f0bf4c44277` adds `tools/run-vrs-cases.cmd`, which launches keep/max/min/mul/replace in separate processes and preserves one log per case.
+- Commit `bb9af784a16167e6dd963a59854f7deb46f99960` updates `.github/workflows/build-vrs-render-probe.yml` to include the runner script in the artifact.
+- Commit `c0e807c899b93ae76093f56ccc59a1395a237202` fixes the runner's executable path for the Actions artifact layout. The script resides under `tools/` and launches the executable one directory above it.
+
+#### Current branch and build gates
+
+Feature branch HEAD: `c0e807c899b93ae76093f56ccc59a1395a237202`. The PanVK driver source change remains the Kbase CS-fault diagnostic commit `e4473dce4547eca9f5159ff238f3ae17e6a7db46`; later commits in this sequence change only probe tooling/packaging. The Android package at HEAD therefore contains the same diagnostic driver implementation as that source commit.
+
+Latest exact-HEAD CI runs:
+- Windows VRS probe: run `42315974283`, workflow `Build Winlator VRS render probe`.
+- Android-only PanVK package: run `42315974348`, workflow `Android-only PanVK G720 Experiment`.
+- Android wrapper variant: run `42315974403`.
+At the latest poll these runs were queued; earlier runs for intermediate commits were still in progress. No new executable or Android package artifact is claimed ready until the exact-HEAD jobs finish and the uploaded files are inspected.
+
+#### Next user gate
+
+Do not ask for another device run until both exact-HEAD artifacts are available and independently checked. Then provide the GitHub Actions artifact links (not a guessed local file path). User should extract the Windows probe artifact, run `tools\\run-vrs-cases.cmd` inside the existing Winlator container with the diagnostic PanVK package installed, and send all five per-case logs plus the matching Winlator/logcat archive. Keep wrapper and container settings unchanged. This is a correctness/diagnostics run only; do not restart Tomb Raider/Borderlands performance benchmarking yet.
