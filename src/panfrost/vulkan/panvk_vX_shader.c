@@ -742,6 +742,79 @@ lower_vrs_frag_center(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    nir_def_replace(&intr->def, center);
    return true;
 }
+
+/*
+ * Combine fragment sizes represented as log2(width/height). PanVK currently
+ * exposes pipeline FSR only: primitive and attachment rates are fixed at 1x1.
+ * The G720 property fragmentShadingRateStrictMultiplyCombiner is false, so
+ * MUL has the Vulkan-defined 1x1-by-1x1 special case (result 2x2).
+ */
+static uint32_t
+panvk_combine_vrs_log2(uint32_t a, uint32_t b,
+                       VkFragmentShadingRateCombinerOpKHR op)
+{
+   switch (op) {
+   case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR:
+      return a;
+   case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR:
+      return b;
+   case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR:
+      return a < b ? a : b;
+   case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR:
+      return a > b ? a : b;
+   case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR:
+      return a + b + (a == 0 && b == 0 ? 1 : 0);
+   default:
+      return UINT32_MAX;
+   }
+}
+
+/*
+ * Resolve a static pipeline-only rate against the implicit 1x1 primitive and
+ * attachment rates. This avoids the native sample-center system value, which
+ * the current Bifrost/Valhall compiler cannot lower for non-KEEP combiners.
+ */
+static bool
+panvk_get_static_pipeline_vrs_rate(const struct vk_features *features,
+                                   const struct vk_graphics_pipeline_state *state,
+                                   uint32_t *rate, uint32_t *width_out,
+                                   uint32_t *height_out)
+{
+   if (!features->pipelineFragmentShadingRate ||
+       features->primitiveFragmentShadingRate ||
+       features->attachmentFragmentShadingRate || !state || !state->fsr ||
+       BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR))
+      return false;
+
+   const uint32_t width = state->fsr->fragment_size.width;
+   const uint32_t height = state->fsr->fragment_size.height;
+   if ((width != 1 && width != 2 && width != 4) ||
+       (height != 1 && height != 2 && height != 4))
+      return false;
+
+   uint32_t log2_width = width == 4 ? 2 : width == 2 ? 1 : 0;
+   uint32_t log2_height = height == 4 ? 2 : height == 2 ? 1 : 0;
+
+   /* First combine pipeline rate with the implicit 1x1 primitive rate. */
+   log2_width = panvk_combine_vrs_log2(
+      log2_width, 0, state->fsr->combiner_ops[0]);
+   log2_height = panvk_combine_vrs_log2(
+      log2_height, 0, state->fsr->combiner_ops[0]);
+
+   /* Then combine with the implicit 1x1 attachment rate. */
+   log2_width = panvk_combine_vrs_log2(
+      log2_width, 0, state->fsr->combiner_ops[1]);
+   log2_height = panvk_combine_vrs_log2(
+      log2_height, 0, state->fsr->combiner_ops[1]);
+
+   if (log2_width > 2 || log2_height > 2)
+      return false;
+
+   *width_out = 1u << log2_width;
+   *height_out = 1u << log2_height;
+   *rate = (log2_height & 0x3) | ((log2_width & 0x3) << 2);
+   return true;
+}
 #endif
 
 static void
@@ -1300,36 +1373,23 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
       if (!nir->info.fs.uses_sample_shading &&
           fs_may_use_vrs(&dev->vk.enabled_features, state)) {
          /*
-          * Static pipeline FSR can be folded into the fragment-center
-          * calculation only when both combiners KEEP the pipeline rate.
-          * Dynamic FSR and non-KEEP combiners need the hardware
-          * load_frag_shading_rate system value, which the current Mali
-          * compiler does not implement. Leave the original sample-center
-          * intrinsic intact for those cases rather than sending an
-          * unsupported NIR intrinsic into the compiler.
+          * The G720 path currently exposes pipeline FSR only. Primitive and
+          * attachment rates are therefore the implicit 1x1 rate, allowing us
+          * to resolve both static combiners at pipeline compile time.
+          * Dynamic FSR remains on the native path until it is implemented.
           */
-         if (state && state->fsr &&
-             !BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR) &&
-             state->fsr->combiner_ops[0] ==
-                VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR &&
-             state->fsr->combiner_ops[1] ==
-                VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR) {
-            const uint32_t width = state->fsr->fragment_size.width;
-            const uint32_t height = state->fsr->fragment_size.height;
-            assert(width == 1 || width == 2 || width == 4);
-            assert(height == 1 || height == 2 || height == 4);
-
-            const uint32_t log2_width = width == 4 ? 2 : width == 2 ? 1 : 0;
-            const uint32_t log2_height = height == 4 ? 2 : height == 2 ? 1 : 0;
-            const uint32_t rate =
-               (log2_height & 0x3) | ((log2_width & 0x3) << 2);
-
-            mesa_logi("PANVK_VRS_DIAG static frag-center lowering rate=%ux%u encoded=0x%x",
-                      width, height, rate);
+         uint32_t rate, effective_width, effective_height;
+         if (panvk_get_static_pipeline_vrs_rate(&dev->vk.enabled_features,
+                                                state, &rate, &effective_width,
+                                                &effective_height)) {
+            mesa_logi("PANVK_VRS_DIAG static effective frag-center lowering rate=%ux%u encoded=0x%x ops=%u,%u",
+                      effective_width, effective_height, rate,
+                      (unsigned)state->fsr->combiner_ops[0],
+                      (unsigned)state->fsr->combiner_ops[1]);
             NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_vrs_frag_center,
                      nir_metadata_control_flow, (void *)&rate);
          } else {
-            mesa_logi("PANVK_VRS_DIAG frag-center dynamic/combined rate left on native sample-center path");
+            mesa_logi("PANVK_VRS_DIAG dynamic/unsupported FSR state left on native sample-center path");
          }
       }
 #endif
