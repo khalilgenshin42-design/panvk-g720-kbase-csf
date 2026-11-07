@@ -1023,9 +1023,10 @@ No source or workflow changes were made. This monitoring addendum is documentati
 
 ## 2026-11-07 12:15 UTC — scheduled CI and artifact revalidation
 
-The branch `experiment/g720-performance-audit` is at documentation-only HEAD
-`d9394de49dc560fe2212a92b71280c372e66b0e6`; its inspected diff only appends
-the prior monitoring record. The latest driver-source commit remains
+At the start of this monitoring pass, branch `experiment/g720-performance-audit`
+was at documentation-only HEAD `d9394de49dc560fe2212a92b71280c372e66b0e6`;
+its inspected diff only appends the prior monitoring record. The latest
+driver-source commit remains
 `a2e5ac142b4f0df71cb28204ece4337bace046de`. No build was triggered by this
 monitoring pass.
 
@@ -1084,9 +1085,9 @@ live kernel modification is permitted.
 
 ### Documentation commit produced by this monitoring pass
 
-This 2026-11-07 monitoring record was committed as
-`960815737d61ad45af5b22fdc4a97b5f16f94ba9` with message
-`docs: record 2026-11-07 PanVK CI and artifact monitoring [skip ci]`.
-It is the current branch HEAD after this update and changes documentation only.
-No new build was triggered; the latest CI-tested code snapshot remains
+The initial 2026-11-07 monitoring record was committed as
+`960815737d61ad45af5b22fdc4a97b5f16f94ba9`. Subsequent corrections in this
+monitoring pass are also documentation-only and use `[skip ci]`. No source
+code or workflow file changed and no new build was triggered; the latest
+CI-tested code snapshot remains
 `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`.
