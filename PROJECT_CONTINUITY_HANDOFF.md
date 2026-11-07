@@ -6139,3 +6139,54 @@ The probe workflow `.github/workflows/build-vrs-render-probe.yml` is configured 
 The Android driver package remains the already-audited static-combiner package from source `4fdb9968d407618cfe3f8101d409fd803574bba3`; no driver rebuild is required for this probe-only change. Once the exact-head Windows probe build succeeds, pair that executable with that exact inner Android package, preserving the existing Winlator wrapper/container. Run each case independently via `tools\\run-vrs-cases.cmd` and collect all five per-case logs plus the matching logcat/Wine archive.
 
 No performance gain is claimed. Do not resume game FPS benchmarking until the static combiner cases pass both pixel and invocation comparisons. Never replace or modify the Android system/vendor Vulkan driver or kernel.
+
+
+## 2026-11-07 — Exact-head VRS artifacts built and statically audited
+
+### Exact source checkpoint and CI
+
+The final VRS diagnostic source checkpoint is
+`7061318e2a431e1a0a05dc2b55c49f4610929636` on
+`experiment/g720-fragment-shading-rate`.
+
+Both exact-head workflows completed successfully:
+- Windows render probe run: `42396877986`, success.
+- Android-only PanVK package run: `42396877989`, success.
+
+Both runs report the same source SHA above. This resolves the earlier uncertainty about whether the Windows probe was built from the final invocation-counter source.
+
+### Windows probe artifact
+
+- Artifact: `panvk-vrs-render-probe-win64`, ID `13584215653`.
+- GitHub Actions run: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42396877986
+- Artifact archive SHA-256: `c289881ee62b27d3f41199f9bc12c5d41974c132970157637dabf4221123a5f2`.
+- Executable: `panvk-vrs-render-probe.exe`, SHA-256
+  `fa60815f71d90b78b9b588a209bd90545936cbeb26d53a868e6321c551bdaff4`.
+- Verified as PE32+ Windows x86-64. Imports are limited to Windows system DLLs `KERNEL32.dll` and `msvcrt.dll`; no Vulkan loader DLL is statically imported because the probe resolves Vulkan entry points at runtime.
+- Includes `tools/run-vrs-cases.cmd`, which runs KEEP, MAX, MIN, MUL, and REPLACE in separate processes and copies each case log.
+
+### Android driver package artifact
+
+- Artifact: `panvk-g720-android-only-experimental-package`, ID `13584176404`.
+- GitHub Actions run: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42396877989
+- Artifact archive SHA-256: `78d4a1835d9f23ceb06272548f9d67a28edc887d09c5c02b17559f10e8ad6105`.
+- Inner Winlator/Adrenotools package: `PanVK-G720-experimental.zip`, SHA-256
+  `5e1f8080ec6d32bb57a743224d5ef31973debb9a1e086904d8bf6780968b204d`.
+- Packaged ICD SHA-256:
+  `6b03eac29efcea0aae28df228c98e7e9da6d58da6a170803b9fc2928ce282b7c`.
+- Private DRM dependency SHA-256:
+  `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`.
+- Both shared objects are ELF64 AArch64 Android API 30 / NDK r30.
+- The final ADPKG is flat and contains `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+- The packaged ICD has `RUNPATH=$ORIGIN` and depends on the private `libpanvk_drm.so`, whose SONAME is also `libpanvk_drm.so`. This avoids accidentally resolving a platform-provided `libdrm.so` with a mismatched ABI. The outer CI artifact also contains the staged/audit tree; the user should import only the inner `PanVK-G720-experimental.zip`.
+- The build's DRM symbol audit reports no missing symbols for the bundled Android libdrm before packaging. The package script then renames the dependency and patches the ICD NEEDED entry/RUNPATH; the packaged ELF dynamic sections were independently inspected after extraction and match that intended layout.
+- This is an experimental custom Winlator ICD only. It is not Vulkan conformant, and runtime/device/game compatibility remains unverified. No system/vendor driver, kernel, or firmware was modified.
+
+### User test is now required
+
+The exact-head Windows probe and matching Android package are now available from the two GitHub Actions run pages above. The next step cannot be completed without device-side testing.
+
+Import the inner `PanVK-G720-experimental.zip` in Winlator Mali 1.2's custom driver importer. Do not replace the phone's system/vendor Vulkan driver. Keep the existing wrapper and container unchanged, and retain System Driver as rollback. Then run `tools\\run-vrs-cases.cmd` from the Windows probe artifact in the same container.
+
+Return all five generated logs (`panvk_vrs_keep.log`, `panvk_vrs_max.log`, `panvk_vrs_min.log`, `panvk_vrs_mul.log`, `panvk_vrs_replace.log`) and the matching Winlator/logcat archive. Do not run Borderlands FPS benchmarks yet: first establish whether all static cases render correctly and whether the SSBO invocation counter detects a greater-than-2x reduction for 2x2 KEEP. A counter result without a reduction may be affected by the atomic instrumentation itself and must not be treated as conclusive evidence that VRS hardware is absent.
+
