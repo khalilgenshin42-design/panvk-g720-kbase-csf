@@ -6097,3 +6097,43 @@ invocation-counting probe should be prepared before interpreting a pixel-only
 PASS as proof of true coarse fragment execution.
 
 No system/vendor driver, kernel, or firmware was modified.
+
+
+## 2026-11-07 17:35 UTC — fragment invocation counter added to VRS render probe
+
+### Context preserved
+
+The last device archive established:
+- 1x1 KEEP pixel checksum `0x06d78d985ad50383`, equal-neighbour count 0.
+- 2x2 KEEP pixel checksum `0xcad734dde7920383`, equal-neighbour count 4096; pixel-signature test passed.
+- All four non-KEEP static combiners faulted with CSF `DATA_INVALID_FAULT` (`0x58`) on the earlier `c0e807c...` diagnostic driver package.
+- Driver commit `4fdb9968d407618cfe3f8101d409fd803574bba3` then added compile-time resolution of static pipeline/primitive/attachment combiner rates. Its Android-only package passed exact-source build and package audits (artifact `13552276626`, inner package SHA-256 `63e4de771c1ad91cca6a89eef067d695c4d3f88dd858cc0999e255142f813e99`). That newer package has not yet had a device runtime test.
+- The 2026-11-07 18:20 UTC source audit confirmed that v12 CSF writes the VRS draw-rate and combiner fields to `PRIMITIVE_FLAGS_2`, but the pixel-only probe did not measure fragment invocation reduction.
+
+### Probe-only implementation
+
+On `experiment/g720-fragment-shading-rate`, a diagnostic-only probe revision was pushed. It does not modify PanVK driver source, Kbase memory mapping, CSF scheduling, queue synchronization, Android kernel, or the phone's system/vendor driver.
+
+Commits:
+- `13609a23ea4bd47a9a8e4d698d729dcb88d56b39`: add an SSBO atomic counter to `tools/vrs_probe.frag`.
+- `9d0aba455c38ee09968cd4b464fc7ca39f37abba`: bind the counter storage buffer in `tools/panvk_vrs_render_probe_win.c`, reset it before each draw, add a fragment-shader-write to host-read buffer barrier, and report the readback count for each render.
+- `7061318e2a431e1a0a05dc2b55c49f4610929636`: clean up descriptor/buffer/memory resources on early setup failures.
+
+The probe checks `fragmentStoresAndAtomics` before device creation and enables it for the fragment-shader SSBO atomic. It uses host-visible, host-coherent counter memory. The shader increments the counter once per fragment invocation while retaining the existing `gl_FragCoord` pixel pattern.
+
+New acceptance conditions:
+1. 1x1 KEEP and 2x2 KEEP must still pass their pixel-signature checks.
+2. Both invocation counts must be nonzero.
+3. 2x2 KEEP must report more than a 2x reduction in fragment invocations relative to 1x1 KEEP.
+4. Each non-KEEP case must match both the expected pixel checksum and the corresponding 1x1/2x2 reference invocation count.
+5. The probe logs the feature gate and every invocation count. If `fragmentStoresAndAtomics` is unavailable, the probe reports SKIP rather than claiming a VRS invocation result.
+
+This instrumentation is diagnostic and may itself affect shader scheduling/coarse-shading eligibility. A missing reduction is therefore not by itself proof that hardware VRS is absent; correlate the reported feature, shader compilation, pixel signature, and invocation counts. If the atomic side effect prevents coarse execution, consider a supported pipeline-statistics query or another independently validated counter.
+
+### Build state and next gate
+
+The probe workflow `.github/workflows/build-vrs-render-probe.yml` is configured to run on changes to both modified files. The final source checkpoint is `7061318e2a431e1a0a05dc2b55c49f4610929636`. At the time of this update, no exact-head Windows probe artifact has been independently inspected, so do not ask the user to download or run this probe yet.
+
+The Android driver package remains the already-audited static-combiner package from source `4fdb9968d407618cfe3f8101d409fd803574bba3`; no driver rebuild is required for this probe-only change. Once the exact-head Windows probe build succeeds, pair that executable with that exact inner Android package, preserving the existing Winlator wrapper/container. Run each case independently via `tools\\run-vrs-cases.cmd` and collect all five per-case logs plus the matching logcat/Wine archive.
+
+No performance gain is claimed. Do not resume game FPS benchmarking until the static combiner cases pass both pixel and invocation comparisons. Never replace or modify the Android system/vendor Vulkan driver or kernel.
