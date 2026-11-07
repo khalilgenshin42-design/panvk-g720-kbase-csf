@@ -6,7 +6,7 @@ echo Each combiner runs in a separate process so one device-lost result cannot s
 for %%C in (keep max min mul replace) do (
   echo.
   echo ===== Running --case=%%C =====
-  "%~dp0panvk-vrs-render-probe.exe" --case=%%C
+  "%~dp0..\panvk-vrs-render-probe.exe" --case=%%C
   if exist panvk_vrs_render_probe.log copy /Y panvk_vrs_render_probe.log panvk_vrs_%%C.log >nul
 )
 echo.
