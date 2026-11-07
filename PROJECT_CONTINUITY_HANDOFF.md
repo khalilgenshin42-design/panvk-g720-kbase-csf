@@ -1,12 +1,12 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-06 12:25 UTC
+Last updated: 2026-11-07 12:15 UTC
 
 ## Authoritative current state — 2026-11-06
 
 This section supersedes older "next steps", queued-CI, and "no code changed" statements in the historical addenda below. Keep the historical record, but use the branch-specific state here when deciding what is current.
 
 - Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file; immediately before the 2026-11-06 monitoring refresh its HEAD was `85df8d35130deb059647ad988236bac848d4f63a`. The latest monitoring addendum below records the current CI/package state.
-- Current task branch: `experiment/g720-performance-audit`. The latest exact CI/package snapshot is branch HEAD `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`; this is a documentation-only audit wording correction on top of the earlier `fb70e9b5cf8b41806da4bc363c4f29d78caeaac8` snapshot. The latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`. Exact-head Android-only and Android-wrapper results are recorded in the 2026-11-06 monitoring addendum below.
+- Current task branch: `experiment/g720-performance-audit`. Current branch HEAD is `d9394de49dc560fe2212a92b71280c372e66b0e6`, a documentation-only `[skip ci]` update on top of the latest CI-tested source snapshot `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`. The latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`. The latest relevant Android-only and wrapper Release/Debugoptimized runs remain `42215758218` and `42215758167`; the 2026-11-07 monitoring addendum records their revalidated artifacts.
 - Separate 4x heap-threshold candidate: `experiment/g720-heap-renew-262k`, HEAD `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`. It changes the compiled default from 65,536 to 262,144; it is not an environment-variable propagation test.
 - Separate descriptor-heap implementation: `experiment/g720-descriptor-heaps`, HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. Its exact-head Android and wrapper builds now pass; the package is independently audited below. No device runtime test has been performed.
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
@@ -5872,3 +5872,41 @@ A closer timestamp-by-timestamp correlation of the first test batch refines the 
 - CSI 1 `0x0f` is `CS_RESOURCE_TERMINATED`; `0x4b` is `CS_INHERIT_FAULT`. Neither should be conflated with the primary `0x58` event.
 
 The targeted static pipeline-only NIR lowering fix remains justified by the second batch and by the repeated difference between the successful KEEP compiler path and the failing native sample-center path.
+
+
+## 2026-11-07 12:15 UTC — scheduled CI and artifact revalidation
+
+### Branch and run discovery
+
+- Re-read this handoff from `docs/project-continuity-handoff-2026-11-03` and the performance audit from `experiment/g720-performance-audit` before checking CI.
+- Active source branch HEAD: `d9394de49dc560fe2212a92b71280c372e66b0e6`. Its commit message is `docs: record 2026-11-06 PanVK artifact monitoring [skip ci]`; the inspected diff changes only `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md`. The latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`.
+- GitHub's branch-filtered Actions listing returned 125 runs. The newest relevant Android-only and wrapper runs are still the 2026-11-06 pair below; no newer run exists on this branch at this monitoring time.
+- Android-only [run 42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218), head `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`, job `127885224447`: `completed / success`. All steps completed successfully: job setup, selected-branch checkout, checkout verification, Python setup, dependency installation, host-tool generation, Android ARM64 libdrm build, Android-only Meson configure, compile/stage, driver/manifest/dependency/staged-file audit, flat package creation, artifact upload, post-steps, and job completion. Pending: 0; failed: 0.
+- Android wrapper [run 42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167), same head:
+  - Release job `127885224388`: `completed / success`. Setup, checkout, memfd_create compatibility patch, Python/dependencies, host-tool generation, Meson configure, compile, artifact upload, post-steps, and completion all passed. Pending: 0; failed: 0.
+  - Debugoptimized job `127885224836`: `completed / success`; the same steps all passed. Pending: 0; failed: 0.
+- No failed job exists in the latest pair, so no failure log diagnosis was needed. The older known runs `41947103034` and `41947103085` are superseded by these newer successful runs.
+
+### Artifact revalidation performed in this monitoring pass
+
+**Android-only artifact — static/package validated**
+
+- Workflow artifact `13501237590`, name `panvk-g720-android-only-experimental-package`, 16,753,940 bytes. GitHub's SHA-256 digest and the independently recomputed downloaded ZIP hash both equal `f5e58163b3caf3f9fa5791dedf56ade82fd87d17dcfdb42722cd846e51ed825a`. Outer ZIP integrity test passed.
+- The embedded import package `PanVK-G720-experimental.zip` is 4,133,089 bytes, SHA-256 `14f7b13ab1735daffd31a0723c1f6d949155e5c6570f1980f98291cb54383e86`; its ZIP integrity test passed. It contains exactly four flat-root files: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+- All embedded SHA256SUMS entries were recomputed and matched: driver `362ad05b978c673b82bf1e66b4ab553f8ea79154c8c5a0a6731b65648359bfb1`; private libdrm `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`; metadata `064c52b79a1d0dc14aab89fa98857d4a905c2167c41d7ee28536b81337b82e81`.
+- `meta.json` identifies `26.3.0-devel-android-kbase-b17b98cef92f`, minimum Android API 30, library `libvulkan_panfrost.so`, and explicitly labels the driver experimental/non-conformant with device/game compatibility unverified.
+- Both packaged ELF files are ELF64 AArch64 with Android API 30 notes. Driver RUNPATH is `$ORIGIN`; its NEEDED private dependency is `libpanvk_drm.so`. The private libdrm has SONAME `libpanvk_drm.so` and depends only on `libc.so`. The outer artifact's `audit/missing-drm-symbols.txt` is empty. The staged ICD manifest is present in the outer artifact at `stage/usr/local/share/vulkan/icd.d/panfrost_icd.aarch64.json`, reports Vulkan API `1.4.354`, and points to the staged PanVK library.
+- Classification: **static/package validated**. This is not device-runtime, Vulkan-conformance, WSI, or game validation.
+
+**Android wrapper artifacts — raw ELF checked, not standalone package validated**
+
+- Release artifact `13502135385`: 4,288,169-byte ZIP; API digest and recomputed SHA-256 `5647fe999a9225123116118eb26ef91f277eef38d4ea2c2a29e98e965d3b0f04`; contains only `libvulkan_panfrost.so`. Extracted ELF SHA-256 `edce8b3dd4fea68ffda7e44622d4c778cdaf0a22fc219cc2b4368335060aa80a`.
+- Debugoptimized artifact `13502061037`: 50,663,624-byte ZIP; API digest and recomputed SHA-256 `fcd0b4d2dcba93c67f3c09dedb6cdc4ab843cd7eef45f34813e90916adbd4159`; contains only `libvulkan_panfrost.so`. Extracted ELF SHA-256 `eebdc6229236e4c91204bd01148409c2b91c71977d1cf71a44a25181b3617477`.
+- Both are ELF64 AArch64/Android API 30. Both RUNPATHs are `$ORIGIN/../../android_stub`. Their NEEDED set includes Android system libraries plus `libdrm.so`, `libxcb.so.1`, `libX11-xcb.so.1`, `libxcb-dri3.so.0`, `libxcb-present.so.0`, `libxcb-xfixes.so.0`, `libxcb-sync.so.1`, `libxcb-randr.so.0`, `libxcb-shm.so.0`, and `libxshmfence.so.1`.
+- Neither wrapper ZIP contains a manifest, checksum file, `android_stub/libdrm.so`, or the X11/XCB dependency closure. Their ELF format and hashes are verified, but the artifacts are not proven self-contained or directly importable as complete driver packages. Runtime dependency resolution remains unverified.
+
+### Current blockers and safety
+
+- The Android-only inner ZIP is the only artifact in this run classified as static/package validated. A controlled Winlator Mali custom-driver runtime test is still required before claiming it loads or works on the Xiaomi 15T.
+- The wrapper Release/Debugoptimized outputs need their intended runtime dependency layout verified before they can be described as complete packages.
+- No source code, build workflow, system/vendor Vulkan driver, or live kernel was changed. No build was triggered. Keep the experimental Android-only package separate in Winlator; retain the stock System Driver as fallback.
