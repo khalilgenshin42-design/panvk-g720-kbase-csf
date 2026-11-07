@@ -1001,6 +1001,19 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
       /* An error must take precedence over a completion marker in the same
        * cache line; otherwise a final seqno write could mask a CS fault. */
       if (cell->error) {
+         /*
+          * The GPU-side completion cell records the CS error before the
+          * kernel notification is necessarily consumed. Preserve the ring
+          * and progress state, then drain any queued Kbase notification so
+          * the underlying CS exception/status is not hidden by this latch.
+          * This path is cold and only runs after a queue error.
+          */
+         kbase_log_subqueue_state(queue, subqueue, "CS error");
+
+         int event_status = kbase_kmod_csf_process_events(dev->kmod.dev);
+         mesa_logi("kbase: CSF notification drain after subqueue error: %d",
+                   event_status);
+
          mesa_loge("kbase: CS error 0x%x on subqueue %u", cell->error,
                    subqueue);
          KBASE_PROFILE_WAIT_RETURN(
