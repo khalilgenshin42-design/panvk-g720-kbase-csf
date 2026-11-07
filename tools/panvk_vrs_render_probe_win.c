@@ -948,6 +948,9 @@ main(int argc, char **argv)
 
          if (probe_case == CASE_KEEP) {
             passed = basic && invocation_reduction;
+         } else if (!fsr_props.fragmentShadingRateNonTrivialCombinerOps) {
+            LOG("SKIP: nontrivial combiner operations are not advertised by this driver\\n");
+            passed = basic && invocation_reduction;
          } else if (basic) {
             VkFragmentShadingRateCombinerOpKHR op0 = keep;
             const char *label = NULL;
