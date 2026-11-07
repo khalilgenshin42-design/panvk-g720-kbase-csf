@@ -89,6 +89,7 @@ memory_type(const VkPhysicalDeviceMemoryProperties *props, uint32_t bits,
    PFN_vkCmdBeginRenderPass cmd_begin_render_pass = LOAD_D(CmdBeginRenderPass); \
    PFN_vkCmdEndRenderPass cmd_end_render_pass = LOAD_D(CmdEndRenderPass); \
    PFN_vkCmdBindPipeline cmd_bind_pipeline = LOAD_D(CmdBindPipeline); \
+   PFN_vkCmdBindDescriptorSets cmd_bind_descriptor_sets = LOAD_D(CmdBindDescriptorSets); \
    PFN_vkCmdDraw cmd_draw = LOAD_D(CmdDraw); \
    PFN_vkCmdCopyImageToBuffer cmd_copy_image_to_buffer = LOAD_D(CmdCopyImageToBuffer); \
    PFN_vkCmdPipelineBarrier cmd_pipeline_barrier = LOAD_D(CmdPipelineBarrier); \
@@ -105,7 +106,9 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
             VkRenderPass render_pass, VkPipelineLayout layout, VkShaderModule vs, VkShaderModule fs,
             VkFragmentShadingRateCombinerOpKHR op0,
             VkFragmentShadingRateCombinerOpKHR op1,
-            VkExtent2D rate, uint8_t *pixels)
+            VkExtent2D rate, VkDescriptorSet invocation_set,
+            VkBuffer invocation_buffer, VkDeviceMemory invocation_mem,
+            uint32_t *invocations, uint8_t *pixels)
 {
    DECLARE_DEVICE_FUNCS;
    if (!destroy_device || !get_device_queue || !create_image ||
@@ -115,7 +118,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
        !create_pipeline_layout || !create_graphics_pipelines ||
        !create_command_pool || !allocate_command_buffers ||
        !begin_command_buffer || !end_command_buffer || !cmd_begin_render_pass ||
-       !cmd_end_render_pass || !cmd_bind_pipeline || !cmd_draw ||
+       !cmd_end_render_pass || !cmd_bind_pipeline || !cmd_bind_descriptor_sets || !cmd_draw ||
        !cmd_copy_image_to_buffer || !cmd_pipeline_barrier || !queue_submit ||
        !create_fence || !wait_for_fences)
       return 0;
@@ -354,8 +357,24 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    };
    cmd_begin_render_pass(cb, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
    cmd_bind_pipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+   cmd_bind_descriptor_sets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, layout,
+                            0, 1, &invocation_set, 0, NULL);
    cmd_draw(cb, 3, 1, 0, 0);
    cmd_end_render_pass(cb);
+
+   VkBufferMemoryBarrier counter_barrier = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .buffer = invocation_buffer,
+      .offset = 0,
+      .size = sizeof(uint32_t),
+   };
+   cmd_pipeline_barrier(cb, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        VK_PIPELINE_STAGE_HOST_BIT, 0, 0, NULL, 1,
+                        &counter_barrier, 0, NULL);
 
    VkBufferImageCopy copy = {
       .bufferOffset = 0,
@@ -385,6 +404,16 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    LOG("    stage: vkEndCommandBuffer result=%d\n", step_result);
    if (step_result != VK_SUCCESS)
       goto done;
+
+   /* Reset the host-coherent invocation counter before submitting this draw. */
+   void *counter_reset = NULL;
+   step_result = map_memory(device, invocation_mem, 0, sizeof(uint32_t), 0,
+                            &counter_reset);
+   LOG("    stage: map invocation counter for reset result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
+      goto done;
+   *(uint32_t *)counter_reset = 0;
+   unmap_memory(device, invocation_mem);
 
    VkFenceCreateInfo fence_info = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
    if (create_fence(device, &fence_info, NULL, &fence) != VK_SUCCESS)
@@ -417,6 +446,15 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       goto done;
    memcpy(pixels, mapped, IMAGE_BYTES);
    unmap_memory(device, buffer_mem);
+
+   void *counter_result = NULL;
+   step_result = map_memory(device, invocation_mem, 0, sizeof(uint32_t), 0,
+                            &counter_result);
+   LOG("    stage: map invocation counter for readback result=%d\n", step_result);
+   if (step_result != VK_SUCCESS)
+      goto done;
+   *invocations = *(const uint32_t *)counter_result;
+   unmap_memory(device, invocation_mem);
    ok = 1;
 
 done:
@@ -622,9 +660,15 @@ main(int argc, char **argv)
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR,
          .pipelineFragmentShadingRate = VK_TRUE,
       };
+      if (!features.features.fragmentStoresAndAtomics) {
+         LOG("SKIP: fragmentStoresAndAtomics is not supported; invocation counter unavailable\n");
+         continue;
+      }
+      LOG("fragmentStoresAndAtomics=1 (enabled for SSBO atomic counter)\n");
       VkPhysicalDeviceFeatures2 enable_features = {
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
          .pNext = &enable_fsr,
+         .features = {.fragmentStoresAndAtomics = VK_TRUE},
       };
       const char *extensions[] = {VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME};
       VkDeviceCreateInfo dci = {
@@ -642,6 +686,18 @@ main(int argc, char **argv)
       VkPhysicalDeviceMemoryProperties mem_props;
       get_memory(pds[d], &mem_props);
       PFN_vkGetDeviceQueue get_queue = (PFN_vkGetDeviceQueue)gdpa(device, "vkGetDeviceQueue");
+      PFN_vkCreateBuffer create_buffer = LOAD_D(CreateBuffer);
+      PFN_vkDestroyBuffer destroy_buffer = LOAD_D(DestroyBuffer);
+      PFN_vkGetBufferMemoryRequirements get_buffer_memory_requirements = LOAD_D(GetBufferMemoryRequirements);
+      PFN_vkAllocateMemory allocate_memory = LOAD_D(AllocateMemory);
+      PFN_vkFreeMemory free_memory = LOAD_D(FreeMemory);
+      PFN_vkBindBufferMemory bind_buffer_memory = LOAD_D(BindBufferMemory);
+      PFN_vkCreateDescriptorSetLayout create_descriptor_set_layout = LOAD_D(CreateDescriptorSetLayout);
+      PFN_vkDestroyDescriptorSetLayout destroy_descriptor_set_layout = LOAD_D(DestroyDescriptorSetLayout);
+      PFN_vkCreateDescriptorPool create_descriptor_pool = LOAD_D(CreateDescriptorPool);
+      PFN_vkDestroyDescriptorPool destroy_descriptor_pool = LOAD_D(DestroyDescriptorPool);
+      PFN_vkAllocateDescriptorSets allocate_descriptor_sets = LOAD_D(AllocateDescriptorSets);
+      PFN_vkUpdateDescriptorSets update_descriptor_sets = LOAD_D(UpdateDescriptorSets);
       PFN_vkCreateRenderPass create_rp = (PFN_vkCreateRenderPass)gdpa(device, "vkCreateRenderPass");
       PFN_vkCreateShaderModule create_sm = (PFN_vkCreateShaderModule)gdpa(device, "vkCreateShaderModule");
       PFN_vkCreatePipelineLayout create_pl = (PFN_vkCreatePipelineLayout)gdpa(device, "vkCreatePipelineLayout");
@@ -649,7 +705,12 @@ main(int argc, char **argv)
       PFN_vkDestroyPipelineLayout destroy_pl = (PFN_vkDestroyPipelineLayout)gdpa(device, "vkDestroyPipelineLayout");
       PFN_vkDestroyRenderPass destroy_rp = (PFN_vkDestroyRenderPass)gdpa(device, "vkDestroyRenderPass");
       PFN_vkDestroyDevice destroy_dev = (PFN_vkDestroyDevice)gdpa(device, "vkDestroyDevice");
-      if (!get_queue || !create_rp || !create_sm || !create_pl ||
+      if (!get_queue || !create_buffer || !destroy_buffer ||
+          !get_buffer_memory_requirements || !allocate_memory || !free_memory ||
+          !bind_buffer_memory || !create_descriptor_set_layout ||
+          !destroy_descriptor_set_layout || !create_descriptor_pool ||
+          !destroy_descriptor_pool || !allocate_descriptor_sets ||
+          !update_descriptor_sets || !create_rp || !create_sm || !create_pl ||
           !destroy_sm || !destroy_pl || !destroy_rp || !destroy_dev) {
          LOG("FAIL: render setup entrypoint missing\n");
          if (destroy_dev) destroy_dev(device, NULL);
@@ -657,6 +718,117 @@ main(int argc, char **argv)
       }
       VkQueue queue = VK_NULL_HANDLE;
       get_queue(device, qf, 0, &queue);
+
+      VkDescriptorSetLayoutBinding counter_binding = {
+         .binding = 0,
+         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+         .descriptorCount = 1,
+         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+      };
+      VkDescriptorSetLayoutCreateInfo dslci = {
+         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+         .bindingCount = 1,
+         .pBindings = &counter_binding,
+      };
+      VkDescriptorSetLayout invocation_layout = VK_NULL_HANDLE;
+      result = create_descriptor_set_layout(device, &dslci, NULL, &invocation_layout);
+      LOG("vkCreateDescriptorSetLayout(invocation counter)=%d\n", result);
+      if (result != VK_SUCCESS) { destroy_dev(device, NULL); continue; }
+
+      VkDescriptorPoolSize pool_size = {
+         .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+         .descriptorCount = 1,
+      };
+      VkDescriptorPoolCreateInfo dpci = {
+         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+         .maxSets = 1,
+         .poolSizeCount = 1,
+         .pPoolSizes = &pool_size,
+      };
+      VkDescriptorPool invocation_pool = VK_NULL_HANDLE;
+      result = create_descriptor_pool(device, &dpci, NULL, &invocation_pool);
+      LOG("vkCreateDescriptorPool(invocation counter)=%d\n", result);
+      if (result != VK_SUCCESS) {
+         destroy_descriptor_set_layout(device, invocation_layout, NULL);
+         destroy_dev(device, NULL); continue;
+      }
+
+      VkDescriptorSetAllocateInfo dsai = {
+         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+         .descriptorPool = invocation_pool,
+         .descriptorSetCount = 1,
+         .pSetLayouts = &invocation_layout,
+      };
+      VkDescriptorSet invocation_set = VK_NULL_HANDLE;
+      result = allocate_descriptor_sets(device, &dsai, &invocation_set);
+      LOG("vkAllocateDescriptorSets(invocation counter)=%d\n", result);
+      if (result != VK_SUCCESS) {
+         destroy_descriptor_pool(device, invocation_pool, NULL);
+         destroy_descriptor_set_layout(device, invocation_layout, NULL);
+         destroy_dev(device, NULL); continue;
+      }
+
+      VkBufferCreateInfo counter_buffer_info = {
+         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+         .size = sizeof(uint32_t),
+         .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      };
+      VkBuffer invocation_buffer = VK_NULL_HANDLE;
+      result = create_buffer(device, &counter_buffer_info, NULL, &invocation_buffer);
+      LOG("vkCreateBuffer(invocation counter)=%d\n", result);
+      if (result != VK_SUCCESS) {
+         destroy_descriptor_pool(device, invocation_pool, NULL);
+         destroy_descriptor_set_layout(device, invocation_layout, NULL);
+         destroy_dev(device, NULL); continue;
+      }
+
+      VkMemoryRequirements counter_req;
+      get_buffer_memory_requirements(device, invocation_buffer, &counter_req);
+      uint32_t counter_type = memory_type(
+         &mem_props, counter_req.memoryTypeBits,
+         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+      if (counter_type == UINT32_MAX) {
+         LOG("SKIP: no host-visible coherent memory for invocation counter\n");
+         destroy_buffer(device, invocation_buffer, NULL);
+         destroy_descriptor_pool(device, invocation_pool, NULL);
+         destroy_descriptor_set_layout(device, invocation_layout, NULL);
+         destroy_dev(device, NULL); continue;
+      }
+      VkMemoryAllocateInfo counter_alloc = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+         .allocationSize = counter_req.size,
+         .memoryTypeIndex = counter_type,
+      };
+      VkDeviceMemory invocation_mem = VK_NULL_HANDLE;
+      result = allocate_memory(device, &counter_alloc, NULL, &invocation_mem);
+      LOG("vkAllocateMemory(invocation counter)=%d\n", result);
+      if (result == VK_SUCCESS)
+         result = bind_buffer_memory(device, invocation_buffer, invocation_mem, 0);
+      LOG("vkBindBufferMemory(invocation counter)=%d\n", result);
+      if (result != VK_SUCCESS) {
+         if (invocation_mem) free_memory(device, invocation_mem, NULL);
+         destroy_buffer(device, invocation_buffer, NULL);
+         destroy_descriptor_pool(device, invocation_pool, NULL);
+         destroy_descriptor_set_layout(device, invocation_layout, NULL);
+         destroy_dev(device, NULL); continue;
+      }
+
+      VkDescriptorBufferInfo counter_desc = {
+         .buffer = invocation_buffer,
+         .offset = 0,
+         .range = sizeof(uint32_t),
+      };
+      VkWriteDescriptorSet counter_write = {
+         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = invocation_set,
+         .dstBinding = 0,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+         .pBufferInfo = &counter_desc,
+      };
+      update_descriptor_sets(device, 1, &counter_write, 0, NULL);
 
       VkAttachmentDescription attachment = {
          .format = format, .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -695,7 +867,11 @@ main(int argc, char **argv)
       result=create_sm(device,&smv,NULL,&vs);
       if(result==VK_SUCCESS)result=create_sm(device,&smf,NULL,&fs);
       VkPipelineLayout pl=VK_NULL_HANDLE;
-      VkPipelineLayoutCreateInfo plci={.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+      VkPipelineLayoutCreateInfo plci = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+         .setLayoutCount = 1,
+         .pSetLayouts = &invocation_layout,
+      };
       if(result==VK_SUCCESS)result=create_pl(device,&plci,NULL,&pl);
       LOG("shader modules/pipeline layout=%d\n",result);
       if(result!=VK_SUCCESS){destroy_dev(device,NULL);continue;}
@@ -709,9 +885,12 @@ main(int argc, char **argv)
       } else {
          const VkFragmentShadingRateCombinerOpKHR keep =
             VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+         uint32_t invocations_1x1 = 0, invocations_2x2 = 0, invocations_target = 0;
          int control_ok = render_rate(device, &mem_props, gdpa, queue, qf,
                                       format, rp, pl, vs, fs, keep, keep,
-                                      (VkExtent2D){1,1}, image_1x1);
+                                      (VkExtent2D){1,1}, invocation_set,
+                                      invocation_buffer, invocation_mem,
+                                      &invocations_1x1, image_1x1);
          LOG("1x1 KEEP control submit/fence/readback=%s\n",
              control_ok ? "PASS" : "FAIL");
          if (control_ok) {
@@ -722,7 +901,9 @@ main(int argc, char **argv)
 
          int vrs_ok = control_ok &&
             render_rate(device, &mem_props, gdpa, queue, qf, format, rp, pl,
-                        vs, fs, keep, keep, (VkExtent2D){2,2}, image_2x2);
+                        vs, fs, keep, keep, (VkExtent2D){2,2}, invocation_set,
+                        invocation_buffer, invocation_mem, &invocations_2x2,
+                        image_2x2);
          LOG("2x2 KEEP submit/fence/readback=%s\n",
              vrs_ok ? "PASS" : "FAIL");
          uint64_t hash_1x1 = control_ok ? checksum(image_1x1) : 0;
@@ -738,9 +919,17 @@ main(int argc, char **argv)
                      equal_2x2 > equal_1x1 + W * H / 2;
          LOG("2x2 KEEP pixel-signature=%s (control=%u vrs=%u)\n",
              basic ? "PASS" : "FAIL", equal_1x1, equal_2x2);
+         LOG("1x1 KEEP fragment-invocations=%u\n", invocations_1x1);
+         LOG("2x2 KEEP fragment-invocations=%u\n", invocations_2x2);
+         int invocation_reduction = control_ok && vrs_ok &&
+                                    invocations_1x1 > 0 && invocations_2x2 > 0 &&
+                                    invocations_2x2 * 2u < invocations_1x1;
+         LOG("2x2 KEEP invocation-reduction=%s (1x1=%u 2x2=%u; requires >2x reduction)\n",
+             invocation_reduction ? "PASS" : "FAIL",
+             invocations_1x1, invocations_2x2);
 
          if (probe_case == CASE_KEEP) {
-            passed = basic;
+            passed = basic && invocation_reduction;
          } else if (basic) {
             VkFragmentShadingRateCombinerOpKHR op0 = keep;
             const char *label = NULL;
@@ -777,7 +966,9 @@ main(int argc, char **argv)
                 (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR);
             int target_ok = render_rate(device, &mem_props, gdpa, queue, qf,
                                         format, rp, pl, vs, fs, op0, keep,
-                                        (VkExtent2D){2,2}, image_target);
+                                        (VkExtent2D){2,2}, invocation_set,
+                                        invocation_buffer, invocation_mem,
+                                        &invocations_target, image_target);
             LOG("%s submit/fence/readback=%s\n",
                 label, target_ok ? "PASS" : "FAIL");
             if (target_ok) {
@@ -785,10 +976,18 @@ main(int argc, char **argv)
                uint32_t target_equal = equal_neighbors(image_target);
                LOG("%s checksum=0x%016llx equal-neighbors=%u\n",
                    label, (unsigned long long)target_hash, target_equal);
-               passed = target_hash == expected_hash;
+               uint32_t expected_invocations =
+                  expected_hash == hash_2x2 ? invocations_2x2 : invocations_1x1;
+               int target_pixel_ok = target_hash == expected_hash;
+               int target_invocations_ok = invocations_target == expected_invocations;
+               LOG("%s fragment-invocations=%u expected=%u\n",
+                   label, invocations_target, expected_invocations);
                LOG("%s pixel comparison=%s expected-checksum=0x%016llx\n",
-                   label, passed ? "PASS" : "FAIL",
+                   label, target_pixel_ok ? "PASS" : "FAIL",
                    (unsigned long long)expected_hash);
+               LOG("%s invocation comparison=%s\n",
+                   label, target_invocations_ok ? "PASS" : "FAIL");
+               passed = invocation_reduction && target_pixel_ok && target_invocations_ok;
             }
          }
       }
@@ -798,6 +997,10 @@ main(int argc, char **argv)
       destroy_sm(device,vs,NULL);destroy_sm(device,fs,NULL);
       destroy_pl(device,pl,NULL);
       destroy_rp(device,rp,NULL);
+      destroy_descriptor_pool(device, invocation_pool, NULL);
+      destroy_descriptor_set_layout(device, invocation_layout, NULL);
+      destroy_buffer(device, invocation_buffer, NULL);
+      free_memory(device, invocation_mem, NULL);
       destroy_dev(device,NULL);
    }
    free(pds);
