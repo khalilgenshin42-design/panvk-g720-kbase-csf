@@ -859,7 +859,14 @@ main(int argc, char **argv)
       VkRenderPass rp = VK_NULL_HANDLE;
       result = create_rp(device, &rpci, NULL, &rp);
       LOG("vkCreateRenderPass=%d\n", result);
-      if (result != VK_SUCCESS) { destroy_dev(device, NULL); continue; }
+      if (result != VK_SUCCESS) {
+         destroy_descriptor_pool(device, invocation_pool, NULL);
+         destroy_descriptor_set_layout(device, invocation_layout, NULL);
+         destroy_buffer(device, invocation_buffer, NULL);
+         free_memory(device, invocation_mem, NULL);
+         destroy_dev(device, NULL);
+         continue;
+      }
 
       VkShaderModuleCreateInfo smv={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_vert_spv),.pCode=vrs_vert_spv};
       VkShaderModuleCreateInfo smf={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_frag_spv),.pCode=vrs_frag_spv};
@@ -874,7 +881,18 @@ main(int argc, char **argv)
       };
       if(result==VK_SUCCESS)result=create_pl(device,&plci,NULL,&pl);
       LOG("shader modules/pipeline layout=%d\n",result);
-      if(result!=VK_SUCCESS){destroy_dev(device,NULL);continue;}
+      if (result != VK_SUCCESS) {
+         if (pl) destroy_pl(device, pl, NULL);
+         if (fs) destroy_sm(device, fs, NULL);
+         if (vs) destroy_sm(device, vs, NULL);
+         destroy_rp(device, rp, NULL);
+         destroy_descriptor_pool(device, invocation_pool, NULL);
+         destroy_descriptor_set_layout(device, invocation_layout, NULL);
+         destroy_buffer(device, invocation_buffer, NULL);
+         free_memory(device, invocation_mem, NULL);
+         destroy_dev(device, NULL);
+         continue;
+      }
 
       LOG("selected render case: %s\n", case_name);
       uint8_t *image_1x1 = malloc(IMAGE_BYTES);
