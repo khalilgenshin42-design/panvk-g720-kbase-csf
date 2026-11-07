@@ -5910,3 +5910,60 @@ The targeted static pipeline-only NIR lowering fix remains justified by the seco
 - The Android-only inner ZIP is the only artifact in this run classified as static/package validated. A controlled Winlator Mali custom-driver runtime test is still required before claiming it loads or works on the Xiaomi 15T.
 - The wrapper Release/Debugoptimized outputs need their intended runtime dependency layout verified before they can be described as complete packages.
 - No source code, build workflow, system/vendor Vulkan driver, or live kernel was changed. No build was triggered. Keep the experimental Android-only package separate in Winlator; retain the stock System Driver as fallback.
+
+
+## 2026-11-07 13:33 UTC — performance-audit revalidation
+
+The performance-audit branch and package were rechecked after the 12:20 UTC
+monitoring corrections.
+
+- At the start of this pass, `experiment/g720-performance-audit` HEAD was
+  `5ebf10a4792126a0cb85ec78e380e50dcc063794`. Its latest driver-source
+  commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`.
+  Comparing those commits shows only documentation paths changed; there is
+  no newer source or workflow change.
+- The latest exact-source CI pair remains Android-only run
+  `42215758218` (job `127885224447`) and wrapper run `42215758167`
+  (Release `127885224388`, Debugoptimized `127885224836`). Every job and
+  step was rechecked and completed successfully. No newer relevant run was
+  found; no build was triggered.
+- Descriptor failure classification was re-read: overflow, descriptor-set
+  slot/heap capacity, and VMA allocation failure are counted separately;
+  aggregate count and Vulkan return behavior are preserved.
+- The heap-threshold log reports only the effective threshold. A 262,144 log
+  from a binary compiled with that default does not establish environment
+  propagation. The 65,536-default package remains the only valid test binary
+  for proving Winlator passes the override.
+
+### Package file revalidation
+
+The local `PanVK-G720-65k-env-override-test.zip` was checked again:
+SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`.
+ZIP integrity and all embedded member hashes pass. It contains exactly
+`meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and
+`SHA256SUMS`; both libraries are ELF64 AArch64, the driver uses RUNPATH
+`$ORIGIN` and private `libpanvk_drm.so`, and the private libdrm depends
+only on `libc.so`. This is static/package validation only, not device
+runtime validation.
+
+### Device evidence and next action
+
+No new Tomb Raider log archive, benchmark result, or runtime observation was
+supplied in this pass. The latest clean documented comparison remains
+9.0 / 17.6 / 13.5 FPS at 65,536 versus the single 7.8 / 18.9 / 13.9 FPS
+262,144-compiled-default candidate; it is inconclusive and not an environment
+override test. The earlier 7.7 / 19.7 / 13.6 capture was instrumented.
+
+Next: import only the verified 65K-default ZIP as the separate Winlator custom
+driver. Run the matched Tomb Raider scene once with
+`PANVK_KBASE_HEAP_RENEW_WORK` absent and require the startup log to report
+65,536. Restart the process, set exactly
+`PANVK_KBASE_HEAP_RENEW_WORK=262144`, and require the log to report 262,144.
+Keep all profiling variables unset for both FPS runs. If the second log
+reports 65,536 or is missing, the override was not demonstrated and the
+comparison is invalid. Preserve the stock System Driver as fallback.
+
+Audit record: `experiment/g720-performance-audit` documentation update
+`a8a6e5b904de570dc9984d45b5b0890c7ad98a0d`. No driver source, Vulkan
+semantics, allocator policy, queue sizing, shader scheduling, Kbase ABI,
+kernel, or Android system/vendor driver was changed. No FPS gain is claimed.
