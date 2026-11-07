@@ -124,7 +124,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    int ok = 0;
    int submitted = 0;
 
-   LOG("  creating %ux%u pipeline and offscreen target\\n", rate.width, rate.height);
+   LOG("  creating %ux%u pipeline and offscreen target\n", rate.width, rate.height);
    VkImageCreateInfo image_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
@@ -470,7 +470,7 @@ main(int argc, char **argv)
    else if (!strcmp(case_name, "--case=replace"))
       probe_case = CASE_REPLACE;
    else {
-      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace\\n", argv[0]);
+      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace\n", argv[0]);
       return 2;
    }
    log_file = fopen("panvk_vrs_render_probe.log", "w");
@@ -687,22 +687,22 @@ main(int argc, char **argv)
       LOG("shader modules/pipeline layout=%d\n",result);
       if(result!=VK_SUCCESS){destroy_dev(device,NULL);continue;}
 
-      LOG("selected render case: %s\\n", case_name);
+      LOG("selected render case: %s\n", case_name);
       uint8_t *image_1x1 = malloc(IMAGE_BYTES);
       uint8_t *image_2x2 = malloc(IMAGE_BYTES);
       uint8_t *image_target = malloc(IMAGE_BYTES);
       if (!image_1x1 || !image_2x2 || !image_target) {
-         LOG("FAIL: host allocation\\n");
+         LOG("FAIL: host allocation\n");
       } else {
          const VkFragmentShadingRateCombinerOpKHR keep =
             VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
          int control_ok = render_rate(device, &mem_props, gdpa, queue, qf,
                                       format, rp, pl, vs, fs, keep, keep,
                                       (VkExtent2D){1,1}, image_1x1);
-         LOG("1x1 KEEP control submit/fence/readback=%s\\n",
+         LOG("1x1 KEEP control submit/fence/readback=%s\n",
              control_ok ? "PASS" : "FAIL");
          if (control_ok) {
-            LOG("1x1 KEEP checksum=0x%016llx equal-neighbors=%u\\n",
+            LOG("1x1 KEEP checksum=0x%016llx equal-neighbors=%u\n",
                 (unsigned long long)checksum(image_1x1),
                 equal_neighbors(image_1x1));
          }
@@ -710,20 +710,20 @@ main(int argc, char **argv)
          int vrs_ok = control_ok &&
             render_rate(device, &mem_props, gdpa, queue, qf, format, rp, pl,
                         vs, fs, keep, keep, (VkExtent2D){2,2}, image_2x2);
-         LOG("2x2 KEEP submit/fence/readback=%s\\n",
+         LOG("2x2 KEEP submit/fence/readback=%s\n",
              vrs_ok ? "PASS" : "FAIL");
          uint64_t hash_1x1 = control_ok ? checksum(image_1x1) : 0;
          uint64_t hash_2x2 = vrs_ok ? checksum(image_2x2) : 0;
          uint32_t equal_1x1 = control_ok ? equal_neighbors(image_1x1) : 0;
          uint32_t equal_2x2 = vrs_ok ? equal_neighbors(image_2x2) : 0;
          if (vrs_ok) {
-            LOG("2x2 KEEP checksum=0x%016llx equal-neighbors=%u\\n",
+            LOG("2x2 KEEP checksum=0x%016llx equal-neighbors=%u\n",
                 (unsigned long long)hash_2x2, equal_2x2);
          }
          int basic = control_ok && vrs_ok &&
                      hash_1x1 != hash_2x2 &&
                      equal_2x2 > equal_1x1 + W * H / 2;
-         LOG("2x2 KEEP pixel-signature=%s (control=%u vrs=%u)\\n",
+         LOG("2x2 KEEP pixel-signature=%s (control=%u vrs=%u)\n",
              basic ? "PASS" : "FAIL", equal_1x1, equal_2x2);
 
          if (probe_case == CASE_KEEP) {
@@ -757,19 +757,19 @@ main(int argc, char **argv)
                break;
             }
 
-            LOG("starting isolated combiner case: %s\\n", label);
+            LOG("starting isolated combiner case: %s\n", label);
             int target_ok = render_rate(device, &mem_props, gdpa, queue, qf,
                                         format, rp, pl, vs, fs, op0, keep,
                                         (VkExtent2D){2,2}, image_target);
-            LOG("%s submit/fence/readback=%s\\n",
+            LOG("%s submit/fence/readback=%s\n",
                 label, target_ok ? "PASS" : "FAIL");
             if (target_ok) {
                uint64_t target_hash = checksum(image_target);
                uint32_t target_equal = equal_neighbors(image_target);
-               LOG("%s checksum=0x%016llx equal-neighbors=%u\\n",
+               LOG("%s checksum=0x%016llx equal-neighbors=%u\n",
                    label, (unsigned long long)target_hash, target_equal);
                passed = target_hash == expected_hash;
-               LOG("%s pixel comparison=%s expected-checksum=0x%016llx\\n",
+               LOG("%s pixel comparison=%s expected-checksum=0x%016llx\n",
                    label, passed ? "PASS" : "FAIL",
                    (unsigned long long)expected_hash);
             }
