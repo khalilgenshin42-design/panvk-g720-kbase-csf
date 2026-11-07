@@ -16,6 +16,13 @@
 #include <vulkan/vulkan.h>
 #include "vrs_probe_spv.h"
 
+/* Fail the probe build if its Vulkan-Headers enum ABI is not the spec ABI. */
+_Static_assert(VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR == 0, "Vulkan FSR KEEP enum mismatch");
+_Static_assert(VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR == 1, "Vulkan FSR REPLACE enum mismatch");
+_Static_assert(VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR == 2, "Vulkan FSR MIN enum mismatch");
+_Static_assert(VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR == 3, "Vulkan FSR MAX enum mismatch");
+_Static_assert(VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR == 4, "Vulkan FSR MUL enum mismatch");
+
 #define W 64u
 #define H 64u
 #define IMAGE_BYTES (W * H * 4u)
@@ -476,6 +483,12 @@ main(int argc, char **argv)
    log_file = fopen("panvk_vrs_render_probe.log", "w");
    if (!log_file) return 2;
    LOG("PanVK VRS render probe: 1x1 control vs 2x2 pipeline rate\n");
+   LOG("Vulkan FSR enum ABI: KEEP=%u REPLACE=%u MIN=%u MAX=%u MUL=%u\\n",
+       (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
+       (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR,
+       (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR,
+       (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR,
+       (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR);
 
    HMODULE loader = LoadLibraryA("vulkan-1.dll");
    if (!loader) {
@@ -757,7 +770,11 @@ main(int argc, char **argv)
                break;
             }
 
-            LOG("starting isolated combiner case: %s\n", label);
+            LOG("starting isolated combiner case: %s\\n", label);
+            LOG("Vulkan FSR requested op0=%u op1=%u (MAX=%u MUL=%u)\\n",
+                (unsigned)op0, (unsigned)keep,
+                (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR,
+                (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR);
             int target_ok = render_rate(device, &mem_props, gdpa, queue, qf,
                                         format, rp, pl, vs, fs, op0, keep,
                                         (VkExtent2D){2,2}, image_target);
