@@ -1080,3 +1080,13 @@ The next concrete gate remains a separate Winlator Mali import/runtime test of
 the Android-only flat package. Do not treat the wrapper ZIPs as complete
 packages until their dependency layout is proven. No system/vendor driver or
 live kernel modification is permitted.
+
+
+### Documentation commit produced by this monitoring pass
+
+This 2026-11-07 monitoring record was committed as
+`960815737d61ad45af5b22fdc4a97b5f16f94ba9` with message
+`docs: record 2026-11-07 PanVK CI and artifact monitoring [skip ci]`.
+It is the current branch HEAD after this update and changes documentation only.
+No new build was triggered; the latest CI-tested code snapshot remains
+`b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`.
