@@ -1091,3 +1091,90 @@ monitoring pass are also documentation-only and use `[skip ci]`. No source
 code or workflow file changed and no new build was triggered; the latest
 CI-tested code snapshot remains
 `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`.
+
+
+## 2026-11-07 13:33 UTC — performance-audit revalidation
+
+This pass re-read the canonical handoff and this audit before checking the live
+branch, source, Actions jobs, package file, and available Tomb Raider captures.
+
+### Branch and source state
+
+- Performance-audit branch HEAD: `5ebf10a4792126a0cb85ec78e380e50dcc063794`
+  (`docs: clarify PanVK monitoring snapshot chronology [skip ci]`).
+- Latest driver-source commit remains
+  `a2e5ac142b4f0df71cb28204ece4337bace046de`
+  (`panvk: fix descriptor profile log call`).
+- GitHub compare from the latest source commit to branch HEAD reports 49
+  documentation commits ahead and zero behind. Its only changed paths are
+  `docs/G720_CAPABILITY_MATRIX_2026-11-05.md` and this performance audit;
+  no driver source or workflow file has changed since the source commit.
+- Re-read of `panvk_vX_descriptor_set.c` confirms the opt-in failure split:
+  overflow (variable-count arithmetic/final uint32 bound),
+  capacity (no free set slot or insufficient descriptor heap free bytes),
+  and VMA (descriptor VMA allocation returns zero). The aggregate failure
+  counter is retained. The original Vulkan return codes and allocation policy
+  are unchanged.
+- Re-read of `panvk_vX_gpu_queue.c` confirms the effective threshold is
+  obtained through `debug_get_num_option("PANVK_KBASE_HEAP_RENEW_WORK", 65536)`
+  and logged once. The log reports the effective value, not whether it came
+  from the environment or the compiled default. The branch's 65,536-default
+  package is therefore still required to prove environment propagation.
+
+### CI revalidation
+
+No newer relevant workflow run appeared after the exact-head 2026-11-06 pair:
+
+- Android-only run
+  [42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218),
+  job `127885224447`: completed SUCCESS. Checkout, dependencies, host tools,
+  Android ARM64 libdrm, configure, compile/stage, ELF/dependency audit,
+  flat package creation, and artifact upload all completed successfully.
+- Wrapper run
+  [42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167):
+  Release job `127885224388` and Debugoptimized job `127885224836` both
+  completed SUCCESS; all steps completed successfully.
+- These runs test source snapshot
+  `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`. Later branch commits are
+  documentation-only. No build was triggered in this revalidation.
+
+### Local delivery-file revalidation
+
+The current delivery file
+`PanVK-G720-65k-env-override-test.zip` was independently checked in the
+working container:
+
+- SHA-256:
+  `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`.
+- ZIP integrity passes; it contains exactly `meta.json`,
+  `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`.
+- All three embedded SHA256SUMS entries pass.
+- Metadata version is
+  `26.3.0-devel-android-kbase-fb70e9b5cf8b`, minimum Android API 30.
+- Driver and private libdrm are ELF64 AArch64. Driver RUNPATH is
+  `$ORIGIN`, NEEDED includes private `libpanvk_drm.so`; private libdrm
+  depends only on `libc.so`.
+
+This confirms archive integrity and static packaging only; it does not prove
+Winlator import, environment-variable propagation, device runtime stability,
+Vulkan conformance, or game performance.
+
+### Benchmark and next gate
+
+No new Tomb Raider benchmark log or FPS result was supplied in this pass.
+The only local Tomb Raider archive remains
+`TombRaider_logs_2026-11-05_02-03-50.zip`; no new measurement supersedes the
+documented clean 65,536 result (9.0 / 17.6 / 13.5 FPS) or the single
+262,144-compiled-default candidate (7.8 / 18.9 / 13.9 FPS). The latter is
+not an environment-variable propagation test and remains inconclusive.
+
+The next device action is unchanged: use only the verified 65K-default package,
+run matched Tomb Raider tests with the variable absent and then set to exactly
+`PANVK_KBASE_HEAP_RENEW_WORK=262144`, restarting the process each time.
+Require startup logs of 65,536 and 262,144 respectively. Leave all profiling
+variables unset in both FPS runs. If the override log remains 65,536 or is
+missing, stop and classify the override test as invalid.
+
+No source, allocator behavior, queue sizing, shader scheduling, Kbase ABI,
+kernel, or Android system/vendor driver was changed in this pass. No FPS gain
+is claimed.
