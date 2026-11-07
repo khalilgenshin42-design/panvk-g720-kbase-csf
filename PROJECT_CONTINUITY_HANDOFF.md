@@ -5676,3 +5676,20 @@ The probe reports `Wrapper(Mali-G720 MC7)`, PanVK Mesa `26.3.0-devel (git-00ed72
 4. Build and statically audit the diagnostic Android package and independent Windows probe from the same exact source checkpoint. Only then ask the user for another controlled Winlator test. Keep the existing wrapper and container unchanged.
 
 Current feature branch source for this test is `experiment/g720-fragment-shading-rate` at commit `00ed7243e5dea048361a1682753b7e4630450bb8`. This user run validates the build's static 2x2 KEEP pipeline compilation, submit, fence, and readback, but does not yet validate its pixel signature or any non-KEEP combiner. No performance result is claimed. The Android system/vendor driver and kernel remain untouched.
+
+
+### 2026-11-07 Kbase CS-fault diagnostics added after the MAX/KEEP device-loss result
+
+A diagnostic-only change was committed on `experiment/g720-fragment-shading-rate`:
+- Commit: `e4473dce4547eca9f5159ff238f3ae17e6a7db46`.
+- File: `src/panfrost/vulkan/csf/panvk_vX_gpu_queue.c`.
+- In the cold `cell->error` failure path, PanVK now calls the existing `kbase_log_subqueue_state(queue, subqueue, "CS error")` helper before marking the Vulkan queue lost. This records the seqno/progress markers, error value, CS ring insert/extract/active state, last-job metadata, and relevant ring-buffer qwords.
+- It then drains already queued Kbase CSF notifications through the existing nonblocking `kbase_kmod_csf_process_events()` path and logs the result. If the kernel has a corresponding fatal/recoverable notification, the existing notification logger should now expose its exception status and sideband instead of the local completion-cell error hiding it.
+- This runs only after a CS error and does not alter the normal submission, completion, memory mapping, queue scheduling, or VRS hardware state.
+
+Android-only build run:
+- Workflow run `42315762033`, job `128227831317`, exact source SHA `e4473dce4547eca9f5159ff238f3ae17e6a7db46`.
+- At the latest poll the job was in progress at dependency installation; all earlier setup/checkout/verification steps passed. No package artifact or build success is claimed yet.
+- Next gate: wait for Android compile, ABI/dependency audit, flat package creation and artifact upload. Reuse the existing Windows render probe for this driver-diagnostic run; no probe source change is needed to collect the new Kbase logs.
+
+Do not ask the user to install or test until this exact-source package completes and is independently inspected. On the next run, keep the wrapper/container unchanged and send both the probe output and matching logcat/Wine log. The purpose is to obtain the VT/tiler CS ring and any Kbase CSF exception details for the MAX/KEEP failure. Preserve the 1x1 and 2x2 KEEP readback results; do not treat the pixel signature as validated until a probe explicitly reports the checksum/equal-neighbour comparison.
