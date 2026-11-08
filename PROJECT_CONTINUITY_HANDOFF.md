@@ -6502,3 +6502,45 @@ advertise REPLACE as reliable.
 
 Keep MIN/MAX/MUL disabled pending separate investigation. The KEEP 2x2 path
 remains the verified baseline (4096 -> 1024 fragment invocations).
+
+
+## 2026-11-08 — Corrected REPLACE test validity gate
+
+A second Vulkan valid-usage review refined the previous addendum: although
+REPLACE is permitted when `fragmentShadingRateNonTrivialCombinerOps=false`,
+it is only legal in a combiner slot whose source feature is enabled:
+- combinerOps[0] requires `primitiveFragmentShadingRate`;
+- combinerOps[1] requires `attachmentFragmentShadingRate`.
+Pipeline FSR alone does not make either non-KEEP slot legal. The current
+probe enabled only `pipelineFragmentShadingRate`, so its historical
+REPLACE test was invalid when primitive/attachment FSR were disabled. This
+may explain why that case faulted; it must not be treated as proof that the
+hardware cannot implement REPLACE.
+
+Probe changes on `experiment/g720-fragment-shading-rate`:
+- `3e8381454050a6dc8f6b28f114aad5c70737503a`: report all three feature
+  booleans; enable primitive/attachment features only when reported; gate
+  combiner tests on the corresponding input feature; select op0 when
+  primitive FSR is supported, otherwise op1 when attachment FSR is supported.
+- `b05d2f8fe58bc7b6185580403a688890e7f9c976`: diagnostic formatting only.
+- Existing `tools/run-vrs-replace-check.cmd` invokes the isolated REPLACE
+  test and writes `panvk_vrs_replace.log`; workflow includes it in the
+  Windows artifact.
+- No Android driver source or package changed.
+
+The new probe must first report
+`pipelineFragmentShadingRate`,
+`primitiveFragmentShadingRate`, and
+`attachmentFragmentShadingRate`.
+If both primitive and attachment features are false, it will correctly
+SKIP REPLACE rather than issuing invalid Vulkan state. If either is true,
+it enables that feature and places REPLACE in the corresponding legal
+combiner slot. MIN/MAX/MUL remain gated by
+`fragmentShadingRateNonTrivialCombinerOps`.
+
+Next device action, once the updated Windows probe artifact is available:
+run `tools/run-vrs-replace-check.cmd` with the known-good Android driver
+package and paste only `panvk_vrs_replace.log`. No Winlator logcat archive
+is required. This is a probe-only rebuild; the Android package remains
+`git-c9d61e10a9`. Do not infer hardware REPLACE support until a legal
+test actually runs and passes.
