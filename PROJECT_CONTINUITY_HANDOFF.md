@@ -7186,3 +7186,22 @@ Next: obtain and inspect the Android-only workflow run for this exact branch hea
   - `libvulkan_panfrost.so`: `01588024ab8549c92f3b5981bdd2239af0b9ec9796c50f91f13c012bca14453b`
   - `libpanvk_drm.so`: `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`
 - Local ZIP integrity check: all four package entries passed `unzip -t`.
+
+
+## 2026-11-08 — First device-side render probe on dynamic-FSR build
+
+### User-provided device log
+- Driver/device: Wrapper (Mali-G720 MC7), PanVK Mesa 26.3.0-devel, `git-0804f245e8`, Vulkan API 1.3.354.
+- FSR feature report: pipeline=1, primitive=0, attachment=0; non-trivial combiner ops=0; strict multiply=0.
+- Device creation with `VK_KHR_fragment_shading_rate` and pipeline FSR succeeded.
+- Invocation-counter descriptor set, SSBO, image, staging buffer, render pass, shader modules, pipeline, command buffer, queue submit, fence wait and readbacks all succeeded.
+- Static 1x1 KEEP: 4096 fragment invocations; checksum `0x06d78d985ad50383`; equal-neighbors=0.
+- Static 2x2 KEEP: 1024 fragment invocations; checksum `0xcad734dde7920383`; equal-neighbors=4096.
+- Pixel signature passed. Invocation reduction passed (4:1, 75% fewer fragment invocations). Final status: `VRS GPU RENDER PASS`.
+
+### Correct interpretation / probe CLI correction
+- The log says `selected render case: --case=keep`. Source inspection of `tools/panvk_vrs_render_probe_win.c` confirms this case runs the 1x1 and static 2x2 pipeline FSR baselines only; it does NOT enter the dynamic FSR comparison branch.
+- The probe supports explicit `--case=dynamic-keep`, which runs the same 1x1 and static 2x2 baselines, then renders dynamic 2x2 KEEP and requires its image checksum and fragment invocation count to match static 2x2.
+- It also supports `--case=dynamic-isolation`, which compares static and dynamic 2x2 constant-colour output/invocations, then verifies dynamic coordinate-dependent rendering reaches the expected invocation count while remaining distinct from the static coordinate output. This is the stronger isolation test for the sysval/fragment-centre change.
+- Therefore this device run proves static pipeline FSR is genuinely executing on the G720 and the package loads. It does NOT yet validate the new dynamic sysval lowering.
+- Next exact test: run the same executable with argument `--case=dynamic-keep`; after that run `--case=dynamic-isolation`. Preserve both complete logs. Do not benchmark games until dynamic correctness is established.
