@@ -3218,14 +3218,17 @@ set_tiler_idvs_flags(struct cs_builder *b, struct panvk_cmd_buffer *cmdbuf,
 #if PAN_ARCH >= 11
 #if PAN_ARCH >= 12
       const struct vk_fragment_shading_rate_state *fsr = &dyns->fsr;
-      uint32_t frag_w = fsr->fragment_size.width;
-      uint32_t frag_h = fsr->fragment_size.height;
+      const uint32_t requested_frag_w = fsr->fragment_size.width;
+      const uint32_t requested_frag_h = fsr->fragment_size.height;
+      uint32_t frag_w = requested_frag_w;
+      uint32_t frag_h = requested_frag_h;
+      const bool sample_shading = fs && fs->info.fs.sample_shading;
       VkFragmentShadingRateCombinerOpKHR op0 = fsr->combiner_ops[0];
       VkFragmentShadingRateCombinerOpKHR op1 = fsr->combiner_ops[1];
 
       /* Sample-rate shading and fragment-rate shading are mutually
        * exclusive. Keep the hardware at 1x1 for sample-shaded pipelines. */
-      if (fs && fs->info.fs.sample_shading) {
+      if (sample_shading) {
          frag_w = frag_h = 1;
          op0 = op1 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
       }
@@ -3244,8 +3247,14 @@ set_tiler_idvs_flags(struct cs_builder *b, struct panvk_cmd_buffer *cmdbuf,
 #endif
       }
 #if PAN_ARCH >= 12
-      if (op0 != VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR ||
-          op1 != VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR) {
+      if (requested_frag_w > 2 || requested_frag_h > 2) {
+         const uint32_t packed = tiler_flags_2.opaque[0];
+         mesa_logi("PANVK_VRS_DIAG TILER_FLAGS2 requested=%ux%u effective=%ux%u sample_shading=%u rate_code=%u ops=%u,%u packed=0x%08x",
+                   requested_frag_w, requested_frag_h, frag_w, frag_h,
+                   sample_shading, packed & 0xf,
+                   (packed >> 4) & 0x7, (packed >> 7) & 0x7, packed);
+      } else if (op0 != VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR ||
+                 op1 != VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR) {
          mesa_logi("PANVK_VRS_DIAG emit TILER_FLAGS2 rate=%ux%u ops=%u,%u packed=0x%08x",
                    frag_w, frag_h, (unsigned)op0, (unsigned)op1,
                    tiler_flags_2.opaque[0]);
