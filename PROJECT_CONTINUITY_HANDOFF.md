@@ -7588,3 +7588,18 @@ The candidate clamp change received a whitespace-only follow-up commit `3cfbf43c
 - The full compile, staged install, driver/manifest/dependency audit, flat Winlator package build, and artifact upload all passed.
 - This package includes the large-rate `TILER_FLAGS2` diagnostic but predates the DCD clamp fix. It is not the package to use for the next rate-matrix run; wait for the candidate-fix package from run `42509483552` or newer.
 - The exact-shape Winlator probe for commit `84b6c3d` is artifact `13628887002` from successful run `42509380933`.
+
+
+### Cross-check against independent PanVK v12 implementation and internal DCD paths
+
+A GitHub code search found an independent Mesa-derived PanVK implementation in `DsoTsin/mesa-manet` (commit `c6ffbdc5ea4685203e89d648e71cc6c7ecfc44ca`). Its v12+ source sets `disable_vrs_clamp_2x2 = true` in the regular DCD flags path and also sets `flags_0.disable_vrs_clamp_2x2 = true` for internal fullscreen/frame-shader DCDs. This independently confirms that the field is intended to be set for v12+ PanVK draws, rather than only for one special large-rate case.
+
+Our branch was extended to mirror those internal paths:
+
+- Commit `3ffa1bf0d30a7830eac22d41f3993ee4844c7212`: set the bit in the CSF `cmd_fb_barrier` fullscreen DCD.
+- Commit `9131a736ea1323174069fec9c6617c69bc6538d7`: set the bit in the frame-shader fallback DCD path.
+- Commit `c027d4d8c747787c85256cfc0e9768e991262c16`: set the bit in the PAN_ARCH >= 12 frame-shader DCD base descriptor. This is the current branch HEAD.
+- The ordinary CSF graphics DCD path remains covered by candidate commit `3b9e6a7`; the later changes complete the internal paths.
+- The draw-rect meta path obtains `DCD_FLAGS_0` from `build_dcd_flags()`, so it inherits the main fix.
+
+All changes are compile/runtime candidates only. They do not expose primitive/attachment FSR features or change the advertised rate list. The next Android package must be built from `c027d4d8` or later, not from the earlier `3b9e6a7` artifact, so all ordinary and internal DCD paths are represented in the test binary.
