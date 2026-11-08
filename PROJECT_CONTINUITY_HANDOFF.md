@@ -6705,3 +6705,40 @@ is built and independently checked.
 
 Detailed VRS source audit:
 [docs/G720-VRS-IMPLEMENTATION-AUDIT.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-fragment-shading-rate/docs/G720-VRS-IMPLEMENTATION-AUDIT.md).
+
+
+## 2026-11-08 — dynamic FSR probe built and artifact verified
+
+The source audit identified dynamic pipeline FSR as the next unverified path.
+Added `--case=dynamic-keep` to the Windows render probe. It creates a
+pipeline with `VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR`, records
+`vkCmdSetFragmentShadingRateKHR(2x2, KEEP/KEEP)`, submits a draw using the
+existing `gl_FragCoord` pattern, waits, reads back, and compares pixel
+signature and invocation count against static 2x2 KEEP. Static 1x1/2x2
+controls remain in the test.
+
+Build and artifact verification:
+- Source commit: `d793346dc75ab8e58676b39d41afbee75aa77c83`
+- Workflow run #32: success
+  https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42431201125
+- Artifact: `panvk-vrs-render-probe-win64`, ID `13597576380`
+- ZIP SHA-256:
+  `9b54bf53664d2ff16923eb621a4c9ac93e0bcce543b1ac60d44f4c648b67696b`
+- Executable SHA-256:
+  `f0e7fc5d84645bf6f4927b4adf5ec1ee5b447d2187eca088b44d64a9d1d083a8`
+- Downloaded the artifact and independently checked the ZIP contents, PE32+
+  x86-64 executable type, dynamic-case strings, and included script.
+
+### User test required next
+
+1. Download the artifact from the Actions run above.
+2. Extract it and run `tools/run-vrs-dynamic-check.cmd`.
+3. Return only `panvk_vrs_dynamic.log`.
+
+This is a Windows probe-only artifact; it does not contain the Android
+driver. Do not install or change the working Android package. Keep
+`git-c9d61e10a9` selected. The dynamic test uses legal 2x2 KEEP/KEEP state;
+do not run the older REPLACE/MIN/MAX/MUL cases.
+
+Detailed audit:
+[docs/G720-VRS-IMPLEMENTATION-AUDIT.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-fragment-shading-rate/docs/G720-VRS-IMPLEMENTATION-AUDIT.md).
