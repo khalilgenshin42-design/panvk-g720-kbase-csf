@@ -6880,3 +6880,10 @@ failure). A new build for the corrected source is queued as run
 or run an artifact until a corrected build succeeds and its ZIP contents and
 hashes have been checked. No Android driver update or device-side action is
 needed yet.
+
+
+Additional isolation-probe guard: the coordinate-reading dynamic rerender now
+logs and asserts its fragment invocation count against static 2x2. The test
+only reports the intended sample-centre diagnosis if both shader variants
+execute at the same coarse invocation count and only the coordinate-derived
+pixels differ. Latest source commit: `c3ca013ac4568624a40aa97f0cb43f04ea52a3e7`.
