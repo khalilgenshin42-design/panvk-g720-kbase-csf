@@ -1101,7 +1101,7 @@ main(int argc, char **argv)
                 {2, 1}, {1, 2}, {4, 2}, {2, 4}, {4, 4},
              };
              int matrix_pass = basic && invocation_reduction;
-             for (uint32_t r = 0; r < ARRAY_SIZE(matrix_rates); r++) {
+             for (uint32_t r = 0; r < (uint32_t)(sizeof(matrix_rates) / sizeof(matrix_rates[0])); r++) {
                 const VkExtent2D rate = matrix_rates[r];
                 const uint32_t area = rate.width * rate.height;
                 uint32_t static_invocations = 0, dynamic_invocations = 0;
