@@ -719,6 +719,8 @@ main(int argc, char **argv)
       probe_case = CASE_RATE_MATRIX;
    else if (!strcmp(case_name, "--case=mip-lod"))
       probe_case = CASE_MIP_LOD;
+   else if (!strcmp(case_name, "--case=mip-lod"))
+      probe_case = CASE_MIP_LOD;
    else {
       fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep|dynamic-isolation|rate-matrix\n", argv[0]);
       return 2;
@@ -1043,6 +1045,19 @@ main(int argc, char **argv)
          destroy_dev(device, NULL); continue;
       }
 
+      VkImage mip_image=VK_NULL_HANDLE, mip_view=VK_NULL_HANDLE;
+      VkDeviceMemory mip_image_mem=VK_NULL_HANDLE;
+      VkSampler mip_sampler=VK_NULL_HANDLE;
+      int mip_resources_ok=1;
+      if (probe_case==CASE_MIP_LOD) {
+         VkFormatProperties mip_fp;
+         get_format_props(pds[d],VK_FORMAT_R8G8B8A8_UNORM,&mip_fp);
+         VkFormatFeatureFlags mip_need=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+         if ((mip_fp.optimalTilingFeatures&mip_need)!=mip_need) {
+            LOG("SKIP: RGBA8 sampled-image/transfer-dst support missing (0x%x)\\n",mip_fp.optimalTilingFeatures);
+            mip_resources_ok=0;
+         }
+      }
       VkDescriptorBufferInfo counter_desc = {
          .buffer = invocation_buffer,
          .offset = 0,
@@ -1057,6 +1072,20 @@ main(int argc, char **argv)
          .pBufferInfo = &counter_desc,
       };
       update_descriptor_sets(device, 1, &counter_write, 0, NULL);
+      if (probe_case==CASE_MIP_LOD && mip_resources_ok) {
+         mip_resources_ok=create_mip_texture(device,&mem_props,queue,qf,
+            &mip_image,&mip_image_mem,&mip_view,&mip_sampler);
+         LOG("mip texture upload/setup=%s\\n",mip_resources_ok?"PASS":"FAIL");
+         if (mip_resources_ok) {
+            VkDescriptorImageInfo image_info={.sampler=mip_sampler,.imageView=mip_view,
+               .imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+            VkWriteDescriptorSet image_write={.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+               .dstSet=invocation_set,.dstBinding=1,.descriptorCount=1,
+               .descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+               .pImageInfo=&image_info};
+            update_descriptor_sets(device,1,&image_write,0,NULL);
+         }
+      }
 
       VkAttachmentDescription attachment = {
          .format = format, .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -1099,11 +1128,14 @@ main(int argc, char **argv)
       VkShaderModuleCreateInfo smv={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_vert_spv),.pCode=vrs_vert_spv};
       VkShaderModuleCreateInfo smf={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_frag_spv),.pCode=vrs_frag_spv};
       VkShaderModuleCreateInfo smf_constant={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_frag_constant_spv),.pCode=vrs_frag_constant_spv};
-      VkShaderModule vs=VK_NULL_HANDLE,fs=VK_NULL_HANDLE,fs_constant=VK_NULL_HANDLE;
+      VkShaderModuleCreateInfo smf_mip={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_frag_mip_spv),.pCode=vrs_frag_mip_spv};
+      VkShaderModule vs=VK_NULL_HANDLE,fs=VK_NULL_HANDLE,fs_constant=VK_NULL_HANDLE,fs_mip=VK_NULL_HANDLE;
       result=create_sm(device,&smv,NULL,&vs);
       if(result==VK_SUCCESS)result=create_sm(device,&smf,NULL,&fs);
       if(result==VK_SUCCESS && probe_case==CASE_DYNAMIC_ISOLATION)
          result=create_sm(device,&smf_constant,NULL,&fs_constant);
+      if(result==VK_SUCCESS && probe_case==CASE_MIP_LOD && mip_resources_ok)
+         result=create_sm(device,&smf_mip,NULL,&fs_mip);
       VkPipelineLayout pl=VK_NULL_HANDLE;
       VkPipelineLayoutCreateInfo plci = {
          .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -1112,9 +1144,15 @@ main(int argc, char **argv)
       };
       if(result==VK_SUCCESS)result=create_pl(device,&plci,NULL,&pl);
       LOG("shader modules/pipeline layout=%d\n",result);
+      if (probe_case==CASE_MIP_LOD && !mip_resources_ok) result=VK_ERROR_FORMAT_NOT_SUPPORTED;
       if (result != VK_SUCCESS) {
          if (pl) destroy_pl(device, pl, NULL);
          if (fs_constant) destroy_sm(device, fs_constant, NULL);
+         if (fs_mip) destroy_sm(device, fs_mip, NULL);
+         if (mip_sampler) { PFN_vkDestroySampler x=(PFN_vkDestroySampler)get_device_proc_addr(device,"vkDestroySampler"); if(x)x(device,mip_sampler,NULL); }
+         if (mip_view) { PFN_vkDestroyImageView x=(PFN_vkDestroyImageView)get_device_proc_addr(device,"vkDestroyImageView"); if(x)x(device,mip_view,NULL); }
+         if (mip_image) { PFN_vkDestroyImage x=(PFN_vkDestroyImage)get_device_proc_addr(device,"vkDestroyImage"); if(x)x(device,mip_image,NULL); }
+         if (mip_image_mem) { PFN_vkFreeMemory x=(PFN_vkFreeMemory)get_device_proc_addr(device,"vkFreeMemory"); if(x)x(device,mip_image_mem,NULL); }
          if (fs) destroy_sm(device, fs, NULL);
          if (vs) destroy_sm(device, vs, NULL);
          destroy_rp(device, rp, NULL);
