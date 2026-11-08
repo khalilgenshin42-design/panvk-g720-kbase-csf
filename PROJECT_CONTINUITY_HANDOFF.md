@@ -7411,3 +7411,10 @@ The next VRS step is now implemented in the Winlator probe source on `experiment
 The rate set matches the current PanVK KHR rate enumeration: 2x1, 1x2 and 4x4 are advertised at 1x MSAA; the probe uses 1x MSAA. This is a test expansion, not a claim those three rates have passed. Existing verified status remains static 2x2 KEEP and dynamic 2x2 KEEP only. No combiner other than KEEP/KEEP is enabled or claimed. The next step is to obtain the rebuilt Win64 probe artifact, run `tools/run-vrs-rate-matrix.cmd` in Winlator with the experimental PanVK driver selected, and review the resulting log before changing advertised rate properties or recommending VRS for DXVK games.
 
 Source review also confirmed that the current dynamic fragment-rate sysval is populated once per draw and decoded in the fragment shader; the new matrix specifically checks that each dynamic rate produces the same output and invocation count as its static equivalent. This remains a targeted correctness probe, not a derivative/implicit-LOD compatibility proof for arbitrary game shaders.
+
+
+The matrix was then widened to cover the complete set of currently enumerated non-2x2 pipeline rates, not only the initial three:
+- Commit `f68ae93e32ec591dae26338260e085fd8143807b`: include `4x2` and `2x4` alongside `2x1`, `1x2`, and `4x4`. The existing baseline and dedicated 2x2 checks cover the remaining advertised sizes.
+- Commit `9c7e4688a37cc6b709b320d49a50f8f99a9bd15d`: clarify the runner description to state that it exercises all advertised non-2x2 rates.
+
+Thus the next probe run checks all seven sizes returned by PanVK's current KHR rate enumeration (1x1 and 2x2 are the baseline/control paths; the new matrix covers 2x1, 1x2, 4x2, 2x4, 4x4), static and dynamic KEEP. A rate is not considered validated until both modes pass on the G720.
