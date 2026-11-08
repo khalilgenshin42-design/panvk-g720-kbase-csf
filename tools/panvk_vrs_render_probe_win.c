@@ -522,7 +522,7 @@ main(int argc, char **argv)
 {
    const char *case_name = argc > 1 ? argv[1] : "--case=dynamic-keep";
    enum { CASE_KEEP, CASE_MAX, CASE_MIN, CASE_MUL, CASE_REPLACE,
-          CASE_DYNAMIC_KEEP, CASE_DYNAMIC_ISOLATION } probe_case;
+          CASE_DYNAMIC_KEEP, CASE_DYNAMIC_ISOLATION, CASE_RATE_MATRIX } probe_case;
 
    if (!strcmp(case_name, "--case=keep"))
       probe_case = CASE_KEEP;
@@ -538,6 +538,8 @@ main(int argc, char **argv)
       probe_case = CASE_DYNAMIC_KEEP;
    else if (!strcmp(case_name, "--case=dynamic-isolation"))
       probe_case = CASE_DYNAMIC_ISOLATION;
+   else if (!strcmp(case_name, "--case=rate-matrix"))
+      probe_case = CASE_RATE_MATRIX;
    else {
       fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep|dynamic-isolation\n", argv[0]);
       return 2;
@@ -1088,6 +1090,63 @@ main(int argc, char **argv)
              }
              free(constant_static);
              free(constant_dynamic);
+          } else if (probe_case == CASE_RATE_MATRIX) {
+             /*
+              * Exercise the advertised pipeline-only rate matrix on real GPU
+              * work: static and dynamic 2x1, 1x2 and 4x4. Each dynamic result
+              * must match its static counterpart in both pixels and invocation
+              * count. The 1x1 control is shared with the existing probe.
+              */
+             static const VkExtent2D matrix_rates[] = {
+                {2, 1}, {1, 2}, {4, 4},
+             };
+             int matrix_pass = basic && invocation_reduction;
+             for (uint32_t r = 0; r < ARRAY_SIZE(matrix_rates); r++) {
+                const VkExtent2D rate = matrix_rates[r];
+                const uint32_t area = rate.width * rate.height;
+                uint32_t static_invocations = 0, dynamic_invocations = 0;
+                LOG("rate-matrix: testing %ux%u static KEEP\\n",
+                    rate.width, rate.height);
+                int static_ok = render_rate(
+                   device, &mem_props, gdpa, queue, qf, format, rp, pl, vs, fs,
+                   keep, keep, rate, false, invocation_set, invocation_buffer,
+                   invocation_mem, &static_invocations, image_target);
+                uint64_t static_hash = static_ok ? checksum(image_target) : 0;
+                uint32_t static_equal = static_ok ? equal_neighbors(image_target) : 0;
+                uint32_t expected_invocations =
+                   (invocations_1x1 + area / 2) / area;
+                int static_pixels_ok = static_ok && static_hash != hash_1x1 &&
+                   static_equal > equal_1x1 + W * H / 4;
+                int static_count_ok = static_ok &&
+                   static_invocations == expected_invocations;
+                LOG("%ux%u static: render=%s checksum=0x%016llx equal-neighbors=%u invocations=%u expected=%u pixels=%s count=%s\\n",
+                    rate.width, rate.height, static_ok ? "PASS" : "FAIL",
+                    (unsigned long long)static_hash, static_equal,
+                    static_invocations, expected_invocations,
+                    static_pixels_ok ? "PASS" : "FAIL",
+                    static_count_ok ? "PASS" : "FAIL");
+
+                int dynamic_ok = static_ok && render_rate(
+                   device, &mem_props, gdpa, queue, qf, format, rp, pl, vs, fs,
+                   keep, keep, rate, true, invocation_set, invocation_buffer,
+                   invocation_mem, &dynamic_invocations, image_2x2);
+                uint64_t dynamic_hash = dynamic_ok ? checksum(image_2x2) : 0;
+                int dynamic_pixels_ok = dynamic_ok && dynamic_hash == static_hash;
+                int dynamic_count_ok = dynamic_ok &&
+                   dynamic_invocations == static_invocations;
+                LOG("%ux%u dynamic: render=%s checksum=0x%016llx invocations=%u static=%u pixels=%s count=%s\\n",
+                    rate.width, rate.height, dynamic_ok ? "PASS" : "FAIL",
+                    (unsigned long long)dynamic_hash, dynamic_invocations,
+                    static_invocations,
+                    dynamic_pixels_ok ? "PASS" : "FAIL",
+                    dynamic_count_ok ? "PASS" : "FAIL");
+
+                matrix_pass &= static_pixels_ok && static_count_ok &&
+                               dynamic_pixels_ok && dynamic_count_ok;
+             }
+             LOG("advertised rate matrix: %s\\n",
+                 matrix_pass ? "PASS" : "FAIL");
+             passed = matrix_pass;
           } else if (!fsr_features.primitiveFragmentShadingRate &&
                      !fsr_features.attachmentFragmentShadingRate) {
              LOG("SKIP: neither primitive nor attachment fragment shading rate is supported; no legal non-KEEP combiner input exists\n");
