@@ -522,7 +522,7 @@ main(int argc, char **argv)
 {
    const char *case_name = argc > 1 ? argv[1] : "--case=keep";
    enum { CASE_KEEP, CASE_MAX, CASE_MIN, CASE_MUL, CASE_REPLACE,
-          CASE_DYNAMIC_KEEP } probe_case;
+          CASE_DYNAMIC_KEEP, CASE_DYNAMIC_ISOLATION } probe_case;
 
    if (!strcmp(case_name, "--case=keep"))
       probe_case = CASE_KEEP;
@@ -536,8 +536,10 @@ main(int argc, char **argv)
       probe_case = CASE_REPLACE;
    else if (!strcmp(case_name, "--case=dynamic-keep"))
       probe_case = CASE_DYNAMIC_KEEP;
+   else if (!strcmp(case_name, "--case=dynamic-isolation"))
+      probe_case = CASE_DYNAMIC_ISOLATION;
    else {
-      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep\n", argv[0]);
+      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep|dynamic-isolation\n", argv[0]);
       return 2;
    }
    log_file = fopen("panvk_vrs_render_probe.log", "w");
@@ -897,9 +899,12 @@ main(int argc, char **argv)
 
       VkShaderModuleCreateInfo smv={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_vert_spv),.pCode=vrs_vert_spv};
       VkShaderModuleCreateInfo smf={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_frag_spv),.pCode=vrs_frag_spv};
-      VkShaderModule vs=VK_NULL_HANDLE,fs=VK_NULL_HANDLE;
+      VkShaderModuleCreateInfo smf_constant={.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,.codeSize=sizeof(vrs_frag_constant_spv),.pCode=vrs_frag_constant_spv};
+      VkShaderModule vs=VK_NULL_HANDLE,fs=VK_NULL_HANDLE,fs_constant=VK_NULL_HANDLE;
       result=create_sm(device,&smv,NULL,&vs);
       if(result==VK_SUCCESS)result=create_sm(device,&smf,NULL,&fs);
+      if(result==VK_SUCCESS && probe_case==CASE_DYNAMIC_ISOLATION)
+         result=create_sm(device,&smf_constant,NULL,&fs_constant);
       VkPipelineLayout pl=VK_NULL_HANDLE;
       VkPipelineLayoutCreateInfo plci = {
          .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -910,6 +915,7 @@ main(int argc, char **argv)
       LOG("shader modules/pipeline layout=%d\n",result);
       if (result != VK_SUCCESS) {
          if (pl) destroy_pl(device, pl, NULL);
+         if (fs_constant) destroy_sm(device, fs_constant, NULL);
          if (fs) destroy_sm(device, fs, NULL);
          if (vs) destroy_sm(device, vs, NULL);
          destroy_rp(device, rp, NULL);
@@ -1001,6 +1007,59 @@ main(int argc, char **argv)
                          dynamic_invocations_match &&
                          dynamic_equal > equal_1x1 + W * H / 2;
              }
+          } else if (probe_case == CASE_DYNAMIC_ISOLATION) {
+             uint8_t *constant_static = malloc(IMAGE_BYTES);
+             uint8_t *constant_dynamic = malloc(IMAGE_BYTES);
+             uint32_t constant_static_invocations = 0;
+             uint32_t constant_dynamic_invocations = 0;
+             if (!constant_static || !constant_dynamic) {
+                LOG("FAIL: host allocation for constant-colour isolation images\\n");
+             } else {
+                LOG("starting constant-colour dynamic FSR isolation case\\n");
+                int constant_static_ok =
+                   render_rate(device, &mem_props, gdpa, queue, qf, format,
+                               rp, pl, vs, fs_constant, keep, keep,
+                               (VkExtent2D){2,2}, false, invocation_set,
+                               invocation_buffer, invocation_mem,
+                               &constant_static_invocations, constant_static);
+                int constant_dynamic_ok = constant_static_ok &&
+                   render_rate(device, &mem_props, gdpa, queue, qf, format,
+                               rp, pl, vs, fs_constant, keep, keep,
+                               (VkExtent2D){2,2}, true, invocation_set,
+                               invocation_buffer, invocation_mem,
+                               &constant_dynamic_invocations, constant_dynamic);
+                uint64_t constant_static_hash = constant_static_ok ?
+                   checksum(constant_static) : 0;
+                uint64_t constant_dynamic_hash = constant_dynamic_ok ?
+                   checksum(constant_dynamic) : 0;
+                int constant_pixels_match = constant_static_ok &&
+                   constant_dynamic_ok &&
+                   constant_static_hash == constant_dynamic_hash;
+                int constant_invocations_match = constant_static_ok &&
+                   constant_dynamic_ok &&
+                   constant_static_invocations == constant_dynamic_invocations;
+                LOG("constant 2x2 static submit/fence/readback=%s\\n",
+                    constant_static_ok ? "PASS" : "FAIL");
+                LOG("constant 2x2 dynamic submit/fence/readback=%s\\n",
+                    constant_dynamic_ok ? "PASS" : "FAIL");
+                LOG("constant static checksum=0x%016llx dynamic=0x%016llx pixel-comparison=%s\\n",
+                    (unsigned long long)constant_static_hash,
+                    (unsigned long long)constant_dynamic_hash,
+                    constant_pixels_match ? "PASS" : "FAIL");
+                LOG("constant fragment-invocations static=%u dynamic=%u comparison=%s\\n",
+                    constant_static_invocations, constant_dynamic_invocations,
+                    constant_invocations_match ? "PASS" : "FAIL");
+                int coordinate_shader_differs = dynamic_ok &&
+                   checksum(image_target) != hash_2x2;
+                LOG("coordinate shader static-vs-dynamic pixel mismatch=%s\\n",
+                    coordinate_shader_differs ? "YES" : "NO");
+                passed = basic && invocation_reduction && constant_pixels_match &&
+                         constant_invocations_match &&
+                         constant_dynamic_invocations == invocations_2x2 &&
+                         coordinate_shader_differs;
+             }
+             free(constant_static);
+             free(constant_dynamic);
           } else if (!fsr_features.primitiveFragmentShadingRate &&
                      !fsr_features.attachmentFragmentShadingRate) {
              LOG("SKIP: neither primitive nor attachment fragment shading rate is supported; no legal non-KEEP combiner input exists\n");
@@ -1079,6 +1138,7 @@ main(int argc, char **argv)
       free(image_1x1);
       free(image_2x2);
       free(image_target);
+      if (fs_constant) destroy_sm(device,fs_constant,NULL);
       destroy_sm(device,vs,NULL);destroy_sm(device,fs,NULL);
       destroy_pl(device,pl,NULL);
       destroy_rp(device,rp,NULL);
