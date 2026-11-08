@@ -6274,6 +6274,9 @@ panvk_per_arch(cmd_fb_barrier)(struct panvk_cmd_buffer *cmdbuf)
       cfg.flags_0.allow_forward_pixel_to_be_killed = false;
       cfg.flags_0.primitive_barrier = true;
       cfg.flags_0.occlusion_query = MALI_OCCLUSION_MODE_DISABLED;
+#if PAN_ARCH >= 12
+      cfg.flags_0.disable_vrs_clamp_2x2 = true;
+#endif
 
       cfg.flags_2.read_mask = 0;
       cfg.flags_2.write_mask = 0;
