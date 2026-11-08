@@ -305,3 +305,11 @@ either constant-colour comparison fails, investigate the broader dynamic
 pipeline state path before touching compiler lowering.
 
 No driver feature bits or Android driver source are changed by this probe.
+
+
+The isolation harness was tightened before distribution: it now also records
+and asserts that the coordinate-reading dynamic shader's fragment invocation
+count equals the static 2x2 count. This avoids interpreting a pixel mismatch
+without first proving the dynamic coordinate shader ran at the expected coarse
+rate. The constant-colour path independently checks its own static/dynamic
+invocation equality and equality to that same 2x2 baseline.
