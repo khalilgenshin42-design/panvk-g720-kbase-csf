@@ -7541,3 +7541,38 @@ Probe commit `84b6c3d745a4865595893da312f4ca20f627ee14` extends the previous axi
 - This provides a more discriminating readout than the previous aggregate equal-neighbor total. If larger requested rates still produce H=2048/V=2048, their rendered footprint is 2x2-like even if the CSF register encoding is correct.
 
 The previous probe build `42509283686` / artifact `13629050724` corresponds to commit `13824a9` and does not include the exact shape assertion. The new commit `84b6c3d` triggers a fresh probe build; do not ask the user to run the older artifact for the final directional test.
+
+
+## 2026-11-08 — Candidate root cause found: v12 DCD VRS 2x2 clamp
+
+A source/GenXML audit found a likely explanation for the exact 2x2 invocation plateau:
+
+- In `src/panfrost/genxml/v12.xml`, `DCD_FLAGS_0` contains `Disable VRS Clamp 2x2` at bit 12. The same field is present in v13 and v14 GenXML.
+- In the existing `build_dcd_flags()` implementation in `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c`, PanVK packed `DCD_FLAGS_0` without setting this field. Since `out` is zeroed before packing, the disable bit remained 0.
+- PanVK already packed the larger requested rates correctly into `IDVS.TILER_FLAGS2`. A separate DCD-level 2x2 clamp would explain why 4x2, 2x4, and 4x4 requests all rendered with a 2x2-like signature.
+- Arm's official G715 developer overview describes the Mali VRS rate set as 1x1, 1x2, 2x1, 2x2, 2x4, 4x2, and 4x4, confirming that larger rates are intended hardware functionality on the family. The G720 product page separately lists pipeline VRS up to 4x4.
+
+### Candidate fix committed
+
+Commit `3b9e6a7d0f83abf929162ebef62cc96b3dc656f0` on `experiment/g720-dynamic-fsr-sysval`:
+
+- Sets `cfg.disable_vrs_clamp_2x2 = true` in `build_dcd_flags()` for `PAN_ARCH >= 12`.
+- Leaves sample-shading behavior unchanged; `set_tiler_idvs_flags()` still forces the effective draw rate to 1x1 when sample shading is enabled.
+- Adds a targeted `PANVK_VRS_DIAG DCD_FLAGS_0` line for requested rates larger than 2 in either dimension, reporting bit 12, the packed DCD word, and requested dimensions.
+- Retains the separate `TILER_FLAGS2` diagnostic from commit `6ff24e6`.
+- This is a candidate fix, not yet runtime-validated. The bit's intended polarity is directly indicated by the GenXML field name; the device test must demonstrate that larger rates now reach the expected pixel footprint and invocation count.
+
+Builds triggered for candidate fix commit `3b9e6a7`:
+- Android-only package build and wrapper build; record run IDs/artifact IDs once complete.
+- The directional Winlator probe is independently built from probe commit `84b6c3d` as artifact `13628887002` (run `42509380933`), but the final device test should use it with the candidate-fix Android package.
+
+### Next validation
+
+1. Confirm Android-only candidate package build succeeds and inspect its package audit before handing it to the user.
+2. Use the Winlator probe artifact `13628887002` with the candidate PanVK package. Run `tools/run-vrs-rate-matrix.cmd`.
+3. Confirm each larger rate emits DCD bit 12 = 1 and the correct TILER_FLAGS2 enum (4x2=9, 2x4=6, 4x4=10).
+4. Confirm directional signatures and SSBO invocation counts match the expected rate:
+   - 4x2: H=3072, V=2048, invocations=512
+   - 2x4: H=2048, V=3072, invocations=512
+   - 4x4: H=3072, V=3072, invocations=256
+5. If the DCD bit is set and larger rates still clamp, investigate DCD packing/serialization and the hardware clamp semantics before touching the TILER_FLAGS2 encoding.
