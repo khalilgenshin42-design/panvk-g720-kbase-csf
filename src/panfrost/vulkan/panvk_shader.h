@@ -194,6 +194,11 @@ struct panvk_graphics_sysvals {
 
    struct {
       aligned_u64 blend_descs[MAX_RTS];
+      /* Effective per-draw fragment rate: log2(width) in bits 2..3,
+       * log2(height) in bits 0..1. Used by dynamic sample-centre lowering.
+       */
+      uint32_t frag_rate;
+      uint32_t _pad;
    } fs;
 
    struct panvk_input_attachment_info iam[INPUT_ATTACHMENT_MAP_SIZE];
