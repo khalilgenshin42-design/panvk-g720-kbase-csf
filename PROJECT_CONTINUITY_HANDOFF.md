@@ -7492,3 +7492,24 @@ CI triggered automatically:
 - Both were in progress when this note was written. Their results and artifact IDs must be added after completion.
 
 This is diagnostic instrumentation only. It is not a claimed VRS fix. Do not ask for a new device run until the Android package build succeeds and its artifact is available. Continue to keep the source branch and package separate from the performance-audit branch and never replace the Android system/vendor driver.
+
+
+### 2026-11-08 — VRS pixel-signature diagnostic strengthened
+
+A second probe-only change was committed on `experiment/g720-dynamic-fsr-sysval`:
+
+- Commit `13824a90757752f4796a67f73b15ddd142699ec9`.
+- `tools/panvk_vrs_render_probe_win.c` now reports equal horizontal and vertical neighboring-pixel counts separately for each static rate-matrix case, in addition to the combined count and SSBO atomic invocation count.
+- This makes the output pattern directional: an actual 4x2 coarse region should produce a different horizontal/vertical repetition signature from 2x2; 2x4 should produce the inverse signature. This is an independent check against relying on a single aggregate neighbor count.
+- The diagnostic does not change the shader, driver, or advertised features. Existing aggregate pixel checks and invocation-count checks remain in place.
+- Winlator probe CI run `42509283686` was triggered for this commit. Android-only and wrapper CI also triggered (`42509283794`, `42509283912`) because the workflow watches the branch; these builds are not evidence of a driver change since only the probe changed in this commit.
+
+Source review also confirmed the Mali v11/v12 GenXML VRS field layout: the 4-bit draw-rate enum is at bits 0..3; combiner 0 at bits 4..6; combiner 1 at bits 7..9. The enum values include 2x4=6, 4x2=9, and 4x4=10. PanVK's formula `(log2(width) << 2) | log2(height)` therefore matches the documented field enum and the packed diagnostic's decode. Do not change axis packing without new runtime evidence.
+
+Arm's G720 product specification lists pipeline, primitive, and attachment VRS up to 4x4. The G720 performance-counter guide's coarse-quad metric is useful for hardware profiling, but it is not the same measurement as this shader SSBO atomic invocation count. Keep those measurement concepts distinct.
+
+Next steps:
+1. Inspect CI run `42509283686`; only offer the new probe to the user after it succeeds.
+2. Inspect Android package run `42509283794`; the diagnostic package from `6ff24e6` is sufficient for CSF register logs if it succeeds. Since `13824a9` only changed the probe, the driver binary need not be rebuilt again for the axis-signature probe, but a matching artifact is preferable if it completes.
+3. In the next device log, compare requested/effective/packed rate code with horizontal and vertical pixel repetition counts and SSBO invocation counts for each rate. A 2x2-like axis signature at larger requested rates indicates clamping or a probe/state interaction; a correct directional signature with flat SSBO count indicates the counter path is misleading.
+4. Keep VRS validation separate from the broader performance work; no game-performance gain is established by this synthetic probe.
