@@ -503,18 +503,27 @@ checksum(const uint8_t *p)
    return h;
 }
 
-static uint32_t
-equal_neighbors(const uint8_t *p)
+static void
+equal_neighbor_axes(const uint8_t *p, uint32_t *horizontal, uint32_t *vertical)
 {
-   uint32_t equal = 0;
+   uint32_t h = 0, v = 0;
    for (uint32_t y = 0; y < H; y++) {
       for (uint32_t x = 0; x < W; x++) {
          const uint8_t *a = &p[(y * W + x) * 4];
-         if (x + 1 < W && memcmp(a, a + 4, 4) == 0) equal++;
-         if (y + 1 < H && memcmp(a, a + W * 4, 4) == 0) equal++;
+         if (x + 1 < W && memcmp(a, a + 4, 4) == 0) h++;
+         if (y + 1 < H && memcmp(a, a + W * 4, 4) == 0) v++;
       }
    }
-   return equal;
+   *horizontal = h;
+   *vertical = v;
+}
+
+static uint32_t
+equal_neighbors(const uint8_t *p)
+{
+   uint32_t horizontal, vertical;
+   equal_neighbor_axes(p, &horizontal, &vertical);
+   return horizontal + vertical;
 }
 
 int
@@ -1113,15 +1122,20 @@ main(int argc, char **argv)
                    invocation_mem, &static_invocations, image_target);
                 uint64_t static_hash = static_ok ? checksum(image_target) : 0;
                 uint32_t static_equal = static_ok ? equal_neighbors(image_target) : 0;
+                uint32_t static_horizontal = 0, static_vertical = 0;
+                if (static_ok)
+                   equal_neighbor_axes(image_target, &static_horizontal,
+                                       &static_vertical);
                 uint32_t expected_invocations =
                    (invocations_1x1 + area / 2) / area;
                 int static_pixels_ok = static_ok && static_hash != hash_1x1 &&
                    static_equal > equal_1x1 + W * H / 4;
                 int static_count_ok = static_ok &&
                    static_invocations == expected_invocations;
-                LOG("%ux%u static: render=%s checksum=0x%016llx equal-neighbors=%u invocations=%u expected=%u pixels=%s count=%s\\n",
+                LOG("%ux%u static: render=%s checksum=0x%016llx equal-neighbors=%u horizontal=%u vertical=%u invocations=%u expected=%u pixels=%s count=%s\\n",
                     rate.width, rate.height, static_ok ? "PASS" : "FAIL",
                     (unsigned long long)static_hash, static_equal,
+                    static_horizontal, static_vertical,
                     static_invocations, expected_invocations,
                     static_pixels_ok ? "PASS" : "FAIL",
                     static_count_ok ? "PASS" : "FAIL");
