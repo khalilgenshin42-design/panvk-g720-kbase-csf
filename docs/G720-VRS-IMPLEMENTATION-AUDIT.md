@@ -348,3 +348,88 @@ PanVK driver; do not install or replace the driver. Send only
 should take only as long as the render/submit/readback sequence; wait for the
 console to finish and the log file to appear. Do not run the older dynamic
 check script for this test.
+
+
+## 2026-11-08 — dynamic FSR isolation result: coordinate-dependent mismatch
+
+The user ran the verified `--case=dynamic-isolation` probe on the existing
+Android package `git-c9d61e10a9` (Mesa 26.3.0-devel, Mali-G720 MC7). The
+result is decisive for separating hardware rate execution from shader
+coordinate behavior:
+
+| Test | Static 2x2 KEEP | Dynamic 2x2 KEEP | Result |
+|---|---:|---:|---|
+| Constant-colour checksum | `0x57ef86c490d1a383` | `0x57ef86c490d1a383` | Exact pixel match |
+| Constant-colour fragment invocations | 1024 | 1024 | Match |
+| Coordinate shader fragment invocations | 1024 | 1024 | Match |
+| Coordinate shader pixels | — | checksum differs | Mismatch |
+
+The earlier static controls also remain green: 1x1 KEEP executes 4096
+fragment invocations; static 2x2 KEEP executes 1024 and passes its expected
+pixel signature. Dynamic 2x2 command recording, queue submission, fence wait,
+and readback all pass. The probe ends with `VRS GPU RENDER PASS` because its
+isolation acceptance criteria pass; this does **not** mean coordinate
+semantics are equivalent.
+
+### What this proves
+
+- Dynamic 2x2 KEEP is not merely accepted by the command recorder: it reaches
+  the GPU and produces the same 4x fragment-invocation reduction as static
+  2x2 KEEP.
+- The dynamic path is not causing a general render-target corruption or
+  constant-output mismatch: the constant-colour static/dynamic images are
+  bit-identical.
+- The remaining discrepancy is specifically exposed by the shader that reads
+  `gl_FragCoord.xy`. This strongly supports a fragment-coordinate /
+  sample-centre lowering defect, rather than a failure to program dynamic
+  VRS state.
+
+This is a narrower diagnosis than the previous test, but not yet proof that
+the only affected observable is sample centre. The coordinate shader uses
+`floor(gl_FragCoord.xy)` and a modulo-8 colour pattern; the next probe should
+log concrete coordinate-derived pixel differences (including their spatial
+distribution), rather than rely only on an aggregate checksum.
+
+### Source trace and implementation constraint
+
+At the tested source checkpoint:
+
+- `panvk_get_static_pipeline_vrs_rate()` intentionally rejects
+  `MESA_VK_DYNAMIC_FSR`.
+- Static FSR lowering replaces
+  `nir_intrinsic_load_sample_pos_or_center` with a rate-derived center
+  before `pan_postprocess_nir()`. A 2x2 rate resolves to (1.0, 1.0).
+- `pan_nir_lower_sample_pos_impl()` later lowers
+  `load_sample_pos_or_center` to (0.5, 0.5) when sample shading is disabled.
+  Dynamic FSR currently bypasses the static replacement, so it follows this
+  generic path.
+- CSF draw emission reads the current dynamic FSR state from
+  `dyns->fsr` and writes the encoded rate and combiner operations into
+  `IDVS.TILER_FLAGS2`. The device counter result independently confirms
+  that this state reaches the hardware.
+
+A correct fix cannot hardcode (1.0, 1.0) for dynamic draws. Dynamic FSR is
+command-buffer state and can change between draws while the fragment shader
+pipeline remains bound. The implementation must make the effective
+fragment-centre information available at draw execution time, or use a
+correct hardware-provided fragment-coordinate/sysval path. It must preserve
+sample-shading and multisample behavior. A candidate per-draw FAU/sysval
+plumbing change requires auditing the shader FAU ABI, command-buffer draw
+state updates, pipeline hashing/cache behavior, and all draw paths before
+implementation.
+
+### Next engineering gate
+
+1. Extend the diagnostic output to identify the actual spatial/coordinate
+   delta between static and dynamic images (not just a checksum).
+2. Audit whether Panfrost's Bifrost/Valhall backend can consume a hardware
+   fragment-rate/centre sysval. If not, design a per-draw rate sysval that is
+   updated whenever dynamic FSR state changes and is available to fragment
+   shaders without recompilation.
+3. Test all advertised pipeline fragment sizes and sample-count interactions
+   before exposing dynamic FSR as fully correct.
+4. Keep primitive and attachment FSR features false; do not change advertised
+   feature bits based on this result.
+
+No Android driver source or package was changed by this device test. No new
+Android driver install is requested yet.
