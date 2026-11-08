@@ -17,6 +17,7 @@ on:
       - experiment/g720-clip-cull-capabilities
       - experiment/g720-descriptor-heaps
       - experiment/g720-fragment-shading-rate
+      - experiment/g720-dynamic-fsr-sysval
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
