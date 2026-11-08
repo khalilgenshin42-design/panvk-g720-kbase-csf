@@ -1255,3 +1255,48 @@ No source or driver file was changed. **Future commits to the handoff branch
 must include `[skip ci]` in the commit message** because of the wrapper
 workflow's unfiltered push trigger. This correction itself is committed with
 `[skip ci]`.
+
+
+## 2026-11-08 12:42 UTC — performance-audit branch revalidation
+
+### Branch and source provenance
+
+- Performance-audit branch HEAD before this documentation update: `6d1ed6db4c0ef050a516ce47de2c1991a30b2e90` (`docs: clarify handoff push CI side effect [skip ci]`).
+- Latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de` (`panvk: fix descriptor profile log call`).
+- GitHub compare from the source commit to the branch HEAD reports 52 commits ahead, 0 behind. The aggregate changed-file list contains only `docs/G720_CAPABILITY_MATRIX_2026-11-05.md` and this audit; no driver source or workflow file changed after the source snapshot.
+- The descriptor source was re-read at this branch head. Failure classification was introduced in `788d34b622ce6cf51aa410c6366a06b86a6a4988`, its format string was corrected in `751fddd64efc201c103ffa496b29608d315a55e6`, and the final profile log-call correction is `a2e5ac142b4f0df71cb28204ece4337bace046de`.
+- The three opt-in descriptor-set failure classes are present:
+  - overflow: variable descriptor-count arithmetic overflow or final count exceeding the 32-bit bound;
+  - capacity: no free descriptor-set slot or insufficient descriptor-heap free bytes;
+  - VMA: `util_vma_heap_alloc()` returns zero.
+  The aggregate counter is retained. The original Vulkan return values and allocator policy are unchanged. The counters are only updated when `PANVK_DESCRIPTOR_PROFILE=1`; the old benchmark log predates this split and cannot be retrospectively classified.
+- The Kbase helper still obtains the threshold through `debug_get_num_option("PANVK_KBASE_HEAP_RENEW_WORK", KBASE_TILER_HEAP_RENEW_WORK)`, with compiled default 65,536, and logs the effective value once. The source change is `52afaaf880fdf3a8cb4e6e0c5cd6598ec482d3ee`. The log does not identify whether the value came from the environment or compiled default.
+
+### CI status
+
+The latest relevant CI runs for the performance-audit source snapshot remain:
+
+- Android-only run [42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218), job `127885224447`, source `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`: SUCCESS. All 15 steps completed successfully, including Android ARM64 libdrm, configure, compile/stage, dependency audit, package, and artifact upload.
+- Wrapper run [42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167), same source: SUCCESS. Release job `127885224388` and Debugoptimized job `127885224836` both completed all 12 steps successfully.
+- There is no newer CI run on `experiment/g720-performance-audit`. Its newer commits are documentation-only, so these source builds remain applicable to the unchanged driver code, but are not builds of the documentation HEAD.
+
+The handoff branch's previous non-`[skip ci]` documentation pushes also queued wrapper-only runs [42481490094](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42481490094) and [42481461421](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42481461421). At this check both were still compiling Release and Debugoptimized wrapper variants. They target `docs/project-continuity-handoff-2026-11-03`, not the performance-audit source branch and not the Android-only PanVK workflow. The earlier documentation-triggered wrapper run `42479110079` completed SUCCESS. Future handoff commits must include `[skip ci]`.
+
+### Newly surfaced files and benchmark evidence
+
+- The newly surfaced `PanVK-G720-65k-env-override-test.zip` is byte-for-byte the same verified package already recorded in this audit: SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`. ZIP integrity and all three embedded SHA256SUMS entries pass again. Metadata is `26.3.0-devel-android-kbase-fb70e9b5cf8b`, minimum API 30. The driver is ELF64 AArch64 with RUNPATH `$ORIGIN` and private NEEDED `libpanvk_drm.so`; the companion is ELF64 AArch64 with SONAME `libpanvk_drm.so` and only `libc.so` as a dependency. This is static/package validation only, not Winlator runtime validation.
+- No new Tomb Raider benchmark archive was supplied. The available archive remains `TombRaider_logs_2026-11-05_02-03-50.zip`, SHA-256 `6f54b17e422795673411dfc3106a184922ea283024801f1e257ed5dbd9f68a56`, with four logs dated 2026-11-05 02:03.
+- Re-reading that archive confirms the diagnostic capture's final Kbase counters: 4,068 heap renewals (4,066 work-triggered), 52,804.121 ms aggregate renewal wait, 61,272.081 ms total renewal time, 0 ring wraps, 1.8 KiB sampled occupancy high-water, 0 transient BO allocation failures, 0 backing BO creation failures, and 299 descriptor-set allocation failures. The descriptor line contains only the aggregate count because this capture predates the failure-category logging. No `tiler heap renewal work threshold=...` line is present, so this archive does not prove environment-variable propagation.
+- The `7.7 / 19.7 / 13.6 FPS` result remains an instrumented diagnostic capture, not a clean performance baseline. The clean 65,536 run remains `9.0 / 17.6 / 13.5 FPS`; the separate 262,144-compiled-default candidate remains `7.8 / 18.9 / 13.9 FPS`. The single-run +0.4 average delta and 1.2 FPS lower minimum are inconclusive. No FPS improvement is claimed.
+
+### Next controlled device test
+
+Use the verified 65,536-default package only, imported as a separate Winlator Mali custom driver:
+
+1. Run the same Tomb Raider scene/settings with `PANVK_KBASE_HEAP_RENEW_WORK` absent; restart the game/driver process and require the startup log `tiler heap renewal work threshold=65536`.
+2. Repeat with exactly `PANVK_KBASE_HEAP_RENEW_WORK=262144`; restart the process and require `tiler heap renewal work threshold=262144`. Because the package's compiled default is 65,536, this second log is the evidence that Winlator passed the override.
+3. If the second run logs 65,536 or the log is absent, stop and mark the override test invalid.
+4. Leave `PANVK_KBASE_PROFILE`, `PANVK_DESCRIPTOR_PROFILE`, `PANVK_MEMPOOL_PROFILE`, `PANVK_KBASE_DIAG_MEM_FLAGS`, and `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` unset in both performance runs. Keep DXVK 1.7.2, wrapper, resolution, quality, scene, and thermal starting conditions matched.
+5. Record min/max/average, frame pacing, visual correctness, hangs/device loss, and teardown. Prefer repeated A/B samples. If descriptor failure causes are still needed, collect a separate profiling-enabled diagnostic run after the uninstrumented A/B comparison.
+
+No source, allocator policy, heap topology, ring size, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed in this revalidation. Do not make further heap-policy changes until the override test is complete.
