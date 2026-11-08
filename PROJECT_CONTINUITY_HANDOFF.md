@@ -7603,3 +7603,11 @@ Our branch was extended to mirror those internal paths:
 - The draw-rect meta path obtains `DCD_FLAGS_0` from `build_dcd_flags()`, so it inherits the main fix.
 
 All changes are compile/runtime candidates only. They do not expose primitive/attachment FSR features or change the advertised rate list. The next Android package must be built from `c027d4d8` or later, not from the earlier `3b9e6a7` artifact, so all ordinary and internal DCD paths are represented in the test binary.
+
+
+### Candidate core-fix package compiled and passed package audit
+
+- Android-only run `42509483552` completed SUCCESS for commit `3b9e6a7d0f83abf929162ebef62cc96b3dc656f0`.
+- Artifact ID `13628843631`, name `panvk-g720-android-only-experimental-package`, size 16,823,004 bytes.
+- The log confirms the AArch64 Android API 30 Vulkan driver was built, staged, audited, packaged, and uploaded successfully. The flat ADPKG ZIP SHA-256 is `6c5b01fb623ff24fc77152db696f043219cbc3698526895a2f09184e72bae666`.
+- This package contains the ordinary-draw DCD clamp fix, but not the later internal fullscreen/frame-shader path completion. It is sufficient to test the main pipeline-rate clamp hypothesis; the preferred test package remains the current branch-tip build `42509835857` for commit `c027d4d`.
