@@ -7369,3 +7369,17 @@ Additional source comparison after the initial finding:
 - The Panthor backend imports its kernel-reported timestamp_frequency and computes the same reciprocal-Hz conversion.
 - Therefore timestampPeriod is in nanoseconds per timestamp tick, and the zero value is specifically caused by the Kbase backend leaving timestamp_frequency at zero. Do not substitute the GPU core frequency unless the kernel timestamp counter is proven to be that same counter.
 - The Kbase timeinfo UAPI distinguishes system-wide timestamp and GPU cycle_counter fields; this distinction must be respected during any calibration experiment.
+
+## 2026-11-08 — Conservative Kbase timestamp capability fix committed (CI pending)
+
+Further source audit established that PanVK CSF Vulkan timestamp queries on arch 10+ are not populated by kbase_kmod_query_timestamp(). The Vulkan query path in src/panfrost/vulkan/csf/panvk_vX_cmd_query.c emits MALI_CS_STATE_TIMESTAMP through cs_store_state(); the Kbase ioctl query_timestamp operation separately returns req.out.timestamp from BASE_TIMEINFO_TIMESTAMP_FLAG. These are distinct paths/counters and must not be assumed to share a frequency.
+
+PanVK currently derives timestampComputeAndGraphics from gpu_can_query_timestamp, derives graphics queue timestampValidBits from the same boolean, and derives timestampPeriod from timestamp_frequency. Since Kbase reports gpu_can_query_timestamp=true solely from nonzero gpu_id but leaves timestamp_frequency=0, the device advertised an unusable combination (feature=true, validBits=64, period=0). KHR_calibrated_timestamps was also exposed from that same boolean.
+
+Experimental source fix committed on experiment/g720-dynamic-fsr-sysval:
+- Commit aa22fd664c203a961e35fdff88b788f19b2a39e0 updates src/panfrost/lib/kmod/kbase_kmod.c to set props->gpu_can_query_timestamp=false until the hardware timestamp counter frequency and its relationship to Kbase timeinfo counters are validated. timestamp_frequency remains zero. The comment explicitly distinguishes MALI_CS_STATE_TIMESTAMP from the Kbase ioctl system timestamp path.
+- This makes PanVK conservatively report timestampComputeAndGraphics=false, graphics timestampValidBits=0, timestampPeriod=0, and disables KHR_calibrated_timestamps on this backend. It does not remove the internal kbase_kmod_query_timestamp() ioctl path.
+- CI workflow commit 78456d1ce6553826a2edc7c1e158b73ea5a4f837 adds a source assertion for the conservative capability setting to android-only-experiment.yml.
+- This is a correctness/advertisement fix only; no claim of GPU timestamp hardware failure. No timestamp frequency is guessed, and no changes to Android system/vendor drivers are made.
+
+Next: verify Android-only CI completes successfully. Then produce a small Vulkan properties probe on the phone to confirm timestampComputeAndGraphics=0, timestampPeriod=0, graphics timestampValidBits=0, and KHR_calibrated_timestamps is not exposed. Only after this is validated should work resume on a separate calibration experiment; use paired Kbase timeinfo monotonic/timestamp/cycle_counter requests and prove which counter corresponds to MALI_CS_STATE_TIMESTAMP before computing a frequency. The existing dynamic FSR GPU render PASS remains valid and unaffected.
