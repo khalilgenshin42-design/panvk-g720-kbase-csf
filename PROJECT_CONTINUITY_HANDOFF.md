@@ -7321,3 +7321,15 @@ Measured and verified results:
 This is the first actual-device runtime validation of the dynamic pipeline-rate command plus PanVK dynamic fragment-rate sysval path for this test. It validates the tested 2x2 KEEP scenario only. It does not validate other combiner modes, primitive/attachment shading rates, all render-pass configurations, application workloads, or performance gains in DXVK games. The hardware/driver-reported capability limits above remain unchanged; do not expose unsupported FSR modes.
 
 Next engineering action: move from isolated probe correctness to integration/performance validation. Add a controlled application-level A/B test that compares baseline 1x1 against dynamic 2x2 KEEP, first with a simple deterministic full-screen workload and GPU timestamps, then a real DXVK workload. Check image correctness and frame time, thermal/frequency stability, and CPU submission overhead. Keep the feature gated/opt-in until end-to-end results demonstrate a benefit. Do not merge into the performance-audit branch or alter the Android package/system driver without a separate review and explicit test evidence.
+
+
+## 2026-11-08 15:16 CET — GPU timestamp capability probe added
+
+The next VRS engineering step is to measure whether the Mali-G720 PanVK device supports GPU timestamp queries before adding timed render cases. Source audit found that PanVK's `timestampComputeAndGraphics` property is gated by `device->kmod.dev->props.gpu_can_query_timestamp`, and `timestampPeriod` is populated from the GPU system timestamp period on v10+. The Windows VRS render probe previously did not report these properties or the selected graphics queue family's timestamp-valid-bit count.
+
+- On `experiment/g720-dynamic-fsr-sysval`, commit `2c8f5d2bfefa90cb5942f87b27903bd70900cb7a` updates `tools/panvk_vrs_render_probe_win.c` to print `timestampComputeAndGraphics`, `timestampPeriod` in nanoseconds, and the selected graphics queue family's `timestampValidBits`.
+- The probe explicitly reports whether GPU timestamp queries are unavailable; if so, any fallback fence timing must be labeled CPU+GPU elapsed time, not GPU-only execution time.
+- Build workflow `Build Winlator VRS render probe` run `42489106136` is in progress for this source commit. Android-only run `42489106018` and wrapper run `42489106032` are also in progress. No device artifact is ready yet.
+- This is probe-only instrumentation. It does not change PanVK runtime behavior, advertised Vulkan features, shader lowering, the Android package, or any system/vendor driver.
+
+After CI succeeds, run the rebuilt probe on the actual G720 and capture the full log. If `timestampComputeAndGraphics=1`, `timestampPeriod>0`, and the graphics queue's `timestampValidBits>0`, implement a GPU timestamp A/B workload. If any condition fails, do not claim GPU-only timings; use clearly labeled fence-based elapsed-time measurements or investigate the Kbase timestamp capability path separately.
