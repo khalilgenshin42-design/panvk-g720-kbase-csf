@@ -6958,3 +6958,27 @@ No source or driver file was changed. **Future commits to the handoff branch
 must include `[skip ci]` in the commit message** because of the wrapper
 workflow's unfiltered push trigger. This correction itself is committed with
 `[skip ci]`.
+
+
+### Related handoff-branch wrapper runs observed during monitoring
+
+The wrapper workflow's unfiltered `on: [push]` also means documentation-only
+commits on this handoff branch can queue wrapper jobs. In addition to the
+monitoring commit run `42479110079` recorded above, two separate concurrent
+handoff documentation commits were observed:
+
+- [Run 42479092549](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42479092549), commit
+  `36074e16917ae87980735f4a4369cbf77e670c53`
+  (`docs: record final dynamic FSR probe QA`): Release job
+  `128726885198` and Debugoptimized job `128726885072`, both QUEUED.
+- [Run 42479223286](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42479223286), commit
+  `b165cd29e275855c3d9cdec0054ab6fcc8751b17`
+  (`docs: mark dynamic FSR isolation probe ready for device test`): Release
+  job `128727287782` and Debugoptimized job `128727288151`, both QUEUED.
+
+These two commits were separate from this monitor's commit. All three runs
+target the documentation branch, not `experiment/g720-performance-audit`.
+No steps had started when checked. The connected GitHub toolset exposes no
+workflow-cancel operation. Future handoff-branch documentation commits should
+use `[skip ci]`; the monitoring correction commit does so and did not queue
+a further wrapper run.
