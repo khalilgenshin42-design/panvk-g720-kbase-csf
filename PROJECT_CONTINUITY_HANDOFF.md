@@ -7721,3 +7721,15 @@ A follow-on semantic probe has been implemented on `experiment/g720-dynamic-fsr-
 - This is relevant to DXVK because Vulkan's derivative operations are measured between fragment invocations; coarse multi-pixel fragments can produce larger derivatives and therefore select coarser implicit texture LOD. This test checks derivative scaling without introducing texture descriptor/resource setup yet.
 - CI workflow `build-vrs-render-probe.yml` was triggered for source commit `d71c22f8b0b83a8400ac406ca536a2aa7faf1906`; run ID `42515697158` was queued at handoff update time. Build status and artifact are pending.
 - No PanVK driver source changes were made in this step. This is a diagnostic probe change only. Do not import or benchmark a new Android driver package based on these commits; wait for the probe build and then the device-side semantic result.
+
+
+### Derivative probe CI result and device handoff
+
+- Final shader commit `e7dbced9a7799c0eec5c00a3aef1b3af9fb8ccee` triggered Windows probe workflow run `42515701317`.
+- CI completed successfully: SPIR-V generation, MinGW C compilation, PE verification, and artifact upload all passed. The compiler emitted only existing unused-function-pointer and GetProcAddress cast warnings; there were no compile errors.
+- Artifact: `panvk-vrs-render-probe-win64`, artifact ID `13630399137`, 120,440 bytes.
+- Executable SHA-256: `84cd818fe269f0239e2723c26891ca96fcf839e7e0a1aabd2e5630730d953b77`.
+- Device run command after extracting the artifact while preserving its directory layout: `tools\\run-vrs-rate-matrix.cmd`. It runs `panvk-vrs-render-probe.exe --case=rate-matrix` and prints `panvk_vrs_render_probe.log`.
+- The test now validates derivative signatures for 1x1, 2x2, 2x1, 1x2, 4x2, 2x4, and 4x4; each matrix rate is tested in both static pipeline state and dynamic command-buffer state. The expected signatures scale with the actual WxH fragment footprint.
+- This remains a Windows diagnostic executable only. No new Android PanVK package was built or changed. Do not treat this as a driver update.
+- User action is now required for the device-side run. Capture the complete `panvk_vrs_render_probe.log` and return it unchanged; especially retain derivative-signature lines and the final PASS/FAIL line.
