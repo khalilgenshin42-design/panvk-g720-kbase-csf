@@ -563,6 +563,9 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
        * should never be written back. */
       cfg.clean_fragment_write = true;
 #endif
+#if PAN_ARCH >= 12
+      cfg.flags_0.disable_vrs_clamp_2x2 = true;
+#endif
    }
 
    uint32_t layer_count = cmdbuf->state.gfx.render.layer_count;
