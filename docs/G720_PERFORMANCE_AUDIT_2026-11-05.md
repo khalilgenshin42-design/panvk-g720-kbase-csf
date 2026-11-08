@@ -1232,3 +1232,26 @@ Neither wrapper ZIP contains `android_stub/libdrm.so`, the X11/XCB dependency cl
 - Wrapper packaging/dependency closure remains an open packaging issue.
 - Preserve the non-rooted Android/Termux workflow. Do not replace the phone's system/vendor Vulkan driver or modify the live kernel.
 - This record is documentation-only; no source or workflow files were changed and no build was triggered.
+
+
+### Monitoring correction — documentation push queued wrapper CI
+
+The handoff refresh commit `cf8a7dd9d2b58aaece1554872bbe06f6ee07717c`
+was pushed without a `[skip ci]` suffix. The wrapper workflow is configured
+with an unfiltered `on: [push]`, so this documentation-only push unintentionally
+queued wrapper CI:
+
+- [Run 42479110079](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42479110079), branch
+  `docs/project-continuity-handoff-2026-11-03`, head
+  `cf8a7dd9d2b58aaece1554872bbe06f6ee07717c`: status QUEUED at
+  2026-11-08 12:12 UTC.
+- Release job `128726936872`: QUEUED, no steps started/returned.
+- Debugoptimized job `128726937136`: QUEUED, no steps started/returned.
+
+This is not a build of the active performance-audit source branch and is not
+part of its latest-run status. The current GitHub connector exposes no workflow
+cancellation action, so this run could not be cancelled from this session.
+No source or driver file was changed. **Future commits to the handoff branch
+must include `[skip ci]` in the commit message** because of the wrapper
+workflow's unfiltered push trigger. This correction itself is committed with
+`[skip ci]`.
