@@ -7333,3 +7333,11 @@ The next VRS engineering step is to measure whether the Mali-G720 PanVK device s
 - This is probe-only instrumentation. It does not change PanVK runtime behavior, advertised Vulkan features, shader lowering, the Android package, or any system/vendor driver.
 
 After CI succeeds, run the rebuilt probe on the actual G720 and capture the full log. If `timestampComputeAndGraphics=1`, `timestampPeriod>0`, and the graphics queue's `timestampValidBits>0`, implement a GPU timestamp A/B workload. If any condition fails, do not claim GPU-only timings; use clearly labeled fence-based elapsed-time measurements or investigate the Kbase timestamp capability path separately.
+
+
+### Timestamp-capability probe build result
+
+- Windows VRS probe workflow run `42489106136` completed SUCCESS for source commit `2c8f5d2bfefa90cb5942f87b27903bd70900cb7a`; shader compilation, MinGW build, executable verification, and artifact upload all passed.
+- Artifact `panvk-vrs-render-probe-win64`: ID `13621270555`, 118,053 bytes, SHA-256 `1d0920d661bf3481946563889b8d06941c8f49e6cf55f7a666d406fb345c2333`, created 2026-11-08 14:18:17 UTC, expires 2027-02-06.
+- Android-only PanVK run `42489106018` and Android wrapper run `42489106032` were still in progress at this update. The Windows probe artifact can be tested independently; this change is only probe source and does not require installing a new driver package.
+- Device-side timestamp availability remains unknown until the user runs the new artifact and shares `panvk_vrs_render_probe.log`.
