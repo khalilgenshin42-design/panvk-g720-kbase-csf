@@ -313,3 +313,12 @@ count equals the static 2x2 count. This avoids interpreting a pixel mismatch
 without first proving the dynamic coordinate shader ran at the expected coarse
 rate. The constant-colour path independently checks its own static/dynamic
 invocation equality and equality to that same 2x2 baseline.
+
+
+Final harness review found that two newly added diagnostic format strings
+contained escaped backslash-n text rather than C newline escapes. They are now
+corrected so each result is written as a separate readable log line. Latest
+source commit for this correction: `09d9684e45201933f0301175dc912a4a39606067`.
+A successful earlier compile exists, but its artifact predates the final
+invocation-count assertion and newline correction and must not be used for the
+next device run. Await the build for the latest commit before distributing.
