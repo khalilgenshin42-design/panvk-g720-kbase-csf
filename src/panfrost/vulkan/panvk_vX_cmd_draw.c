@@ -827,6 +827,38 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
    set_gfx_sysval(cmdbuf, dirty_sysvals, vs.draw_id,
                   info->indirect.record_index);
 
+#if PAN_ARCH >= 12
+   /*
+    * Dynamic FSR changes draw-to-draw without recompiling the fragment
+    * shader. Keep the shader-side sample centre in the same effective-rate
+    * domain as CSF's PRIMITIVE_FLAGS_2 programming. Sample shading disables
+    * coarse fragment shading in set_tiler_idvs_flags(), so its effective
+    * rate is 1x1.
+    */
+   if (fs) {
+      const struct vk_fragment_shading_rate_state *fsr =
+         &cmdbuf->vk.dynamic_graphics_state.fsr;
+      uint32_t frag_rate = 0;
+
+      if (!fs->info.fs.sample_shading &&
+          fsr->combiner_ops[0] ==
+             VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR &&
+          fsr->combiner_ops[1] ==
+             VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR) {
+         const uint32_t width = fsr->fragment_size.width;
+         const uint32_t height = fsr->fragment_size.height;
+         const uint32_t log2_width =
+            width == 4 ? 2 : width == 2 ? 1 : 0;
+         const uint32_t log2_height =
+            height == 4 ? 2 : height == 2 ? 1 : 0;
+
+         frag_rate = (log2_width << 2) | log2_height;
+      }
+
+      set_gfx_sysval(cmdbuf, dirty_sysvals, fs.frag_rate, frag_rate);
+   }
+#endif
+
 #if PAN_ARCH < 9
    set_gfx_sysval(cmdbuf, dirty_sysvals, vs.raw_vertex_offset,
                   info->vertex.raw_offset);
