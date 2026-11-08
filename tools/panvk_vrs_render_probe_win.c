@@ -1013,9 +1013,9 @@ main(int argc, char **argv)
              uint32_t constant_static_invocations = 0;
              uint32_t constant_dynamic_invocations = 0;
              if (!constant_static || !constant_dynamic) {
-                LOG("FAIL: host allocation for constant-colour isolation images\\n");
+                LOG("FAIL: host allocation for constant-colour isolation images\n");
              } else {
-                LOG("starting constant-colour dynamic FSR isolation case\\n");
+                LOG("starting constant-colour dynamic FSR isolation case\n");
                 int constant_static_ok =
                    render_rate(device, &mem_props, gdpa, queue, qf, format,
                                rp, pl, vs, fs_constant, keep, keep,
@@ -1038,15 +1038,15 @@ main(int argc, char **argv)
                 int constant_invocations_match = constant_static_ok &&
                    constant_dynamic_ok &&
                    constant_static_invocations == constant_dynamic_invocations;
-                LOG("constant 2x2 static submit/fence/readback=%s\\n",
+                LOG("constant 2x2 static submit/fence/readback=%s\n",
                     constant_static_ok ? "PASS" : "FAIL");
-                LOG("constant 2x2 dynamic submit/fence/readback=%s\\n",
+                LOG("constant 2x2 dynamic submit/fence/readback=%s\n",
                     constant_dynamic_ok ? "PASS" : "FAIL");
-                LOG("constant static checksum=0x%016llx dynamic=0x%016llx pixel-comparison=%s\\n",
+                LOG("constant static checksum=0x%016llx dynamic=0x%016llx pixel-comparison=%s\n",
                     (unsigned long long)constant_static_hash,
                     (unsigned long long)constant_dynamic_hash,
                     constant_pixels_match ? "PASS" : "FAIL");
-                LOG("constant fragment-invocations static=%u dynamic=%u comparison=%s\\n",
+                LOG("constant fragment-invocations static=%u dynamic=%u comparison=%s\n",
                     constant_static_invocations, constant_dynamic_invocations,
                     constant_invocations_match ? "PASS" : "FAIL");
                 int dynamic_coordinate_ok =
@@ -1057,10 +1057,8 @@ main(int argc, char **argv)
                                &invocations_target, image_target);
                 int coordinate_shader_differs = dynamic_coordinate_ok &&
                    checksum(image_target) != hash_2x2;
-                LOG("coordinate shader dynamic render=%s; static-vs-dynamic mismatch=%s\\n",
+                LOG("coordinate shader dynamic render=%s; static-vs-dynamic mismatch=%s\n",
                     dynamic_coordinate_ok ? "PASS" : "FAIL",
-                    coordinate_shader_differs ? "YES" : "NO");
-                LOG("coordinate shader static-vs-dynamic pixel mismatch=%s\\n",
                     coordinate_shader_differs ? "YES" : "NO");
                 passed = basic && invocation_reduction && constant_pixels_match &&
                          constant_invocations_match &&
