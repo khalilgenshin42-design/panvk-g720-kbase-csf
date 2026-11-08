@@ -104,6 +104,148 @@ memory_type(const VkPhysicalDeviceMemoryProperties *props, uint32_t bits,
    PFN_vkDeviceWaitIdle device_wait_idle = LOAD_D(DeviceWaitIdle); \
    PFN_vkCmdSetFragmentShadingRateKHR cmd_set_fragment_shading_rate = LOAD_D(CmdSetFragmentShadingRateKHR)
 
+
+/* Five constant-colour mip levels expose implicit-LOD selection in readback. */
+static int
+create_mip_texture(VkDevice device,
+                   const VkPhysicalDeviceMemoryProperties *mem_props,
+                   VkQueue queue, uint32_t queue_family,
+                   VkImage *out_image, VkDeviceMemory *out_image_mem,
+                   VkImageView *out_view, VkSampler *out_sampler)
+{
+   DECLARE_DEVICE_FUNCS;
+   if (!create_image || !destroy_image || !get_image_memory_requirements ||
+       !allocate_memory || !free_memory || !bind_image_memory ||
+       !create_buffer || !destroy_buffer || !get_buffer_memory_requirements ||
+       !bind_buffer_memory || !map_memory || !unmap_memory ||
+       !create_image_view || !destroy_image_view || !create_sampler ||
+       !destroy_sampler || !cmd_pipeline_barrier || !cmd_copy_buffer_to_image ||
+       !create_command_pool || !destroy_command_pool || !allocate_command_buffers ||
+       !begin_command_buffer || !end_command_buffer || !queue_submit ||
+       !create_fence || !destroy_fence || !wait_for_fences)
+      return 0;
+
+   const uint32_t levels = 5;
+   const VkDeviceSize bytes = (256u*256u + 128u*128u + 64u*64u +
+                               32u*32u + 16u*16u) * 4u;
+   VkImage image=VK_NULL_HANDLE;
+   VkDeviceMemory image_mem=VK_NULL_HANDLE, upload_mem=VK_NULL_HANDLE;
+   VkBuffer upload=VK_NULL_HANDLE;
+   VkImageView view=VK_NULL_HANDLE;
+   VkSampler sampler=VK_NULL_HANDLE;
+   VkCommandPool pool=VK_NULL_HANDLE;
+   VkFence fence=VK_NULL_HANDLE;
+   int submitted=0, ok=0;
+   VkResult vr;
+   VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+      .extent={256,256,1},.mipLevels=levels,.arrayLayers=1,
+      .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+      .usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
+      .sharingMode=VK_SHARING_MODE_EXCLUSIVE,.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED};
+   vr=create_image(device,&ii,NULL,&image);
+   LOG("mip vkCreateImage=%d\\n",vr);
+   if(vr!=VK_SUCCESS)goto done;
+   VkMemoryRequirements ir; get_image_memory_requirements(device,image,&ir);
+   uint32_t it=memory_type(mem_props,ir.memoryTypeBits,0,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+   if(it==UINT32_MAX)goto done;
+   VkMemoryAllocateInfo ia={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize=ir.size,.memoryTypeIndex=it};
+   vr=allocate_memory(device,&ia,NULL,&image_mem); if(vr!=VK_SUCCESS)goto done;
+   vr=bind_image_memory(device,image,image_mem,0); if(vr!=VK_SUCCESS)goto done;
+
+   VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=bytes,
+      .usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT,.sharingMode=VK_SHARING_MODE_EXCLUSIVE};
+   vr=create_buffer(device,&bi,NULL,&upload); if(vr!=VK_SUCCESS)goto done;
+   VkMemoryRequirements br; get_buffer_memory_requirements(device,upload,&br);
+   uint32_t bt=memory_type(mem_props,br.memoryTypeBits,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+   if(bt==UINT32_MAX)goto done;
+   VkMemoryAllocateInfo ba={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize=br.size,.memoryTypeIndex=bt};
+   vr=allocate_memory(device,&ba,NULL,&upload_mem); if(vr!=VK_SUCCESS)goto done;
+   vr=bind_buffer_memory(device,upload,upload_mem,0); if(vr!=VK_SUCCESS)goto done;
+   void *mapped=NULL; vr=map_memory(device,upload_mem,0,bytes,0,&mapped);
+   if(vr!=VK_SUCCESS)goto done;
+   static const uint8_t rgba[5][4]={{255,0,0,255},{0,255,0,255},
+      {0,0,255,255},{255,255,0,255},{255,0,255,255}};
+   VkBufferImageCopy regions[5]; VkDeviceSize offset=0;
+   for(uint32_t l=0;l<levels;l++){
+      uint32_t dim=256u>>l; uint8_t *dst=(uint8_t*)mapped+offset;
+      for(uint32_t p=0;p<dim*dim;p++)memcpy(dst+p*4u,rgba[l],4);
+      regions[l]=(VkBufferImageCopy){.bufferOffset=offset,
+         .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,l,0,1},
+         .imageExtent={dim,dim,1}};
+      offset+=(VkDeviceSize)dim*dim*4u;
+   }
+   unmap_memory(device,upload_mem);
+
+   VkCommandPoolCreateInfo pci={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags=VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,.queueFamilyIndex=queue_family};
+   vr=create_command_pool(device,&pci,NULL,&pool); if(vr!=VK_SUCCESS)goto done;
+   VkCommandBufferAllocateInfo cai={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+   VkCommandBuffer cb=VK_NULL_HANDLE; vr=allocate_command_buffers(device,&cai,&cb);
+   if(vr!=VK_SUCCESS)goto done;
+   VkCommandBufferBeginInfo cbi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+   vr=begin_command_buffer(cb,&cbi); if(vr!=VK_SUCCESS)goto done;
+   VkImageMemoryBarrier b0={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,
+      .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+      .image=image,.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,levels,0,1}};
+   cmd_pipeline_barrier(cb,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+      0,0,NULL,0,NULL,1,&b0);
+   cmd_copy_buffer_to_image(cb,upload,image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,levels,regions);
+   VkImageMemoryBarrier b1={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.dstAccessMask=VK_ACCESS_SHADER_READ_BIT,
+      .oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+      .image=image,.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,levels,0,1}};
+   cmd_pipeline_barrier(cb,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+      0,0,NULL,0,NULL,1,&b1);
+   vr=end_command_buffer(cb); if(vr!=VK_SUCCESS)goto done;
+   VkFenceCreateInfo fi={.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+   vr=create_fence(device,&fi,NULL,&fence); if(vr!=VK_SUCCESS)goto done;
+   VkSubmitInfo si={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount=1,.pCommandBuffers=&cb};
+   vr=queue_submit(queue,1,&si,fence); if(vr!=VK_SUCCESS)goto done;
+   submitted=1; vr=wait_for_fences(device,1,&fence,VK_TRUE,30000000000ull);
+   LOG("mip upload fence=%d\\n",vr); if(vr!=VK_SUCCESS)goto done;
+
+   VkImageViewCreateInfo vi={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image=image,.viewType=VK_IMAGE_VIEW_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
+      .components={VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY,
+         VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY},
+      .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,levels,0,1}};
+   vr=create_image_view(device,&vi,NULL,&view); if(vr!=VK_SUCCESS)goto done;
+   VkSamplerCreateInfo sci={.sType=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter=VK_FILTER_NEAREST,.minFilter=VK_FILTER_NEAREST,
+      .mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST,
+      .addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .minLod=0.0f,.maxLod=4.0f,.borderColor=VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK};
+   vr=create_sampler(device,&sci,NULL,&sampler); if(vr!=VK_SUCCESS)goto done;
+   *out_image=image;*out_image_mem=image_mem;*out_view=view;*out_sampler=sampler;
+   image=VK_NULL_HANDLE;image_mem=VK_NULL_HANDLE;view=VK_NULL_HANDLE;
+   sampler=VK_NULL_HANDLE;ok=1;
+done:
+   if(submitted&&!ok&&device_wait_idle)device_wait_idle(device);
+   if(fence)destroy_fence(device,fence,NULL);
+   if(pool)destroy_command_pool(device,pool,NULL);
+   if(upload)destroy_buffer(device,upload,NULL);
+   if(upload_mem)free_memory(device,upload_mem,NULL);
+   if(sampler)destroy_sampler(device,sampler,NULL);
+   if(view)destroy_image_view(device,view,NULL);
+   if(image)destroy_image(device,image,NULL);
+   if(image_mem)free_memory(device,image_mem,NULL);
+   return ok;
+}
+
 static int
 render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
             PFN_vkGetDeviceProcAddr get_device_proc_addr,
