@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - experiment/g720-fragment-shading-rate
+      - experiment/g720-dynamic-fsr-sysval
     paths:
       - tools/panvk_vrs_render_probe_win.c
       - tools/run-vrs-cases.cmd
@@ -78,4 +79,5 @@ jobs:
             tools/run-vrs-replace-check.cmd
             tools/run-vrs-dynamic-check.cmd
             tools/run-vrs-dynamic-isolation.cmd
+            Run-Dynamic-VRS.cmd
           if-no-files-found: error
