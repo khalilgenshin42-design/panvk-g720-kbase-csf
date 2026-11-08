@@ -744,6 +744,31 @@ lower_vrs_frag_center(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 }
 
 /*
+ * Dynamic FSR cannot be folded into an immediate because the rate can change
+ * between draws while the pipeline remains bound. Read the effective rate
+ * from the fragment FAU block populated by cmd_prepare_draw_sysvals().
+ */
+static bool
+lower_dynamic_vrs_frag_center(nir_builder *b, nir_intrinsic_instr *intr,
+                              UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_load_sample_pos_or_center)
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def *rate = load_sysval(b, graphics, 32, fs.frag_rate);
+   nir_def *log2_size =
+      nir_vec2(b, nir_iand_imm(b, nir_ushr_imm(b, rate, 2), 3),
+               nir_iand_imm(b, rate, 3));
+   nir_def *center = nir_ldexp(b, nir_imm_vec2(b, 0.5f, 0.5f), log2_size);
+   if (center->bit_size != intr->def.bit_size)
+      center = nir_f2fN(b, center, intr->def.bit_size);
+
+   nir_def_replace(&intr->def, center);
+   return true;
+}
+
+/*
  * Combine fragment sizes represented as log2(width/height). PanVK currently
  * exposes pipeline FSR only: primitive and attachment rates are fixed at 1x1.
  * The G720 property fragmentShadingRateStrictMultiplyCombiner is false, so
@@ -838,6 +863,29 @@ panvk_hash_state(struct vk_physical_device *device,
 #if PAN_ARCH >= 12
       bool vrs = fs_may_use_vrs(enabled_features, state);
       _mesa_blake3_update(&blake3_ctx, &vrs, sizeof(vrs));
+
+      /*
+       * Static FSR changes the NIR sample-centre immediate and therefore
+       * belongs in the shader cache key. Dynamic FSR instead reads a per-draw
+       * sysval; distinguish that shader variant from the static variant but
+       * deliberately do not key it by the current dynamic rate.
+       */
+      const bool dynamic_fsr =
+         BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR);
+      _mesa_blake3_update(&blake3_ctx, &dynamic_fsr,
+                          sizeof(dynamic_fsr));
+
+      if ((stages & VK_SHADER_STAGE_FRAGMENT_BIT) && vrs &&
+          !dynamic_fsr && !sample_shading_enable) {
+         uint32_t rate, width, height;
+         const bool has_static_rate =
+            panvk_get_static_pipeline_vrs_rate(enabled_features, state,
+                                               &rate, &width, &height);
+         _mesa_blake3_update(&blake3_ctx, &has_static_rate,
+                             sizeof(has_static_rate));
+         if (has_static_rate)
+            _mesa_blake3_update(&blake3_ctx, &rate, sizeof(rate));
+      }
 #endif
 
       _mesa_blake3_update(&blake3_ctx, &state->mv->view_mask,
@@ -1372,24 +1420,38 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
 #if PAN_ARCH >= 12
       if (!nir->info.fs.uses_sample_shading &&
           fs_may_use_vrs(&dev->vk.enabled_features, state)) {
-         /*
-          * The G720 path currently exposes pipeline FSR only. Primitive and
-          * attachment rates are therefore the implicit 1x1 rate, allowing us
-          * to resolve both static combiners at pipeline compile time.
-          * Dynamic FSR remains on the native path until it is implemented.
-          */
-         uint32_t rate, effective_width, effective_height;
-         if (panvk_get_static_pipeline_vrs_rate(&dev->vk.enabled_features,
-                                                state, &rate, &effective_width,
-                                                &effective_height)) {
-            mesa_logi("PANVK_VRS_DIAG static effective frag-center lowering rate=%ux%u encoded=0x%x ops=%u,%u",
-                      effective_width, effective_height, rate,
-                      (unsigned)state->fsr->combiner_ops[0],
-                      (unsigned)state->fsr->combiner_ops[1]);
-            NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_vrs_frag_center,
-                     nir_metadata_control_flow, (void *)&rate);
+         const bool dynamic_fsr =
+            state && BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR);
+
+         if (dynamic_fsr &&
+             dev->vk.enabled_features.pipelineFragmentShadingRate &&
+             !dev->vk.enabled_features.primitiveFragmentShadingRate &&
+             !dev->vk.enabled_features.attachmentFragmentShadingRate) {
+            mesa_logi("PANVK_VRS_DIAG dynamic frag-center lowering via per-draw FAU sysval");
+            NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+                     lower_dynamic_vrs_frag_center,
+                     nir_metadata_control_flow, NULL);
          } else {
-            mesa_logi("PANVK_VRS_DIAG dynamic/unsupported FSR state left on native sample-center path");
+            /*
+             * The G720 path currently exposes pipeline FSR only. Primitive
+             * and attachment rates are therefore the implicit 1x1 rate,
+             * allowing static pipeline rates to be resolved at compile time.
+             */
+            uint32_t rate, effective_width, effective_height;
+            if (panvk_get_static_pipeline_vrs_rate(&dev->vk.enabled_features,
+                                                   state, &rate,
+                                                   &effective_width,
+                                                   &effective_height)) {
+               mesa_logi("PANVK_VRS_DIAG static effective frag-center lowering rate=%ux%u encoded=0x%x ops=%u,%u",
+                         effective_width, effective_height, rate,
+                         (unsigned)state->fsr->combiner_ops[0],
+                         (unsigned)state->fsr->combiner_ops[1]);
+               NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+                        lower_vrs_frag_center, nir_metadata_control_flow,
+                        (void *)&rate);
+            } else {
+               mesa_logi("PANVK_VRS_DIAG unsupported FSR state left on native sample-center path");
+            }
          }
       }
 #endif
