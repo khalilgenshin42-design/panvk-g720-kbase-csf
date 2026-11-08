@@ -147,3 +147,36 @@ result; no feature bits should be forced on.
 No Android driver source was changed in this audit. No new device test is
 requested until the dynamic render probe is built and its artifact is
 independently checked.
+
+
+## 2026-11-08 — dynamic FSR render probe prepared
+
+Added a separate `--case=dynamic-keep` path to the Windows render probe.
+It creates a graphics pipeline with
+`VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR`, records
+`vkCmdSetFragmentShadingRateKHR(2x2, KEEP/KEEP)`, submits an actual draw
+using the existing `gl_FragCoord` shader, waits for completion, reads back
+the image, and compares both the pixel checksum and fragment invocation
+count against the static 2x2 KEEP result. The existing static 1x1 and 2x2
+controls run first in the same process.
+
+Build verification:
+- Source commit: `d793346dc75ab8e58676b39d41afbee75aa77c83`
+- GitHub Actions run #32: success
+  https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42431201125
+- Artifact: `panvk-vrs-render-probe-win64`, ID `13597576380`
+- Artifact ZIP SHA-256:
+  `9b54bf53664d2ff16923eb621a4c9ac93e0bcce543b1ac60d44f4c648b67696b`
+- Executable SHA-256:
+  `f0e7fc5d84645bf6f4927b4adf5ec1ee5b447d2187eca088b44d64a9d1d083a8`
+- ZIP contents were downloaded and independently inspected: valid x86-64
+  Windows PE executable plus the KEEP, REPLACE, all-cases, and dynamic-check
+  scripts. The dynamic command and expected log strings are present in the
+  executable.
+
+This is a probe-only artifact. It does not contain or replace the Android
+PanVK driver. Do not install a new driver for this test; use the already
+working `git-c9d61e10a9` package. The next user action is to run
+`tools/run-vrs-dynamic-check.cmd` from the extracted artifact and return
+only `panvk_vrs_dynamic.log`. The test is deliberately isolated from the
+invalid non-KEEP combiner cases.
