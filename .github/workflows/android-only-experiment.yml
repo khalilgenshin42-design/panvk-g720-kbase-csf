@@ -60,6 +60,11 @@ jobs:
           grep -q ".pipelineFragmentShadingRate = PAN_ARCH >= 12" src/panfrost/vulkan/panvk_vX_physical_device.c
           grep -q "panvk_GetPhysicalDeviceFragmentShadingRatesKHR" src/panfrost/vulkan/panvk_physical_device.c
           grep -q "cfg.vrs_draw_rate" src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c
+          grep -q "uint32_t frag_rate;" src/panfrost/vulkan/panvk_shader.h
+          grep -q "set_gfx_sysval(cmdbuf, dirty_sysvals, fs.frag_rate, frag_rate)" src/panfrost/vulkan/panvk_vX_cmd_draw.c
+          grep -q "lower_dynamic_vrs_frag_center" src/panfrost/vulkan/panvk_vX_shader.c
+          grep -q "load_sysval(b, graphics, 32, fs.frag_rate)" src/panfrost/vulkan/panvk_vX_shader.c
+          grep -q "has_static_rate" src/panfrost/vulkan/panvk_vX_shader.c
 
       - name: Set up Python
         uses: actions/setup-python@v5
