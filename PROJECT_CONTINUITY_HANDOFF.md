@@ -7579,3 +7579,12 @@ Builds triggered for candidate fix commit `3b9e6a7`:
 
 
 The candidate clamp change received a whitespace-only follow-up commit `3cfbf43c3db1d666392d76b494443eddd288175c` to align the inserted block with surrounding code. No behavior changed. The Android-only build for `3b9e6a7` is still useful for compile/runtime validation; a newer build may also be triggered for the branch tip.
+
+
+### Diagnostic-only Android package build completed
+
+- Android-only run `42509014534` completed SUCCESS for source commit `6ff24e63fefb7eee875d4a99353a4f45224c4845`.
+- Artifact `13627869712`, `panvk-g720-android-only-experimental-package`, 16,821,512 bytes, not expired.
+- The full compile, staged install, driver/manifest/dependency audit, flat Winlator package build, and artifact upload all passed.
+- This package includes the large-rate `TILER_FLAGS2` diagnostic but predates the DCD clamp fix. It is not the package to use for the next rate-matrix run; wait for the candidate-fix package from run `42509483552` or newer.
+- The exact-shape Winlator probe for commit `84b6c3d` is artifact `13628887002` from successful run `42509380933`.
