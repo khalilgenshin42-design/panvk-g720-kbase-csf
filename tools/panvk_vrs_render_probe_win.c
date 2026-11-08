@@ -1128,14 +1128,23 @@ main(int argc, char **argv)
                                        &static_vertical);
                 uint32_t expected_invocations =
                    (invocations_1x1 + area / 2) / area;
+                uint32_t expected_horizontal =
+                   (W / rate.width) * H * (rate.width - 1);
+                uint32_t expected_vertical =
+                   W * (H / rate.height) * (rate.height - 1);
                 int static_pixels_ok = static_ok && static_hash != hash_1x1 &&
                    static_equal > equal_1x1 + W * H / 4;
+                int static_shape_ok = static_ok &&
+                   static_horizontal == expected_horizontal &&
+                   static_vertical == expected_vertical;
                 int static_count_ok = static_ok &&
                    static_invocations == expected_invocations;
-                LOG("%ux%u static: render=%s checksum=0x%016llx equal-neighbors=%u horizontal=%u vertical=%u invocations=%u expected=%u pixels=%s count=%s\\n",
+                LOG("%ux%u static: render=%s checksum=0x%016llx equal-neighbors=%u horizontal=%u/%u vertical=%u/%u shape=%s invocations=%u expected=%u pixels=%s count=%s\\n",
                     rate.width, rate.height, static_ok ? "PASS" : "FAIL",
                     (unsigned long long)static_hash, static_equal,
-                    static_horizontal, static_vertical,
+                    static_horizontal, expected_horizontal,
+                    static_vertical, expected_vertical,
+                    static_shape_ok ? "PASS" : "FAIL",
                     static_invocations, expected_invocations,
                     static_pixels_ok ? "PASS" : "FAIL",
                     static_count_ok ? "PASS" : "FAIL");
@@ -1155,8 +1164,9 @@ main(int argc, char **argv)
                     dynamic_pixels_ok ? "PASS" : "FAIL",
                     dynamic_count_ok ? "PASS" : "FAIL");
 
-                matrix_pass &= static_pixels_ok && static_count_ok &&
-                               dynamic_pixels_ok && dynamic_count_ok;
+                matrix_pass &= static_pixels_ok && static_shape_ok &&
+                               static_count_ok && dynamic_pixels_ok &&
+                               dynamic_count_ok;
              }
              LOG("advertised rate matrix: %s\\n",
                  matrix_pass ? "PASS" : "FAIL");
