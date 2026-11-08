@@ -66,6 +66,9 @@ jobs:
           grep -q "load_sysval(b, graphics, 32, fs.frag_rate)" src/panfrost/vulkan/panvk_vX_shader.c
           grep -q "has_static_rate" src/panfrost/vulkan/panvk_vX_shader.c
           grep -q "props->gpu_can_query_timestamp = false;" src/panfrost/lib/kmod/kbase_kmod.c
+          grep -q "props.timestamp_frequency != 0" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -q "!device->kbase_node_path\[0\]" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -q "!physical_device->kbase_node_path\[0\]" src/panfrost/vulkan/panvk_physical_device.c
 
       - name: Set up Python
         uses: actions/setup-python@v5
