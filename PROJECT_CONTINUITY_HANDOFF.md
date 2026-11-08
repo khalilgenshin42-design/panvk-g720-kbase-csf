@@ -7611,3 +7611,33 @@ All changes are compile/runtime candidates only. They do not expose primitive/at
 - Artifact ID `13628843631`, name `panvk-g720-android-only-experimental-package`, size 16,823,004 bytes.
 - The log confirms the AArch64 Android API 30 Vulkan driver was built, staged, audited, packaged, and uploaded successfully. The flat ADPKG ZIP SHA-256 is `6c5b01fb623ff24fc77152db696f043219cbc3698526895a2f09184e72bae666`.
 - This package contains the ordinary-draw DCD clamp fix, but not the later internal fullscreen/frame-shader path completion. It is sufficient to test the main pipeline-rate clamp hypothesis; the preferred test package remains the current branch-tip build `42509835857` for commit `c027d4d`.
+
+
+### Full candidate package for the next device test is ready
+
+- Android-only PanVK build run `42509835857` completed SUCCESS for exact source commit `c027d4d8c747787c85256cfc0e9768e991262c16`.
+- Artifact ID: `13628779694`, name `panvk-g720-android-only-experimental-package`, size 16,825,016 bytes.
+- Artifact page: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42509835857/artifacts/13628779694
+- The workflow completed compile/stage, Android ARM64 ELF audit, ICD manifest/dependency audit, flat ADPKG packaging, and upload.
+- Inner importable `PanVK-G720-experimental.zip` SHA-256: `5ea2bb16e45cf4591a56786cdd531c41f454c6429103b3b48352aa0d8982c161`.
+- Driver SHA-256 before packaging: `3d105175d0b95ab9d93d087ab6f15c9e7e72584c6b8a259f4891f0b9f11b6ff0`.
+- Driver is ELF64 AArch64, Android API 30; the package audit and upload succeeded.
+- This is the first package containing the complete ordinary-draw, fullscreen barrier, and frame-shader DCD clamp changes.
+
+The matching exact-shape Winlator render probe is artifact `13628887002` from run `42509380933`, source commit `84b6c3d745a4865595893da312f4ca20f627ee14`. It includes `tools/run-vrs-rate-matrix.cmd` and reports horizontal/vertical pixel-footprint checks as well as SSBO invocation counts.
+
+### User test gate — ready now
+
+Use only the candidate PanVK package from run `42509835857` and the render probe artifact from run `42509380933`:
+
+1. Download the Android-only artifact and extract the nested `PanVK-G720-experimental.zip`.
+2. Import it in Winlator Mali 1.2 as a separate custom driver. Do not replace the Android system/vendor driver.
+3. Download/extract the Win64 probe artifact and run `tools/run-vrs-rate-matrix.cmd`.
+4. Send the complete `panvk_vrs_render_probe.log` and any PanVK diagnostic output containing `PANVK_VRS_DIAG`.
+
+Expected large-rate values if the DCD clamp fix works:
+- 4x2: DCD disable-clamp bit 12 = 1, TILER rate code 9, H=3072/V=2048, SSBO invocations=512.
+- 2x4: DCD disable-clamp bit 12 = 1, TILER rate code 6, H=2048/V=3072, SSBO invocations=512.
+- 4x4: DCD disable-clamp bit 12 = 1, TILER rate code 10, H=3072/V=3072, SSBO invocations=256.
+
+Keep the 1x1, 2x1, 1x2, and 2x2 controls passing. If the large rates pass, next validate the shader semantics that matter to real workloads (derivatives/implicit LOD, interpolation, discard/depth/sample behavior) before considering the feature production-safe. No game-FPS claim follows from this synthetic test.
