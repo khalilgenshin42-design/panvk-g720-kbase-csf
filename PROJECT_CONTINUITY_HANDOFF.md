@@ -1,12 +1,12 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-07 18:06 UTC
+Last updated: 2026-11-08 12:42 UTC
 
-## Authoritative current state — 2026-11-07
+## Authoritative current state — 2026-11-08
 
 This section supersedes older "next steps", queued-CI, and "no code changed" statements in the historical addenda below. Keep the historical record, but use the branch-specific state here when deciding what is current.
 
-- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file; immediately before the 2026-11-06 monitoring refresh its HEAD was `85df8d35130deb059647ad988236bac848d4f63a`. The latest monitoring addendum below records the current CI/package state.
-- Current task branch: `experiment/g720-performance-audit`. Its latest updates since the last CI-tested source snapshot are documentation-only monitoring records using `[skip ci]`; the latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`, and the latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`. The latest relevant Android-only and wrapper Release/Debugoptimized runs remain `42215758218` and `42215758167`; the 2026-11-07 monitoring addendum records their revalidated artifacts.
+- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file. Its pre-this-pass HEAD was `2ead3df163443f8234ea0fead043de2f8c21fddb`; that documentation-only commit triggered two wrapper-only CI runs, recorded in the 2026-11-08 12:42 UTC addendum. This update uses `[skip ci]`.
+- Current task branch: `experiment/g720-performance-audit`. Its pre-this-pass HEAD was `6d1ed6db4c0ef050a516ce47de2c1991a30b2e90`; it is documentation-only beyond driver-source commit `a2e5ac142b4f0df71cb28204ece4337bace046de`. The latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`; Android-only run `42215758218` and wrapper run `42215758167` both succeeded. The audit refresh for this pass is commit `de47624438c6951437855dfd66c65b526fdf0b51`.
 - Separate 4x heap-threshold candidate: `experiment/g720-heap-renew-262k`, HEAD `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`. It changes the compiled default from 65,536 to 262,144; it is not an environment-variable propagation test.
 - Separate descriptor-heap implementation: `experiment/g720-descriptor-heaps`, HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. Its exact-head Android and wrapper builds now pass; the package is independently audited below. No device runtime test has been performed.
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
@@ -7205,3 +7205,39 @@ Next: obtain and inspect the Android-only workflow run for this exact branch hea
 - It also supports `--case=dynamic-isolation`, which compares static and dynamic 2x2 constant-colour output/invocations, then verifies dynamic coordinate-dependent rendering reaches the expected invocation count while remaining distinct from the static coordinate output. This is the stronger isolation test for the sysval/fragment-centre change.
 - Therefore this device run proves static pipeline FSR is genuinely executing on the G720 and the package loads. It does NOT yet validate the new dynamic sysval lowering.
 - Next exact test: run the same executable with argument `--case=dynamic-keep`; after that run `--case=dynamic-isolation`. Preserve both complete logs. Do not benchmark games until dynamic correctness is established.
+
+
+## 2026-11-08 12:42 UTC — performance-audit follow-up and attachment verification
+
+### Current branch and source state
+
+- Re-read the complete canonical handoff and the performance audit before inspecting the repository, active branch, source files, CI, and current conversation attachments.
+- Performance-audit branch pre-update HEAD: `6d1ed6db4c0ef050a516ce47de2c1991a30b2e90`. Latest driver-source commit: `a2e5ac142b4f0df71cb28204ece4337bace046de`. Compare reports 52 commits ahead / 0 behind from source to branch HEAD, with only documentation paths changed. No driver source or workflow file changed.
+- Descriptor failure classification remains in source: `788d34b622ce6cf51aa410c6366a06b86a6a4988` adds overflow/capacity/VMA counters; `751fddd64efc201c103ffa496b29608d315a55e6` corrects formatting; `a2e5ac142b4f0df71cb28204ece4337bace046de` fixes the profile log call. Original allocator behavior and Vulkan results are preserved.
+- Effective heap threshold logging remains from `52afaaf880fdf3a8cb4e6e0c5cd6598ec482d3ee`. Default is 65,536. The log only reports the effective value, so environment propagation must be demonstrated with the 65K-default package.
+- Performance audit documentation was updated at commit `de47624438c6951437855dfd66c65b526fdf0b51`.
+
+### CI state and branch separation
+
+- Performance-audit Android-only run [42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218) and wrapper run [42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167) both remain SUCCESS for source snapshot `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`. The branch's later commits are documentation-only.
+- The handoff branch's prior commits without `[skip ci]` triggered wrapper-only runs [42481490094](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42481490094) and [42481461421](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42481461421). At the time of inspection, both Release and Debugoptimized compile steps were still in progress. These are not performance-audit or Android-only PanVK builds. The earlier wrapper run `42479110079` completed SUCCESS. Use `[skip ci]` on all future handoff documentation commits.
+- Parallel VRS work remains separate: `experiment/g720-dynamic-fsr-sysval` at `0804f245e8bf0e4fc7e6c70e6867a375a7bd73aa` passed Android-only run `42480864484` and wrapper run `42480864476`; Android artifact `13617542479` was recorded with outer digest `422db8213301238ead0db0ea4a4102331b1da1880c2cac9ba5a10c644d0d5787` and inner package hash `91c4de31a7c740749c016cfb897337d325c08e1c442a5a17ad63eb387c3177bc`. This is a separate dynamic-FSR experiment and must not be substituted for the heap-threshold package.
+
+### Current attachment verification and benchmark evidence
+
+- The newly surfaced `PanVK-G720-65k-env-override-test.zip` is the same package already recorded: SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`. ZIP integrity and all embedded checksums pass. It contains the four expected flat files. The driver is ELF64 AArch64/API 30 with RUNPATH `$ORIGIN` and private NEEDED `libpanvk_drm.so`; the companion library is ELF64 AArch64 with SONAME `libpanvk_drm.so` and only `libc.so` as a dependency. This confirms static package integrity, not runtime loading or game compatibility.
+- No new Tomb Raider benchmark log was attached. The available archive is still `TombRaider_logs_2026-11-05_02-03-50.zip`, SHA-256 `6f54b17e422795673411dfc3106a184922ea283024801f1e257ed5dbd9f68a56`, timestamped 2026-11-05 02:03.
+- That instrumented archive records 4,068 heap renewals, 52,804.121 ms aggregate renewal wait, 0 ring wraps, 1.8 KiB sampled occupancy high-water, 0 transient BO allocation failures, 0 backing BO creation failures, and 299 aggregate descriptor-set allocation failures. It has neither the new descriptor failure-category output nor the effective-threshold log, so it cannot classify those 299 failures or validate the environment override.
+- The `7.7 / 19.7 / 13.6 FPS` result remains an instrumented diagnostic capture. Clean 65K baseline remains `9.0 / 17.6 / 13.5 FPS`; the 262K compiled-default candidate remains `7.8 / 18.9 / 13.9 FPS`. The result is inconclusive; no FPS improvement is claimed.
+
+### Next device test
+
+Use the verified 65K-default package as a separate Winlator Mali custom driver:
+
+1. Run the same Tomb Raider scene/settings with `PANVK_KBASE_HEAP_RENEW_WORK` absent; restart the game/driver process and require `tiler heap renewal work threshold=65536`.
+2. Repeat with exactly `PANVK_KBASE_HEAP_RENEW_WORK=262144`; restart and require `tiler heap renewal work threshold=262144`. The package's compiled default is 65,536, so this demonstrates environment propagation.
+3. If the second run reports 65,536 or has no threshold log, stop and classify the override test as invalid.
+4. Leave all profiling variables unset in both performance runs: `PANVK_KBASE_PROFILE`, `PANVK_DESCRIPTOR_PROFILE`, `PANVK_MEMPOOL_PROFILE`, `PANVK_KBASE_DIAG_MEM_FLAGS`, and `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE`.
+5. Keep scene, resolution, quality, DXVK 1.7.2, wrapper, and thermal starting state matched; capture min/max/average FPS, frame pacing, visual correctness, stability, and teardown. Prefer repeated A/B samples. Run descriptor telemetry separately if failure categories are still needed.
+
+No source, allocator policy, queue sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed. Do not make further heap-policy changes until this controlled device test is complete.
