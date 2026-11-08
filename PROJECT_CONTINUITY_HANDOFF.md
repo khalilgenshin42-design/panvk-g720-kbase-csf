@@ -7431,3 +7431,47 @@ The first Win64 probe CI attempts failed at link time because the standalone pro
 A Vulkan-spec audit corrected the earlier interpretation of the combiner tests: with both `primitiveFragmentShadingRate=false` and `attachmentFragmentShadingRate=false`, valid API use requires `combinerOps[0]` and `combinerOps[1]` to be KEEP. REPLACE is only valid for the corresponding enabled primitive/attachment input; MIN/MAX/MUL additionally require `fragmentShadingRateNonTrivialCombinerOps=true`. Therefore the probe's non-KEEP paths are correctly skipped for this device feature combination. Do not treat an invalid non-KEEP call/device-lost result as evidence of a Mali hardware defect. The current truthful capability report remains pipeline FSR only, KEEP/KEEP only.
 
 Next user-side validation is now justified: install the experimental PanVK package from run `42507009169` through Winlator's custom driver import (do not replace the Android system driver), then run the new `tools/run-vrs-rate-matrix.cmd` from the Win64 probe artifact. Send the complete `panvk_vrs_render_probe.log`; this is the only required action before deciding whether all advertised rates are genuinely supported.
+
+
+## 2026-11-08 — VRS rate-matrix runtime review and CSF state trace
+
+The user supplied the rate-matrix probe output from the actual Wrapper(Mali-G720 MC7) device, running PanVK Mesa 26.3.0-devel at revision `git-cabe200fd0`, Vulkan API 1.3.354.
+
+### Confirmed runtime results in the supplied log
+
+- Kbase timestamp reporting is now internally consistent: `timestampComputeAndGraphics=0`, `timestampPeriod=0 ns`, and graphics queue `timestampValidBits=0`. The probe correctly labels fence timing as CPU+GPU elapsed time, not GPU-only timing.
+- Device creation, FSR feature enablement, invocation-counter descriptor/buffer allocation, image and staging allocation, pipeline creation, queue submission, fence waits, and readbacks all succeed.
+- 1x1 KEEP: 4,096 fragment invocations.
+- 2x2 KEEP: 1,024 invocations; the 4:1 reduction and pixel signature pass.
+- 2x1 static and dynamic KEEP: both 2,048 invocations; pixels and static/dynamic equivalence pass.
+- 1x2 static and dynamic KEEP: both 2,048 invocations; pixels and static/dynamic equivalence pass.
+- 4x2 static and dynamic KEEP: both 1,024 invocations, while the probe expects 512. Pixel checks pass, but the invocation-count check fails.
+- 2x4 static and dynamic KEEP: both 1,024 invocations, while the probe expects 512. Pixel checks pass, but the invocation-count check fails.
+- The user-supplied message ends during the 4x4 setup, before its result. Do not record a 4x4 runtime result from this excerpt. If a later complete log provides it, append the result separately.
+
+### Correction to the preceding assistant diagnosis
+
+A source trace disproves the suggestion that PanVK only updates the shader-side `fs.frag_rate` and fails to program the rasterizer.
+
+On `experiment/g720-dynamic-fsr-sysval` at HEAD `8d32632b50644bccd54392106b00fd00d424fbcb`:
+
+- `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c`, function `set_tiler_idvs_flags()`, reads the effective `dyns->fsr.fragment_size` and combiner operations.
+- It packs `PRIMITIVE_FLAGS_2` and writes the packed value directly to `IDVS.TILER_FLAGS2` with `cs_move32_to()`.
+- `src/panfrost/genxml/v12.xml` defines the hardware VRS draw-rate encodings: 1x1=0, 1x2=1, 1x4=2, 2x1=4, 2x2=5, 2x4=6, 4x1=8, 4x2=9, 4x4=10. The driver's expression `(log2(width) << 2) | log2(height)` maps the tested sizes to those exact values.
+- `src/panfrost/vulkan/panvk_vX_cmd_draw.c` separately populates `fs.frag_rate` for the shader-side sample-centre lowering. That is not the hardware rasterizer programming path.
+
+Thus the next investigation must not start by adding a missing TILER_FLAGS2 write. The register write already exists. The observed plateau at 1,024 invocations for 4x2 and 2x4 needs a discriminating test to determine whether the GPU is clamping the requested state, the probe's atomic-based invocation counter is not measuring the effective coarse rate as assumed, or another pipeline condition is forcing a smaller effective rate.
+
+### Hardware capability cross-check
+
+Arm's official Mali-G720 product page states that the GPU supports pipeline, primitive, and attachment VRS up to 4x4: https://support.arm.com/compute-ip/mali-g720 . The G720 performance-counter reference guide describes the fragment shading-rate counter as coarse quads generated relative to fine quads: https://documentation-service.arm.com/static/67487f4427eda361ad4dc5f6?token= . This confirms that 4x4 is a hardware capability of the G720 family; it does not prove that this specific PanVK implementation is programming it correctly.
+
+### Next engineering actions
+
+1. Inspect the complete 4x4 result if the user supplies the remaining lines; do not infer it from the truncated excerpt.
+2. Audit the test's invocation-count measurement independently from its pixel signature. The current fragment shader performs an SSBO `atomicAdd` once per invocation and also writes a `gl_FragCoord` pattern. Keep the counter and pixel-pattern results separately classified.
+3. Add a targeted, low-noise diagnostic of the effective Vulkan FSR state and the packed `TILER_FLAGS2` value for the tested large rates. Avoid unconditional per-draw logging in ordinary game workloads.
+4. Compare the actual command-state values for static and dynamic 4x2, 2x4, and 4x4. Confirm the effective rate is not changed by sample shading, rasterization sample count, or another pipeline state before draw submission.
+5. Only after this separation should the driver rate enumeration or hardware programming be changed. Do not reduce the advertised limits or claim larger rates work until a corrected probe demonstrates the expected behavior.
+
+No PanVK source, feature advertisement, Kbase behavior, package, kernel, or Android system/vendor driver was changed in this review. Keep the VRS work isolated from the performance-audit and descriptor-heap branches.
