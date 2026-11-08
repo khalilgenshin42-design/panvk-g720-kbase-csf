@@ -1059,10 +1059,10 @@ main(int argc, char **argv)
                    invocations_target == invocations_2x2;
                 int coordinate_shader_differs = dynamic_coordinate_ok &&
                    checksum(image_target) != hash_2x2;
-                LOG("coordinate shader dynamic render=%s; pixel mismatch=%s\\n",
+                LOG("coordinate shader dynamic render=%s; pixel mismatch=%s\n",
                     dynamic_coordinate_ok ? "PASS" : "FAIL",
                     coordinate_shader_differs ? "YES" : "NO");
-                LOG("coordinate shader dynamic fragment-invocations=%u static=%u comparison=%s\\n",
+                LOG("coordinate shader dynamic fragment-invocations=%u static=%u comparison=%s\n",
                     invocations_target, invocations_2x2,
                     coordinate_invocations_match ? "PASS" : "FAIL");
                 passed = basic && invocation_reduction && constant_pixels_match &&
