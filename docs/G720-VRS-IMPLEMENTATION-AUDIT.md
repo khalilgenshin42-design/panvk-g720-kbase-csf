@@ -468,3 +468,27 @@ A particularly important correctness constraint is that sample shading forces
 hardware VRS back to 1x1 in the CSF draw emitter. The shader-side effective
 rate must use the same rule, not merely copy `dyns->fsr.fragment_size`.
 Likewise, unsupported or non-pipeline combiner sources must remain fail-closed.
+
+
+## 2026-11-08 — dynamic FSR sample-centre sysval implementation (experimental)
+
+The coordinate-only mismatch from the dynamic isolation probe has now been addressed in a separate experimental branch, without changing the known-good experiment/g720-fragment-shading-rate branch or the installed Android driver.
+
+Source changes on experiment/g720-dynamic-fsr-sysval:
+
+- panvk_graphics_sysvals.fs now has an aligned 32-bit frag_rate field. Its encoding matches the existing PanVK VRS encoding: log2(width) in bits 2..3 and log2(height) in bits 0..1.
+- cmd_prepare_draw_sysvals() refreshes this value from the current dynamic graphics FSR state for every graphics draw preparation. It writes 1x1 when sample shading is enabled, matching the existing CSF TILER_FLAGS2 path. It currently only derives the sysval for KEEP/KEEP combiner state, which is the valid pipeline-only configuration with primitive and attachment FSR features disabled.
+- Dynamic fragment shaders replace nir_intrinsic_load_sample_pos_or_center with a load of the per-draw FAU sysval, then derive the fragment centre from the effective rate. This keeps the rate dynamic without recompiling the shader.
+- Shader cache hashing now distinguishes static and dynamic FSR variants and includes the effective static rate when that rate is folded into NIR. This prevents static pipelines with different compile-time centres from aliasing the same shader cache key.
+
+The existing draw preparation function is called from ordinary draws, tessellation paths, GS paths, and the meta draw path; the sysval update is therefore placed at the shared per-draw update point rather than in only the ordinary draw entry point.
+
+### Validation still required
+
+This is a source patch, not a validated driver build. The next gate is a successful Android/AArch64 PanVK build, followed by package audit. Then run the existing dynamic-isolation render probe with:
+1. static 2x2 KEEP as the reference;
+2. dynamic 2x2 KEEP with the coordinate-reading fragment shader;
+3. dynamic 1x1 then dynamic 2x2 in the same command stream/pipeline to prove the FAU value refreshes between draws;
+4. sample-shading enabled to prove the effective sysval remains 1x1.
+
+Do not replace the installed driver until the new package passes the build, ELF/dependency audit, import test, and device render checks. Primitive and attachment FSR remain unexposed. The source branch is experimental and has not yet passed compilation or device validation.
