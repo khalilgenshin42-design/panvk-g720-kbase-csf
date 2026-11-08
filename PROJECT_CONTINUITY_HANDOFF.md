@@ -7176,3 +7176,13 @@ Next: obtain and inspect the Android-only workflow run for this exact branch hea
 4. Run static 2x2 KEEP coordinate test, dynamic 2x2 KEEP coordinate test, then dynamic 1x1-to-2x2 transitions in one command buffer/pipeline.
 5. Confirm sample shading forces effective 1x1.
 6. Only after correctness and stability pass, benchmark Borderlands GOTY at the established 1280x720 settings against the known-good stock-driver baseline. Keep the known-good VRS branch and stock driver untouched.
+
+
+### Post-package ELF verification
+- Inspected the inner ZIP independently after extraction.
+- Packaged driver now has RUNPATH `$ORIGIN` and a `DT_NEEDED` entry for `libpanvk_drm.so`; companion library SONAME is `libpanvk_drm.so`.
+- Confirmed the packaged driver's 24 undefined `drm*` dynamic references are all provided by the packaged companion library (212 exported dynamic symbols); no unresolved DRM names were found.
+- The package-stage driver hash differs from the pre-package staged-driver hash because the packaging step adjusts the runtime dependency name and RUNPATH. The authoritative install-package hashes are in the inner ZIP's `SHA256SUMS`:
+  - `libvulkan_panfrost.so`: `01588024ab8549c92f3b5981bdd2239af0b9ec9796c50f91f13c012bca14453b`
+  - `libpanvk_drm.so`: `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`
+- Local ZIP integrity check: all four package entries passed `unzip -t`.
