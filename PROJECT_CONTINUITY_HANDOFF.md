@@ -6388,3 +6388,62 @@ non-KEEP combiner hardware/CSF fault remains an open investigation; the
 packed `TILER_FLAGS2` diagnostic is now available if a later controlled
 test is needed. No performance gain beyond the proven KEEP invocation
 reduction is claimed.
+
+
+## 2026-11-08 00:17 UTC — New-build VRS KEEP regression passed
+
+### Device result
+
+The user ran the KEEP-only render probe against the corrected Android package built
+from PanVK source commit
+`c9d61e10a9c3489d8193a8fb0767f4b5187d79f3` on the Mali-G720 MC7.
+
+The probe reports:
+- Device: `Wrapper(Mali-G720 MC7)`
+- Driver: `panvk (Mesa 26.3.0-devel (git-c9d61e10a9))`
+- Vulkan API: 1.3.354
+- `pipelineFragmentShadingRate=1`
+- `nonTrivialCombinerOps=0`
+- `strictMultiplyCombiner=0`
+- `fragmentStoresAndAtomics=1`
+
+Both render cases completed successfully:
+- 1x1 KEEP: queue submit, fence wait, and readback PASS; checksum
+  `0x06d78d985ad50383`; equal-neighbour count 0; fragment invocations 4096.
+- 2x2 KEEP: queue submit, fence wait, and readback PASS; checksum
+  `0xcad734dde7920383`; equal-neighbour count 4096; pixel signature PASS;
+  fragment invocations 1024.
+- Invocation reduction PASS: 4096 -> 1024, exactly 4x fewer fragment
+  invocations (75% reduction).
+- Final probe status: `VRS GPU RENDER PASS`.
+
+This verifies that the capability-conservative property report
+(`fragmentShadingRateNonTrivialCombinerOps=false`) did not regress the
+working pipeline KEEP path. The tested package is the exact corrected driver
+commit above, not the older `git-7061318e2a` package.
+
+### Log availability and interpretation
+
+The user could not attach the Winlator/logcat archive because of attachment
+limits. The standalone KEEP-only probe output was pasted directly and contains
+all required acceptance data for this regression test. No logcat-based
+cross-check of kernel/CSF warnings is available for this run; this does not
+invalidate the successful Vulkan submit/fence/readback and invocation-count
+results. Do not request another archive solely to close this KEEP regression.
+
+### Current VRS status and next work
+
+- Pipeline fragment shading rate with KEEP is runtime-proven on this G720:
+  2x2 rate produces the expected coarse pixel signature and a measured 75%
+  reduction in fragment shader invocations versus 1x1.
+- Non-trivial combiners remain conservatively unadvertised. Their earlier
+  MAX/MIN/MUL/REPLACE tests caused device loss; the root cause is still open.
+- Do not re-enable `fragmentShadingRateNonTrivialCombinerOps` without a
+  separate controlled hardware test and successful correctness validation.
+- The next investigation can proceed in source/CI without another user action:
+  isolate the non-KEEP combiner state programming and review the packed
+  `TILER_FLAGS2` diagnostic path. Keep KEEP as the known-good baseline.
+- Do not claim a game-performance gain from the 75% invocation reduction
+  alone. First validate application-level use, visual quality, and frame-time
+  impact before making any FPS claim.
+- No Android system/vendor driver, kernel, or firmware was modified.
