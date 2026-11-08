@@ -7576,3 +7576,6 @@ Builds triggered for candidate fix commit `3b9e6a7`:
    - 2x4: H=2048, V=3072, invocations=512
    - 4x4: H=3072, V=3072, invocations=256
 5. If the DCD bit is set and larger rates still clamp, investigate DCD packing/serialization and the hardware clamp semantics before touching the TILER_FLAGS2 encoding.
+
+
+The candidate clamp change received a whitespace-only follow-up commit `3cfbf43c3db1d666392d76b494443eddd288175c` to align the inserted block with surrounding code. No behavior changed. The Android-only build for `3b9e6a7` is still useful for compile/runtime validation; a newer build may also be triggered for the branch tip.
