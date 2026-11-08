@@ -1055,15 +1055,20 @@ main(int argc, char **argv)
                                (VkExtent2D){2,2}, true, invocation_set,
                                invocation_buffer, invocation_mem,
                                &invocations_target, image_target);
+                int coordinate_invocations_match = dynamic_coordinate_ok &&
+                   invocations_target == invocations_2x2;
                 int coordinate_shader_differs = dynamic_coordinate_ok &&
                    checksum(image_target) != hash_2x2;
-                LOG("coordinate shader dynamic render=%s; static-vs-dynamic mismatch=%s\n",
+                LOG("coordinate shader dynamic render=%s; pixel mismatch=%s\\n",
                     dynamic_coordinate_ok ? "PASS" : "FAIL",
                     coordinate_shader_differs ? "YES" : "NO");
+                LOG("coordinate shader dynamic fragment-invocations=%u static=%u comparison=%s\\n",
+                    invocations_target, invocations_2x2,
+                    coordinate_invocations_match ? "PASS" : "FAIL");
                 passed = basic && invocation_reduction && constant_pixels_match &&
                          constant_invocations_match &&
                          constant_dynamic_invocations == invocations_2x2 &&
-                         coordinate_shader_differs;
+                         coordinate_invocations_match && coordinate_shader_differs;
              }
              free(constant_static);
              free(constant_dynamic);
