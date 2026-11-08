@@ -1006,7 +1006,7 @@ main(int argc, char **argv)
                                          (VkExtent2D){2,2}, invocation_set,
                                          invocation_buffer, invocation_mem,
                                          &invocations_target, image_target);
-LOG("%s submit/fence/readback=%s\n",
+             LOG("%s submit/fence/readback=%s\n",
                 label, target_ok ? "PASS" : "FAIL");
             if (target_ok) {
                uint64_t target_hash = checksum(image_target);
