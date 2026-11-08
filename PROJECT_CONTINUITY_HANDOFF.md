@@ -7068,3 +7068,34 @@ usage/remapping, exact dynamic-state dirty propagation, all draw variants,
 and consistency with the CSF rule that sample shading forces effective VRS
 to 1x1. Do not just copy the requested rate if sample shading or combiner
 semantics alter the effective rate.
+
+
+## 2026-11-08 13:25 UTC — dynamic FSR sysval implementation started on isolated branch
+
+The dynamic-isolation device result established that dynamic 2x2 KEEP reaches the GPU and executes 1024 fragment invocations, matching static 2x2, and that constant-colour output is bit-identical. The remaining observed mismatch is limited to coordinate-dependent output. This strongly points to fragment-centre/sample-position semantics; it does not prove that all other coordinate-related semantics are correct.
+
+A separate source branch, experiment/g720-dynamic-fsr-sysval, was created from experiment/g720-fragment-shading-rate. The known-good/tested branch and the installed Android package remain unchanged.
+
+### Source changes committed (not yet compiled)
+
+- a289ec077bedcaee186449cc6914ae01edf3ccd5 — add aligned graphics fragment sysval fs.frag_rate.
+- 4561b7f73a64d7f5d5eb669beb0d49609db36ff2 — populate the effective dynamic rate in cmd_prepare_draw_sysvals() at the shared per-draw update point. The value uses the same log2(width)/log2(height) bit encoding as the static centre lowering and CSF TILER_FLAGS2. Sample-shading pipelines publish 1x1. Only KEEP/KEEP is lowered, matching the currently exposed pipeline-only feature scope.
+- 938ef7b8c057b418ebac9797232b264f3792aa5b — replace dynamic load_sample_pos_or_center with a fragment FAU/sysval load, and separate static/dynamic FSR shader cache keys. Static effective rates are now included in the cache key because they alter compile-time NIR constants.
+- e4a28fb14673843e81f648ca4f8bfecf160bac35 — record the implementation and validation plan in docs/G720-VRS-IMPLEMENTATION-AUDIT.md.
+
+The shared cmd_prepare_draw_sysvals() function is called by ordinary draws, tessellation, GS, and meta draw paths in the CSF implementation. The sysval is therefore updated at the common preparation point, before fragment FAU upload. This source-level call-site audit is not a substitute for build or runtime validation.
+
+### Current status and next gates
+
+Status: experimental source patch; build pending; device validation pending.
+
+The source branch has not yet passed compilation. The audit-document push should queue the repository's push-triggered wrapper CI, but that workflow is not the Android-only PanVK build. The Android-only workflow is manual-dispatch in the repository; no dispatch action is exposed in the connected GitHub tools in this session. Do not claim an Android build or package exists until a successful Android-only run is independently inspected.
+
+Next steps:
+1. Review the complete source diff for ABI, FAU packing, dynamic dirty-state, and shader cache correctness.
+2. Obtain a successful Android/AArch64 build on this exact branch; verify compiler logs and artifact provenance.
+3. Audit the resulting package (ELF class/ABI/API level, dependencies, symbols, ZIP integrity, and hashes) before any device import.
+4. Re-run the dynamic-isolation coordinate test, then add a same-command-buffer 1x1-to-2x2 rate transition and sample-shading 1x1 test.
+5. Only after the above passes, compare performance and stability in Winlator. Keep the existing known-good PanVK package available for rollback.
+
+No system/vendor driver, kernel, firmware, or installed Android package was modified. Primitive and attachment FSR remain disabled/unexposed. No new device-side action is requested yet.
