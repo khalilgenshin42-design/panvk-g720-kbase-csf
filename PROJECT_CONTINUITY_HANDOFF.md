@@ -6544,3 +6544,39 @@ package and paste only `panvk_vrs_replace.log`. No Winlator logcat archive
 is required. This is a probe-only rebuild; the Android package remains
 `git-c9d61e10a9`. Do not infer hardware REPLACE support until a legal
 test actually runs and passes.
+
+
+## 2026-11-08 — REPLACE probe artifact built and ready
+
+The corrected Windows-only VRS probe has now completed successfully.
+
+- Probe source commit: `b05d2f8fe58bc7b6185580403a688890e7f9c976`.
+- Workflow run: `42429775774` (run #28), conclusion: **success**.
+- Workflow page: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42429775774
+- Artifact: `panvk-vrs-render-probe-win64`, artifact ID `13596813051`.
+- Artifact SHA-256: `c4b80fd9643935f6df39e77b1f114ea4ed32f5506d337338f6d0a94338c9f097`.
+- Artifact expires 2027-02-06.
+
+The artifact includes the isolated `tools/run-vrs-replace-check.cmd` script.
+Use this probe with the already validated Android package from source
+`c9d61e10a9c3489d8193a8fb0767f4b5187d79f3`; no Android driver reinstall or
+new package is needed for this feature-query test.
+
+### Required device check
+
+1. Download `panvk-vrs-render-probe-win64` from the successful workflow run above.
+2. Extract it inside the existing Winlator container.
+3. Run `tools\\run-vrs-replace-check.cmd`.
+4. Paste only `panvk_vrs_replace.log` here. Do not send a logcat archive.
+
+The probe prints the three FSR feature booleans. If both
+`primitiveFragmentShadingRate` and `attachmentFragmentShadingRate` are
+false, REPLACE is correctly skipped and the result is still useful: it means
+the current PanVK device feature exposure does not provide a legal combiner
+input path. If either input feature is true, the probe enables that feature
+and tests REPLACE only in its corresponding legal combiner slot.
+
+This is diagnostic work only. Do not import any new Android driver package,
+change the container, or alter the system/vendor driver or kernel. Keep the
+previously validated 2x2 KEEP result as the baseline (4096 to 1024 fragment
+invocations; 75% reduction). No game FPS improvement is claimed.
