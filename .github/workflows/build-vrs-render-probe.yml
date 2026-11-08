@@ -10,6 +10,7 @@ on:
       - tools/run-vrs-cases.cmd
       - tools/run-vrs-keep-check.cmd
       - tools/run-vrs-replace-check.cmd
+      - tools/run-vrs-dynamic-check.cmd
       - tools/vrs_probe.vert
       - tools/vrs_probe.frag
       - .github/workflows/build-vrs-render-probe.yml
@@ -71,4 +72,5 @@ jobs:
             tools/run-vrs-cases.cmd
             tools/run-vrs-keep-check.cmd
             tools/run-vrs-replace-check.cmd
+            tools/run-vrs-dynamic-check.cmd
           if-no-files-found: error
