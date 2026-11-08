@@ -2921,13 +2921,13 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
                                    (dyns->ms.rasterization_samples > 1);
 
 #if PAN_ARCH >= 12
-      /*
-       * v12+ clamps pipeline VRS to 2x2 unless this DCD bit is set.
-       * PanVK advertises larger pipeline rates, so disable the hardware
-       * clamp. Sample shading still forces an effective 1x1 rate in
-       * set_tiler_idvs_flags().
-       */
-      cfg.disable_vrs_clamp_2x2 = true;
+         /*
+          * v12+ clamps pipeline VRS to 2x2 unless this DCD bit is set.
+          * PanVK advertises larger pipeline rates, so disable the hardware
+          * clamp. Sample shading still forces an effective 1x1 rate in
+          * set_tiler_idvs_flags().
+          */
+         cfg.disable_vrs_clamp_2x2 = true;
 #endif
 
          cfg.shader_modifies_coverage = shader_modifies_coverage;
