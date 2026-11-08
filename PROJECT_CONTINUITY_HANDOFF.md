@@ -7363,3 +7363,9 @@ The Kbase UAPI header src/panfrost/lib/kmod/kbase_uapi.h defines KBASE_IOCTL_GET
 No runtime driver change has been made yet. Do NOT simply force a guessed timestamp frequency or claim that the GPU timestamp counter is broken. Next engineering task is to determine precisely which counter Vulkan timestamp writes use on this kbase CSF path, and whether a safe frequency can be calibrated from paired monotonic + system timestamp samples via KBASE_IOCTL_GET_CPU_GPU_TIMEINFO. Check units, source flags, wraparound, sampling stability, and whether timestamp_cycles_to_ns_factor is expected to be reciprocal frequency before implementing. If calibration cannot be validated, correct the capability reporting so gpu_can_query_timestamp, queue timestampValidBits, and timestampPeriod are mutually consistent (disable Vulkan GPU timestamp support rather than advertise zero period). Keep this isolated to the experimental branch; no system/vendor driver replacement.
 
 Probe source and CI artifact are unchanged by this finding. The user does not need to change Winlator settings or rerun the same rendering test until a new probe is built.
+
+Additional source comparison after the initial finding:
+- The Panfrost DRM backend obtains DRM_PANFROST_PARAM_SYSTEM_TIMESTAMP_FREQUENCY and computes timestamp_cycles_to_ns_factor = 1,000,000,000 / timestamp_frequency.
+- The Panthor backend imports its kernel-reported timestamp_frequency and computes the same reciprocal-Hz conversion.
+- Therefore timestampPeriod is in nanoseconds per timestamp tick, and the zero value is specifically caused by the Kbase backend leaving timestamp_frequency at zero. Do not substitute the GPU core frequency unless the kernel timestamp counter is proven to be that same counter.
+- The Kbase timeinfo UAPI distinguishes system-wide timestamp and GPU cycle_counter fields; this distinction must be respected during any calibration experiment.
