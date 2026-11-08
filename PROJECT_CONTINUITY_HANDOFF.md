@@ -6447,3 +6447,58 @@ results. Do not request another archive solely to close this KEEP regression.
   alone. First validate application-level use, visual quality, and frame-time
   impact before making any FPS claim.
 - No Android system/vendor driver, kernel, or firmware was modified.
+
+
+## 2026-11-08 — Vulkan FSR combiner capability correction and REPLACE probe
+
+### Specification correction
+
+A review of the current Vulkan specification found that
+`fragmentShadingRateNonTrivialCombinerOps=false` does **not** prohibit
+`VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR`. The property only
+controls whether operations other than KEEP or REPLACE (MIN, MAX, MUL) may
+be used. Therefore the previous probe logic that skipped REPLACE whenever
+the property was false was over-restrictive, and the earlier description of
+REPLACE as an unsupported non-trivial operation was incorrect.
+
+The current Vulkan specification states that:
+- KEEP and REPLACE are permitted when this property is false.
+- MIN, MAX, and MUL require the property to be true.
+- `fragmentShadingRateStrictMultiplyCombiner` must be false when
+  `fragmentShadingRateNonTrivialCombinerOps` is false.
+
+Reference: Vulkan specification, fragment shading rate properties and
+`vkCmdSetFragmentShadingRateKHR` valid usage:
+https://docs.vulkan.org/spec/latest/chapters/limits.html
+https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdSetFragmentShadingRateKHR.html
+
+### Probe correction
+
+On `experiment/g720-fragment-shading-rate`:
+- Commit `ec70a4a0aad4621527b66bca71dd3c206721c9dc` changes the probe gate so
+  REPLACE is tested even when `fragmentShadingRateNonTrivialCombinerOps=0`;
+  MIN/MAX/MUL remain skipped.
+- Commit `d00064758eb0e1697593672fdbaa3a0cdde58052` adds
+  `tools/run-vrs-replace-check.cmd`.
+- Commit `39093235c5a39f2bce0aa7af8fa45911968f821b` includes the new script
+  in the Windows probe workflow and artifact.
+- Commit `94bcead1ab18d3aae0b7db827f4edff61b4c11e6` tidies the diagnostic.
+- Driver source and Android package are unchanged by this probe-only work.
+
+### Next device test
+
+After the updated Windows probe artifact finishes building, test
+`tools/run-vrs-replace-check.cmd` with the known-good Android package
+(`git-c9d61e10a9`, property `nonTrivialCombinerOps=0)). The script produces
+`panvk_vrs_replace.log`; only that small text log is required, not a Winlator
+logcat archive.
+
+Expected semantics for the probe's 2x2 pipeline rate with REPLACE/KEEP:
+REPLACE selects the second input rate (the probe's default primitive rate),
+so this case is expected to match the 1x1 control's pixel signature and
+fragment invocation count. This is a hypothesis to validate on hardware,
+not a claimed result. If the submission faults, retain the log and do not
+advertise REPLACE as reliable.
+
+Keep MIN/MAX/MUL disabled pending separate investigation. The KEEP 2x2 path
+remains the verified baseline (4096 -> 1024 fragment invocations).
