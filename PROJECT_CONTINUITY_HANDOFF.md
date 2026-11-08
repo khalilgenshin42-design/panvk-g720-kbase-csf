@@ -6913,3 +6913,25 @@ Read the canonical handoff and `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md` befor
 - No source, stock/vendor driver, or live kernel was modified.
 
 The detailed step list, manifest fields, dependency analysis, and artifact validation are recorded in the performance audit. Its monitoring update commit is `24c2e1957d9b4d0a11c07dda2e1d81ded14bcf1e`.
+
+
+### Final dynamic FSR isolation probe ready for device test (2026-11-08)
+
+GitHub Actions run #38 succeeded for source
+`09d9684e45201933f0301175dc912a4a39606067`:
+https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42479065982
+Artifact ID: `13616202931`, name `panvk-vrs-render-probe-win64`.
+ZIP SHA-256: `69d232372041beec38e9f7751e2cee53e23bc488cdfadedaf542bb77596911a3`.
+Executable SHA-256: `06b777aaf67f2bee2af879e1e973c448b71ea88bcb2dc054f4c51d567540dc92`.
+The archive was downloaded and independently inspected: valid x86-64 Windows
+PE executable, expected dynamic isolation runner present, and both shader
+variant invocation-comparison diagnostics embedded.
+
+**User action now required:** download the artifact from the Actions run above,
+extract it, open the extracted `tools` directory, and run
+`run-vrs-dynamic-isolation.cmd`. Keep existing Android driver
+`git-c9d61e10a9` installed; this is a Windows probe only and does not update
+the Android driver. Send only `tools/panvk_vrs_dynamic_isolation.log`. If the
+named log is absent but `panvk_vrs_render_probe.log` exists, send that instead.
+Wait for the command window to finish before closing it. No reinstall, logcat,
+or full archive is needed.
