@@ -1178,3 +1178,57 @@ missing, stop and classify the override test as invalid.
 No source, allocator behavior, queue sizing, shader scheduling, Kbase ABI,
 kernel, or Android system/vendor driver was changed in this pass. No FPS gain
 is claimed.
+
+
+## 2026-11-08 12:08 UTC — scheduled Android build and package revalidation
+
+### Branch/source provenance
+
+- Active branch at start of this pass: `experiment/g720-performance-audit`, HEAD `a8a6e5b904de570dc9984d45b5b0890c7ad98a0d` (`docs: revalidate PanVK performance audit state [skip ci]`).
+- Latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`.
+- Latest CI-tested snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`; the latest branch commits after that snapshot are documentation-only. GitHub compare from the driver-source commit to the branch HEAD reports 50 commits ahead / 0 behind and only documentation paths (`docs/G720_CAPABILITY_MATRIX_2026-11-05.md` and this audit) in the aggregate changed-file list. No source or workflow change requiring a rebuild was found.
+- The canonical handoff and this audit were read before inspecting Actions.
+
+### Latest relevant Actions runs
+
+The branch-filtered Actions listing contains 125 runs. The latest relevant pair remains the 2026-11-06 runs below; the older initial monitoring IDs `41947103034` and `41947103085` are superseded.
+
+- Android-only [run 42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218), source `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`, job `127885224447`: completed SUCCESS. All 15 returned steps completed successfully: setup, checkout, checkout verification, Python, dependencies, host tools, Android ARM64 libdrm, Android-only configure, compile/stage, driver/manifest/dependency/staging audit, flat package creation, artifact upload, post-Python, post-checkout, and job completion. Pending 0; failed 0.
+- Android wrapper [run 42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167), same source:
+  - Release job `127885224388`: completed SUCCESS; all 12 returned steps passed, including memfd_create patch, dependencies, host tools, Meson configure, compile, artifact upload, cleanup, and completion. Pending 0; failed 0.
+  - Debugoptimized job `127885224836`: completed SUCCESS; same 12 returned steps passed. Pending 0; failed 0.
+- No latest relevant job failed or remains pending, so no failure log diagnosis was needed. No workflow was rerun and no build was triggered during this monitoring pass.
+
+### Fresh artifact download and validation
+
+Android-only artifact `13501237590` (16,753,940 bytes):
+- GitHub artifact digest and independently computed outer ZIP SHA-256 both equal `f5e58163b3caf3f9fa5791dedf56ade82fd87d17dcfdb42722cd846e51ed825a`; outer ZIP integrity passes.
+- The outer archive contains the staged install, audit records, and nested `PanVK-G720-experimental.zip`.
+- Nested flat package SHA-256: `14f7b13ab1735daffd31a0723c1f6d949155e5c6570f1980f98291cb54383e86`; nested ZIP integrity passes.
+- Exactly four nested members: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`. `sha256sum -c SHA256SUMS` passes for all members:
+  - driver `362ad05b978c673b82bf1e66b4ab553f8ea79154c8c5a0a6731b65648359bfb1`
+  - private libdrm `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`
+  - metadata `064c52b79a1d0dc14aab89fa98857d4a905c2167c41d7ee28536b81337b82e81`
+- Metadata JSON validates: package version `26.3.0-devel-android-kbase-b17b98cef92f`, min API 30, library `libvulkan_panfrost.so`.
+- Both libraries are ELF64 AArch64 / Android API 30. Driver RUNPATH is `$ORIGIN`; its private NEEDED entry is `libpanvk_drm.so`. The bundled private libdrm depends only on `libc.so`. The workflow audit's `missing-drm-symbols.txt` is zero bytes.
+- The staged ICD manifest parses as valid JSON and reports Vulkan API `1.4.354`, library path `/usr/local/lib/libvulkan_panfrost.so`. The importable nested package itself is the flat four-file package described above; the absolute staged manifest path is not a path to copy into Android's system directories.
+- Classification: **passed and statically/package validated**. This is not a device-runtime, Vulkan-conformance, WSI, or game-compatibility result.
+
+Wrapper Release artifact `13502135385`:
+- Outer ZIP SHA-256 matches GitHub digest: `5647fe999a9225123116118eb26ef91f277eef38d4ea2c2a29e98e965d3b0f04`; ZIP integrity passes.
+- Contains only `libvulkan_panfrost.so`; extracted ELF SHA-256 `edce8b3dd4fea68ffda7e44622d4c778cdaf0a22fc219cc2b4368335060aa80a`; ELF64 AArch64 / Android API 30.
+- RUNPATH `$ORIGIN/../../android_stub`; NEEDED includes `libdrm.so` and X11/XCB libraries.
+
+Wrapper Debugoptimized artifact `13502061037`:
+- Outer ZIP SHA-256 matches GitHub digest: `fcd0b4d2dcba93c67f3c09dedb6cdc4ab843cd7eef45f34813e90916adbd4159`; ZIP integrity passes.
+- Contains only `libvulkan_panfrost.so`; extracted ELF SHA-256 `eebdc6229236e4c91204bd01148409c2b91c71977d1cf71a44a25181b3617477`; ELF64 AArch64 / Android API 30 with debug information.
+- RUNPATH and NEEDED dependency set match Release.
+
+Neither wrapper ZIP contains `android_stub/libdrm.so`, the X11/XCB dependency closure, an ICD manifest, or a checksum manifest. Classification for both: **build passed / raw ELF and ABI checked, but standalone package and runtime dependency closure not validated**. Do not present these raw ZIPs as complete importable packages without proving the intended wrapper runtime supplies those dependencies.
+
+### Blocker and safe next step
+
+- No new device logs or runtime test were available in this monitoring pass. The Android-only package is ready for a controlled separate Winlator Mali custom-driver import test, but runtime loading, Vulkan device creation, stability, and game performance remain unverified.
+- Wrapper packaging/dependency closure remains an open packaging issue.
+- Preserve the non-rooted Android/Termux workflow. Do not replace the phone's system/vendor Vulkan driver or modify the live kernel.
+- This record is documentation-only; no source or workflow files were changed and no build was triggered.
