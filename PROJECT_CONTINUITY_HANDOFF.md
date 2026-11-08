@@ -6493,12 +6493,9 @@ After the updated Windows probe artifact finishes building, test
 `panvk_vrs_replace.log`; only that small text log is required, not a Winlator
 logcat archive.
 
-Expected semantics for the probe's 2x2 pipeline rate with REPLACE/KEEP:
-REPLACE selects the second input rate (the probe's default primitive rate),
-so this case is expected to match the 1x1 control's pixel signature and
-fragment invocation count. This is a hypothesis to validate on hardware,
-not a claimed result. If the submission faults, retain the log and do not
-advertise REPLACE as reliable.
+The earlier REPLACE/KEEP expected-result paragraph was superseded by the
+valid-usage correction below: REPLACE cannot be tested unless primitive or
+attachment FSR is enabled for the selected combiner slot.
 
 Keep MIN/MAX/MUL disabled pending separate investigation. The KEEP 2x2 path
 remains the verified baseline (4096 -> 1024 fragment invocations).
@@ -6580,3 +6577,58 @@ This is diagnostic work only. Do not import any new Android driver package,
 change the container, or alter the system/vendor driver or kernel. Keep the
 previously validated 2x2 KEEP result as the baseline (4096 to 1024 fragment
 invocations; 75% reduction). No game FPS improvement is claimed.
+
+## 2026-11-08 — Device result: no legal non-KEEP combiner input
+
+User ran the corrected artifact on the target Mali-G720 MC7 using the known
+working PanVK build (git-c9d61e10a9). Results:
+
+- Driver: PanVK Mesa 26.3.0-devel, API 1.3.354.
+- pipelineFragmentShadingRate=1.
+- primitiveFragmentShadingRate=0.
+- attachmentFragmentShadingRate=0.
+- fragmentShadingRateNonTrivialCombinerOps=0.
+- strictMultiplyCombiner=0.
+- Device creation and SSBO invocation-counter setup succeeded.
+- 1x1 KEEP render/readback passed; checksum 0x06d78d985ad50383;
+  fragment invocations: 4096.
+- 2x2 KEEP render/readback passed; checksum 0xcad734dde7920383;
+  pixel signature passed; fragment invocations: 1024.
+- Invocation reduction: 4x (75% fewer fragment invocations).
+- REPLACE was correctly skipped because neither primitive nor attachment
+  FSR is supported by the currently exposed feature set.
+- Overall result: VRS GPU RENDER PASS.
+
+### Interpretation
+
+This is a clean positive result for pipeline-rate FSR, and a definitive
+feature-query result for this PanVK build: only the pipeline rate input is
+exposed. It is not evidence that Mali-G720 hardware lacks primitive or
+attachment rate capabilities; PanVK may simply not implement or expose
+those paths. Do not force either feature bit to true. Vulkan feature bits
+promise complete valid behavior; exposing them without matching command,
+state, and attachment implementation would be incorrect and risks device
+loss.
+
+No Android driver change was made. The verified pipeline 2x2 KEEP path is
+preserved as a baseline. This result does not yet demonstrate game FPS gains.
+
+### Engineering decision / next source investigation
+
+Do not spend another device run on REPLACE with the current binary: it will
+continue to skip. The next source-level task is to audit the Mali-G720
+architecture-12 implementation for actual primitive and attachment FSR paths:
+
+1. Architecture-12 feature reporting in the per-architecture physical-device
+   feature implementation.
+2. vkCmdSetFragmentShadingRateKHR primitive-rate state and primitive-rate
+   output from the primitive/tiler path.
+3. Attachment-rate image format, usage, and layout restrictions, plus
+   fragment descriptor and state programming.
+4. Hardware-generation-specific register/descriptor support and Vulkan limits.
+
+Compare against upstream Mesa PanVK v12 and the relevant GenXML definitions;
+do not infer capability solely from the G720 product specification. Expose
+the feature only after a complete implementation path is verified.
+
+Device retest required: none at this stage. Continue source audit first.
