@@ -7133,3 +7133,46 @@ The workflow allowlist already includes experiment/g720-dynamic-fsr-sysval (comm
 Current branch head after the CI guardrail change: 0804f245e8bf0e4fc7e6c70e6867a375a7bd73aa. The experimental source changes remain uncompiled. No device package or vendor/system driver was changed.
 
 Next: obtain and inspect the Android-only workflow run for this exact branch head; if it fails, fix the first actual compiler/build error rather than making speculative source changes. If it succeeds, inspect its artifact and package before asking for device-side testing. Device tests remain static 2x2 vs dynamic 2x2 coordinate output, same-command-buffer 1x1-to-2x2 transition, and sample-shading 1x1 effective-rate behavior.
+
+
+## 2026-11-08 — Dynamic FSR Android build and package validation
+
+### Source revision
+- Experimental source branch: `experiment/g720-dynamic-fsr-sysval`
+- Source commit: `0804f245e8bf0e4fc7e6c70e6867a375a7bd73aa`
+- This branch contains the dynamic fragment-rate graphics sysval, dynamic fragment-centre lowering, cache-key separation, source guards, and Android-only workflow allowlist update.
+
+### CI results
+- Android NDK wrapper-variant workflow run `42480864476`: completed successfully.
+  - Debugoptimized and release Android AArch64 Panfrost/PanVK shared-library jobs succeeded.
+  - Artifacts: `libvulkan_wrapper-aarch64-debugoptimized` and `libvulkan_wrapper-aarch64-release`.
+- Android-only PanVK G720 workflow run `42480864484`: completed successfully.
+  - Built real Android ARM64 libdrm.
+  - Configured and compiled the Android-only Kbase build.
+  - Staged install and driver/manifest/dependency audit succeeded.
+  - Flat Winlator/Adrenotools package build and artifact upload succeeded.
+- Workflow run URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42480864484
+
+### Package artifact
+- Artifact: `panvk-g720-android-only-experimental-package`
+- GitHub artifact ID: `13617542479`
+- Artifact SHA-256: `422db8213301238ead0db0ea4a4102331b1da1880c2cac9ba5a10c644d0d5787`
+- Inner installable package: `PanVK-G720-experimental.zip`
+- Inner package SHA-256: `91c4de31a7c740749c016cfb897337d325c08e1c442a5a17ad63eb387c3177bc`
+- Driver ELF SHA-256 from build audit: `3aeab38c79eb1756f7c7853ffeb0e24044a0b76aebcd04bb32a0af90e51499c6`
+- Package contents: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, `SHA256SUMS`.
+- Metadata identifies Mesa `26.3.0-devel`, package version `26.3.0-devel-android-kbase-0804f245e8bf`, min API 30, and explicitly marks device/game compatibility unverified and non-conformant.
+- Verified locally in the audit step: package ZIP integrity passes; both driver libraries are ELF64 little-endian AArch64 Android shared objects; driver RUNPATH is `$ORIGIN/../../android_stub`; required bundled `libdrm.so` is staged; audit reports zero missing DRM symbols.
+
+### Important qualification
+- CI build, ELF/dependency audit, and ZIP integrity are confirmed. Runtime loading and Vulkan execution on the user's Dimensity 8400 Ultra / Mali-G720 MC7 are NOT yet verified.
+- This is an experimental custom Winlator/Adrenotools import package. Do not replace or modify the Android system/vendor Vulkan driver.
+- The wrapper-variant build artifact is a separate CI output; the Android-only package above is the intended flat custom-driver package for device testing.
+
+### Next device validation
+1. Download and import the inner `PanVK-G720-experimental.zip` into Winlator Mali 1.2's custom driver path only.
+2. First run a Vulkan capability/device probe and the existing VRS render probe; capture full logs.
+3. Verify that the reported driver revision matches `0804f245` and that the ICD loads without missing-library or symbol errors.
+4. Run static 2x2 KEEP coordinate test, dynamic 2x2 KEEP coordinate test, then dynamic 1x1-to-2x2 transitions in one command buffer/pipeline.
+5. Confirm sample shading forces effective 1x1.
+6. Only after correctness and stability pass, benchmark Borderlands GOTY at the established 1280x720 settings against the known-good stock-driver baseline. Keep the known-good VRS branch and stock driver untouched.
