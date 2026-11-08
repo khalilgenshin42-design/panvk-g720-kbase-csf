@@ -7789,3 +7789,5 @@ The user ran the derivative-extended Windows probe on the target Winlator Mali-G
 - No PanVK driver source has been changed for this test. The purpose is to determine whether implicit texture LOD tracks the already-validated VRS derivative signatures; no GPU result or driver defect is claimed yet.
 
 - Corrected Windows probe CI completed successfully: run `42516974283` on source commit `907cc8f02dbde4eab27896a911ca2201cf2eae3f`. All steps passed, including shader compilation, MinGW build, PE verification, and artifact upload. Artifact ID `13632071195`, size 124,045 bytes, SHA-256 `4325e48f0e91e22e5c6daee6d55ccca8b949c82a42d6be7d053dea76d7d2238b`. This is the first build artifact containing the actual `--case=mip-lod` execution path; device validation is still pending.
+
+- Added `tools/run-vrs-mip-lod.cmd` (`90a556a50daa62180f7ff9592b405b9c28ba98f4`) as a one-click Windows runner, and updated the probe workflow to include it in the uploaded artifact (`a619595480ae12b04c2455e908481e854bfa367b`). A fresh artifact is being built from the packaging commit; prefer that artifact over the earlier successful executable-only package so the runner is included.
