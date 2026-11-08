@@ -7049,3 +7049,22 @@ is built and verified.
 
 Detailed audit:
 https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-fragment-shading-rate/docs/G720-VRS-IMPLEMENTATION-AUDIT.md
+
+
+### Follow-up source audit — dynamic FSR sysval design path
+
+A source trace identified a plausible per-draw fragment FAU/sysval route:
+`panvk_graphics_sysvals` has an FS sysval block; the architecture-specific
+`cmd_prepare_draw_sysvals` function populates per-draw values and marks
+`FS_PUSH_UNIFORMS` dirty when the shader uses changed sysvals; CSF
+`prepare_push_uniforms` uploads the FS FAU block and updates
+`IDVS.FRAGMENT_FAU`. The draw emitter already reads dynamic FSR state from
+`dyns->fsr` and programs `IDVS.TILER_FLAGS2`.
+
+Candidate implementation is to carry the effective dynamic rate in a
+fragment sysval and lower the dynamic sample-centre input to that sysval.
+This is not implemented yet. Remaining audit requirements include sysval
+usage/remapping, exact dynamic-state dirty propagation, all draw variants,
+and consistency with the CSF rule that sample shading forces effective VRS
+to 1x1. Do not just copy the requested rate if sample shading or combiner
+semantics alter the effective rate.
