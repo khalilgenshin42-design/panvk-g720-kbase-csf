@@ -7706,3 +7706,18 @@ After the successful device rate matrix, the current VRS implementation was re-a
 5. Keep all semantic tests at 1x MSAA initially. Only add sample-count variants that are present in the returned rate list and supported interaction properties.
 
 No additional user action is required yet. Continue with the semantic-probe design and CI build; request a device run only after a complete, deterministic probe artifact is ready.
+
+
+## 2026-11-08 — VRS derivative-semantics probe implementation
+
+A follow-on semantic probe has been implemented on `experiment/g720-dynamic-fsr-sysval`, after the earlier hardware matrix passed.
+
+- Source commits:
+  - `d71c22f8b0b83a8400ac406ca536a2aa7faf1906` — extend `tools/panvk_vrs_render_probe_win.c` with derivative-signature assertions.
+  - `48e96f996aad2f6ab50155fd64bad9d9f7dac519` — emit a smooth affine UV varying from `tools/vrs_probe.vert`.
+  - `e7dbced9a7799c0eec5c00a3aef1b3af9fb8ccee` — encode `dFdx(test_uv.x)` and `dFdy(test_uv.y)` in the output B/A channels from `tools/vrs_probe.frag`.
+- The probe expects derivatives to scale with the fragment footprint: for a 64x64 target and WxH fragment rate, the affine UV derivative spans W/64 and H/64. The shader encodes these as normalized 8-bit signatures; host validation checks the centre pixel with a +/-2 UNORM tolerance.
+- Static and dynamic rates in the existing advertised rate matrix must each report the expected derivative signature, in addition to matching invocation counts and output checksums. The test also checks the 1x1 and 2x2 baseline signatures.
+- This is relevant to DXVK because Vulkan's derivative operations are measured between fragment invocations; coarse multi-pixel fragments can produce larger derivatives and therefore select coarser implicit texture LOD. This test checks derivative scaling without introducing texture descriptor/resource setup yet.
+- CI workflow `build-vrs-render-probe.yml` was triggered for source commit `d71c22f8b0b83a8400ac406ca536a2aa7faf1906`; run ID `42515697158` was queued at handoff update time. Build status and artifact are pending.
+- No PanVK driver source changes were made in this step. This is a diagnostic probe change only. Do not import or benchmark a new Android driver package based on these commits; wait for the probe build and then the device-side semantic result.
