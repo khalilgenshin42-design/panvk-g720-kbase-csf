@@ -7289,3 +7289,12 @@ Repository changes on `experiment/g720-dynamic-fsr-sysval`:
 Next step after successful CI: user downloads the newly built `panvk-vrs-render-probe-win64` artifact from run `42485499280`, extracts it, and double-clicks `Run-Dynamic-VRS.cmd`. The expected first log marker is `selected render case: --case=dynamic-keep`; dynamic success additionally requires static-vs-dynamic checksum and invocation comparisons to PASS and final `VRS GPU RENDER PASS`. A static-only log remains insufficient evidence. The known-good static 1x1/2x2 result (4096 vs 1024 fragment invocations, 75% reduction) remains valid and unchanged.
 
 No PanVK driver implementation or Android package was modified by this probe harness fix. The VRS experiment remains isolated from the performance-audit branch; no system/vendor driver replacement is involved.
+
+
+### Dynamic VRS probe rebuild CI result
+
+- Windows probe workflow run `42485499280` completed SUCCESS; all steps passed, including shader compilation, MinGW executable build, executable verification, and artifact upload.
+- New artifact: `panvk-vrs-render-probe-win64`, artifact ID `13619392010`, size 117,149 bytes, created 2026-11-08 13:33:43Z; not expired at verification time.
+- Artifact download page: `https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42485499280`.
+- Artifact includes the rebuilt `panvk-vrs-render-probe.exe` and root `Run-Dynamic-VRS.cmd` plus existing case scripts, as declared in the successful workflow upload step. New EXE defaults to `--case=dynamic-keep` when launched with no arguments.
+- CI success proves the Windows probe compiled and packaged; it does not prove dynamic FSR runtime correctness on the Mali-G720. Device run/log still required.
