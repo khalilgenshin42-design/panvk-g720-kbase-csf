@@ -950,7 +950,7 @@ main(int argc, char **argv)
             passed = basic && invocation_reduction;
          } else if (!fsr_props.fragmentShadingRateNonTrivialCombinerOps &&
                      probe_case != CASE_REPLACE) {
-             LOG("SKIP: MIN/MAX/MUL require fragmentShadingRateNonTrivialCombinerOps; KEEP and REPLACE remain supported\\n");
+             LOG("SKIP: MIN/MAX/MUL require fragmentShadingRateNonTrivialCombinerOps; KEEP and REPLACE remain supported\n");
              passed = basic && invocation_reduction;
           } else if (basic) {
             VkFragmentShadingRateCombinerOpKHR op0 = keep;
