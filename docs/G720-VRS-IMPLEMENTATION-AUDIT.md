@@ -322,3 +322,29 @@ source commit for this correction: `09d9684e45201933f0301175dc912a4a39606067`.
 A successful earlier compile exists, but its artifact predates the final
 invocation-count assertion and newline correction and must not be used for the
 next device run. Await the build for the latest commit before distributing.
+
+
+## 2026-11-08 — final isolation probe artifact verified
+
+The corrected Windows probe build completed successfully in GitHub Actions
+run #38:
+https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42479065982
+Source: `09d9684e45201933f0301175dc912a4a39606067`.
+
+Artifact `panvk-vrs-render-probe-win64` (ID `13616202931`) is available from
+the run's Artifacts section. ZIP SHA-256:
+`69d232372041beec38e9f7751e2cee53e23bc488cdfadedaf542bb77596911a3`.
+Executable SHA-256:
+`06b777aaf67f2bee2af879e1e973c448b71ea88bcb2dc054f4c51d567540dc92`.
+Independent inspection confirmed the ZIP contains the x86-64 Windows PE
+executable and `tools/run-vrs-dynamic-isolation.cmd`; executable strings
+include both constant-colour and coordinate-shader invocation comparisons.
+
+Device test instructions: extract the ZIP, open the extracted `tools` folder,
+and run `run-vrs-dynamic-isolation.cmd`. This uses the currently installed
+PanVK driver; do not install or replace the driver. Send only
+`tools/panvk_vrs_dynamic_isolation.log` (or the generated
+`tools/panvk_vrs_render_probe.log` if the copy step does not run). The run
+should take only as long as the render/submit/readback sequence; wait for the
+console to finish and the log file to appear. Do not run the older dynamic
+check script for this test.
