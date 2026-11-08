@@ -1046,7 +1046,8 @@ main(int argc, char **argv)
          destroy_dev(device, NULL); continue;
       }
 
-      VkImage mip_image=VK_NULL_HANDLE, mip_view=VK_NULL_HANDLE;
+      VkImage mip_image=VK_NULL_HANDLE;
+      VkImageView mip_view=VK_NULL_HANDLE;
       VkDeviceMemory mip_image_mem=VK_NULL_HANDLE;
       VkSampler mip_sampler=VK_NULL_HANDLE;
       int mip_resources_ok=1;
