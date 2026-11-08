@@ -7513,3 +7513,12 @@ Next steps:
 2. Inspect Android package run `42509283794`; the diagnostic package from `6ff24e6` is sufficient for CSF register logs if it succeeds. Since `13824a9` only changed the probe, the driver binary need not be rebuilt again for the axis-signature probe, but a matching artifact is preferable if it completes.
 3. In the next device log, compare requested/effective/packed rate code with horizontal and vertical pixel repetition counts and SSBO invocation counts for each rate. A 2x2-like axis signature at larger requested rates indicates clamping or a probe/state interaction; a correct directional signature with flat SSBO count indicates the counter path is misleading.
 4. Keep VRS validation separate from the broader performance work; no game-performance gain is established by this synthetic probe.
+
+
+### Directional probe build result
+
+- Winlator probe workflow run `42509283686` completed successfully for commit `13824a90757752f4796a67f73b15ddd142699ec9`.
+- Artifact: `panvk-vrs-render-probe-win64`, artifact ID `13629050724`, size 119,691 bytes, not expired at time of check.
+- The probe now emits separate horizontal and vertical equal-neighbor counts for each static matrix rate.
+- PanVK reports `pipelineStatisticsQuery=false`, so the probe cannot use `VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT` as a second hardware-side invocation measurement. Retain the SSBO atomic counter and directional pixel signature as two distinct observations.
+- Android-only diagnostic package run `42509014534` was still building at the time of this update. It is the preferred package for the next test because it includes the targeted CSF packed-state log from commit `6ff24e6`. The Winlator probe artifact above is already ready, but wait for the Android package before asking the user to test.
