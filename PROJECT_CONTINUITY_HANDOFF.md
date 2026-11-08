@@ -7341,3 +7341,25 @@ After CI succeeds, run the rebuilt probe on the actual G720 and capture the full
 - Artifact `panvk-vrs-render-probe-win64`: ID `13621270555`, 118,053 bytes, SHA-256 `1d0920d661bf3481946563889b8d06941c8f49e6cf55f7a666d406fb345c2333`, created 2026-11-08 14:18:17 UTC, expires 2027-02-06.
 - Android-only PanVK run `42489106018` and Android wrapper run `42489106032` were still in progress at this update. The Windows probe artifact can be tested independently; this change is only probe source and does not require installing a new driver package.
 - Device-side timestamp availability remains unknown until the user runs the new artifact and shares `panvk_vrs_render_probe.log`.
+
+## 2026-11-08 — Mali-G720 timestamp capability inconsistency identified
+
+The user ran the rebuilt timestamp-capability probe on Wrapper(Mali-G720 MC7), PanVK Mesa 26.3.0-devel (0804f245e8). The dynamic VRS render result remains a full PASS (same static/dynamic 2x2 checksum 0xcad734dde7920383, 1,024 fragment invocations versus 4,096 at 1x1, and successful submit/fence/readback).
+
+Timestamp fields reported:
+- timestampComputeAndGraphics=1
+- timestampPeriod=0 ns
+- graphics queue timestampValidBits=64
+- Probe correctly reports GPU timestamp queries unavailable because the period is zero.
+
+Source audit on experiment/g720-dynamic-fsr-sysval found the inconsistency:
+- src/panfrost/lib/kmod/kbase_kmod.c sets props->gpu_can_query_timestamp = (props->gpu_id != 0).
+- The same initialization explicitly sets props->timestamp_frequency = 0, with a comment explaining the GPU/system timestamp frequency is not populated from the GPU property blob.
+- src/panfrost/vulkan/panvk_physical_device.c implements panvk_get_gpu_system_timestamp_period(): it returns zero when gpu_can_query_timestamp is false OR timestamp_frequency is zero; otherwise it returns timestamp_cycles_to_ns_factor.
+- Queue-family timestamp valid bits are set to 64 on arch >= 10 whenever gpu_can_query_timestamp is true. Thus the current Kbase property combination produces the observed mismatch: timestamp feature flag and valid bits are advertised while timestampPeriod is zero.
+
+The Kbase UAPI header src/panfrost/lib/kmod/kbase_uapi.h defines KBASE_IOCTL_GET_CPU_GPU_TIMEINFO output fields including monotonic seconds/nanoseconds, system-wide timestamp, and GPU cycle counter. mali_base_kernel.h defines request flags for monotonic time, system-wide timestamp, and GPU cycle counter. The backend's existing kbase_kmod_query_timestamp() requests only BASE_TIMEINFO_TIMESTAMP_FLAG and returns out.timestamp.
+
+No runtime driver change has been made yet. Do NOT simply force a guessed timestamp frequency or claim that the GPU timestamp counter is broken. Next engineering task is to determine precisely which counter Vulkan timestamp writes use on this kbase CSF path, and whether a safe frequency can be calibrated from paired monotonic + system timestamp samples via KBASE_IOCTL_GET_CPU_GPU_TIMEINFO. Check units, source flags, wraparound, sampling stability, and whether timestamp_cycles_to_ns_factor is expected to be reciprocal frequency before implementing. If calibration cannot be validated, correct the capability reporting so gpu_can_query_timestamp, queue timestampValidBits, and timestampPeriod are mutually consistent (disable Vulkan GPU timestamp support rather than advertise zero period). Keep this isolated to the experimental branch; no system/vendor driver replacement.
+
+Probe source and CI artifact are unchanged by this finding. The user does not need to change Winlator settings or rerun the same rendering test until a new probe is built.
