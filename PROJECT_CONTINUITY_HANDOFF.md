@@ -7791,3 +7791,12 @@ The user ran the derivative-extended Windows probe on the target Winlator Mali-G
 - Corrected Windows probe CI completed successfully: run `42516974283` on source commit `907cc8f02dbde4eab27896a911ca2201cf2eae3f`. All steps passed, including shader compilation, MinGW build, PE verification, and artifact upload. Artifact ID `13632071195`, size 124,045 bytes, SHA-256 `4325e48f0e91e22e5c6daee6d55ccca8b949c82a42d6be7d053dea76d7d2238b`. This is the first build artifact containing the actual `--case=mip-lod` execution path; device validation is still pending.
 
 - Added `tools/run-vrs-mip-lod.cmd` (`90a556a50daa62180f7ff9592b405b9c28ba98f4`) as a one-click Windows runner, and updated the probe workflow to include it in the uploaded artifact (`a619595480ae12b04c2455e908481e854bfa367b`). A fresh artifact is being built from the packaging commit; prefer that artifact over the earlier successful executable-only package so the runner is included.
+
+
+## 2026-11-08 — Implicit mip-LOD probe package ready for device validation
+
+- Packaging workflow run `42517071053` completed successfully on VRS source commit `a619595480ae12b04c2455e908481e854bfa367b`. All seven build/verification/upload steps passed.
+- Artifact `panvk-vrs-render-probe-win64`, ID `13631618592`, size 124,426 bytes; ZIP SHA-256 `d84c77e845ec906d8bce48f7c049d382e3527e62faf007e47b9f3abb114259d9`. Download: `https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42517071053/artifacts/13631618592`.
+- The uploaded artifact contains nine files, including `panvk-vrs-render-probe.exe` and `tools/run-vrs-mip-lod.cmd`. The executable is a PE32+ x86-64 Windows console binary; executable SHA-256 `9ebafd4669b2e18a276098d0bd158123ab14b60185b024646f1af2db9391abaa`. Its only imported DLLs are `KERNEL32.dll` and `msvcrt.dll`.
+- This is a test-probe artifact, not a PanVK driver package. Run it in the existing Winlator Mali 1.2 environment with the same experimental PanVK driver used for the earlier passing VRS tests. Extract the ZIP preserving directories, then launch `tools/run-vrs-mip-lod.cmd`; upload the generated complete `panvk_vrs_render_probe.log` for analysis.
+- Expected device result is per-rate implicit mip signature plus static/dynamic image equality and invocation-count validation. No device result, implicit-LOD pass, or driver defect is claimed until the log is inspected.
