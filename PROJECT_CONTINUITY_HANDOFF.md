@@ -12,7 +12,7 @@ This section supersedes older "next steps", queued-CI, and "no code changed" sta
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
 - Separate fragment-shading-rate work: `experiment/g720-fragment-shading-rate`, HEAD `157418c71475b9d96170a43f24157a80673d4160`; driver-source commit `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`. Android package, Android wrapper variants, and the Windows VRS capability probe all pass CI; package and probe artifacts were independently inspected. No device runtime test has been performed.
 
-- Current VRS continuation: `experiment/g720-fragment-shading-rate` now contains the static-combiner lowering driver commit `4fdb9968d407618cfe3f8101d409fd803574bba3`, with an independently audited Android package (artifact `13552276626`, inner SHA-256 `63e4de771c1ad91cca6a89eef067d695c4d3f88dd858cc0999e255142f813e99`). That package has not yet been runtime-tested. The latest probe-only branch head is `7061318e2a431e1a0a05dc2b55c49f4610929636`; it adds an SSBO atomic fragment-invocation counter. Its exact-head Windows build/artifact has not yet been verified. Do not ask for device testing until that probe artifact is available and inspected.
+- Current VRS continuation: `experiment/g720-dynamic-fsr-sysval` at `0804f245e8bf0e4fc7e6c70e6867a375a7bd73aa` passed Android-only run `42480864484` and wrapper run `42480864476`; Android artifact `13617542479` was independently package-audited. A device-side static FSR render probe has now passed on the G720: 1x1 KEEP produced 4096 fragment invocations and static 2x2 KEEP produced 1024 (4:1 reduction), with image signatures/checksums passing. This proves the static pipeline FSR path renders, but does not validate the new dynamic FSR sysval lowering. The exact next device tests are `--case=dynamic-keep` and then `--case=dynamic-isolation`; do not benchmark games until both dynamic correctness paths are validated. Keep this branch/package separate from the heap-threshold performance-audit experiment.
 - These branches are parallel experiments. Do not merge or substitute their packages for one another without an explicit compatibility review.
 
 ### Current implementation state
@@ -7241,3 +7241,17 @@ Use the verified 65K-default package as a separate Winlator Mali custom driver:
 5. Keep scene, resolution, quality, DXVK 1.7.2, wrapper, and thermal starting state matched; capture min/max/average FPS, frame pacing, visual correctness, stability, and teardown. Prefer repeated A/B samples. Run descriptor telemetry separately if failure categories are still needed.
 
 No source, allocator policy, queue sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed. Do not make further heap-policy changes until this controlled device test is complete.
+
+
+## 2026-11-08 — parallel VRS device result captured during performance-audit refresh
+
+The separate dynamic-FSR sysval branch has one new device result recorded in the preceding handoff history:
+
+- Device/package: Wrapper (Mali-G720 MC7), PanVK Mesa 26.3.0-devel, revision `0804f245e8`, Vulkan API 1.3.354.
+- Pipeline fragment shading rate is reported supported; primitive and attachment FSR remain disabled.
+- Static 1x1 KEEP rendered 4,096 fragment invocations; static 2x2 KEEP rendered 1,024. Both image checksums/signatures passed, and the probe reported `VRS GPU RENDER PASS`.
+- This is a genuine static pipeline-FSR render result, not just an extension/feature query. It does not validate dynamic fragment-rate sysval lowering: the supplied run used `--case=keep`, not a dynamic case.
+- Next VRS-only device tests are `--case=dynamic-keep`, then `--case=dynamic-isolation`. Preserve the full logs. Do not treat these results as Tomb Raider or heap-renewal performance measurements.
+- This VRS work remains on its isolated branch and is not merged into `experiment/g720-performance-audit`.
+
+The performance-audit branch remains unchanged at driver-source commit `a2e5ac142b4f0df71cb28204ece4337bace046de`; the audit document refresh is `de47624438c6951437855dfd66c65b526fdf0b51`. The heap-threshold A/B device test remains the next action for that branch.
