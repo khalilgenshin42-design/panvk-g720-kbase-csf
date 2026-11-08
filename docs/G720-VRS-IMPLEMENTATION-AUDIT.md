@@ -64,3 +64,86 @@ The current uploaded log does not prove that descriptor heaps are exercised. Its
 - Do not expose `VK_KHR_ray_query` based only on the Mali-G720 product name. Mali-G720 and Immortalis-G720 are distinct SKUs; ray tracing is not established for the user's ordinary Mali-G720 MC7.
 - Do not force-enable `vertexPipelineStoresAndAtomics` on v12. The existing PanVK gate intentionally treats it differently on pre-v13 architectures.
 - Do not advertise VRS by changing extension/feature booleans alone.
+
+
+## 2026-11-08 source audit — pipeline, primitive, attachment, and dynamic paths
+
+Audited the device-tested driver source checkpoint
+`c9d61e10a9c3489d8193a8fb0767f4b5187d79f3` and its v12 GenXML.
+
+### Confirmed pipeline path
+
+- `get_physical_device_extensions()` advertises
+  `VK_KHR_fragment_shading_rate` for `PAN_ARCH >= 12`.
+- The reported feature set is deliberately pipeline-only:
+  `pipelineFragmentShadingRate=true`,
+  `primitiveFragmentShadingRate=false`, and
+  `attachmentFragmentShadingRate=false`.
+- `fragmentShadingRateNonTrivialCombinerOps=false` is retained.
+- `panvk_vX_cmd_draw.c` packs pipeline draw rate and the two combiner fields
+  into `PRIMITIVE_FLAGS_2`, then writes `IDVS.TILER_FLAGS2`.
+- The v12 GenXML confirms the register and field definitions. The tested
+  1x1 and 2x2 KEEP paths both pass GPU submit, fence, readback, and pixel
+  signature; the SSBO counter measured 4096 versus 1024 invocations.
+
+### Primitive and attachment paths are not implemented/exposed
+
+- No PanVK v12 path was found that consumes the SPIR-V
+  `PrimitiveShadingRateKHR` output and transfers it into per-primitive
+  tiler state. The feature is explicitly false.
+- v12 GenXML does contain `Framebuffer Parameters.VRS Image Rate` and
+  `VRS Image Plane` fields, but the inspected PanVK CSF framebuffer
+  construction path and `pan_fb.c` do not populate or manage a VRS image
+  attachment. The feature is explicitly false.
+- These GenXML fields prove that the register/descriptor format has fields;
+  they do not prove the full Vulkan primitive or attachment implementation.
+  Keep both feature bits false.
+
+### Dynamic pipeline FSR remains an unverified gap
+
+- `panvk_get_static_pipeline_vrs_rate()` explicitly rejects
+  `MESA_VK_DYNAMIC_FSR`; only static pipeline state is folded into the
+  fragment-center NIR lowering.
+- `panvk_compile_nir()` leaves dynamic FSR on the native sample-center path.
+  The adjacent compiler comment says the Bifrost/Valhall compiler does not
+  currently implement `nir_load_frag_shading_rate()`.
+- The existing capability probe only records
+  `vkCmdSetFragmentShadingRateKHR` and ends the command buffer; it does not
+  submit a draw. The render probe exercises static pipeline FSR and
+  `gl_FragCoord`, not dynamic FSR.
+- Therefore dynamic FSR command recording is demonstrated, but dynamic FSR
+  draw execution and correct fragment-center semantics are not yet proven.
+  Do not describe the extension as fully validated based on the static KEEP
+  test alone.
+
+### Combiner validity correction
+
+With primitive and attachment features both false, Vulkan valid usage
+requires combiner slot 0 and slot 1 to remain KEEP, respectively. The
+non-trivial-combiner property is also false. Consequently the earlier
+REPLACE/MIN/MAX/MUL device-loss cases did not constitute legal tests of
+those operations on this feature set. They must not be used to conclude that
+G720 hardware lacks those combiners. The corrected probe's SKIP is the right
+result; no feature bits should be forced on.
+
+### Next engineering work
+
+1. Add a separate dynamic-FSR render case: create a pipeline with
+   `VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR`, record
+   `vkCmdSetFragmentShadingRateKHR(2x2, KEEP/KEEP)`, draw the same
+   `gl_FragCoord` pattern, submit, wait, read back, and verify both the
+   coarse pixel signature and invocation count. Keep the static KEEP cases
+   as controls.
+2. If dynamic FSR fails or shader compilation leaves an unsupported
+   intrinsic, implement the required dynamic fragment-rate/sample-center
+   sysval path before claiming dynamic support.
+3. Test every rate returned by `vkGetPhysicalDeviceFragmentShadingRatesKHR`
+   at its advertised sample counts before treating the full rate list as
+   runtime-qualified.
+4. Keep primitive and attachment features disabled until their shader-output
+   and framebuffer/image paths, format/usage restrictions, synchronization,
+   and CTS coverage are complete.
+
+No Android driver source was changed in this audit. No new device test is
+requested until the dynamic render probe is built and its artifact is
+independently checked.
