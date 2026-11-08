@@ -520,7 +520,7 @@ equal_neighbors(const uint8_t *p)
 int
 main(int argc, char **argv)
 {
-   const char *case_name = argc > 1 ? argv[1] : "--case=keep";
+   const char *case_name = argc > 1 ? argv[1] : "--case=dynamic-keep";
    enum { CASE_KEEP, CASE_MAX, CASE_MIN, CASE_MUL, CASE_REPLACE,
           CASE_DYNAMIC_KEEP, CASE_DYNAMIC_ISOLATION } probe_case;
 
