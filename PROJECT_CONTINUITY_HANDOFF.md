@@ -7475,3 +7475,20 @@ Arm's official Mali-G720 product page states that the GPU supports pipeline, pri
 5. Only after this separation should the driver rate enumeration or hardware programming be changed. Do not reduce the advertised limits or claim larger rates work until a corrected probe demonstrates the expected behavior.
 
 No PanVK source, feature advertisement, Kbase behavior, package, kernel, or Android system/vendor driver was changed in this review. Keep the VRS work isolated from the performance-audit and descriptor-heap branches.
+
+
+### Follow-up source diagnostic committed
+
+After tracing the actual CSF register path, a narrowly scoped diagnostic was added on `experiment/g720-dynamic-fsr-sysval`:
+
+- Commit `6ff24e63fefb7eee875d4a99353a4f45224c4845`.
+- File: `src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c`, in `set_tiler_idvs_flags()`.
+- For requested rates with width or height greater than 2, PanVK now logs requested size, effective size after sample-shading rules, sample-shading enable, packed VRS rate code, decoded combiner fields, and the full `PRIMITIVE_FLAGS_2` packed word immediately before writing `IDVS.TILER_FLAGS2`.
+- The diagnostic is limited to larger rates; it does not log every ordinary 1x1/2x2 draw. It does not alter the encoded state or feature advertisement.
+
+CI triggered automatically:
+- Android-only package build run `42509014534`.
+- Android wrapper build run `42509014577`.
+- Both were in progress when this note was written. Their results and artifact IDs must be added after completion.
+
+This is diagnostic instrumentation only. It is not a claimed VRS fix. Do not ask for a new device run until the Android package build succeeds and its artifact is available. Continue to keep the source branch and package separate from the performance-audit branch and never replace the Android system/vendor driver.
