@@ -7298,3 +7298,26 @@ No PanVK driver implementation or Android package was modified by this probe har
 - Artifact download page: `https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42485499280`.
 - Artifact includes the rebuilt `panvk-vrs-render-probe.exe` and root `Run-Dynamic-VRS.cmd` plus existing case scripts, as declared in the successful workflow upload step. New EXE defaults to `--case=dynamic-keep` when launched with no arguments.
 - CI success proves the Windows probe compiled and packaged; it does not prove dynamic FSR runtime correctness on the Mali-G720. Device run/log still required.
+
+
+
+## 2026-11-08 — Mali-G720 dynamic pipeline FSR runtime PASS
+
+The user ran the rebuilt argument-independent Windows render probe on the actual Wrapper(Mali-G720 MC7) device. The supplied log selects `--case=dynamic-keep` without arguments and completes both static controls and the dynamic-state test successfully.
+
+Device/runtime identity:
+- Wrapper(Mali-G720 MC7), PanVK Mesa 26.3.0-devel, driver revision `0804f245e8`, Vulkan API 1.3.354.
+- `pipelineFragmentShadingRate=1`; primitive and attachment FSR remain unsupported/disabled (`0`). `nonTrivialCombinerOps=0`, `strictMultiplyCombiner=0`.
+- Probe device creation, descriptor setup, render resources, graphics pipelines, queue submissions, fences, memory maps, and readbacks all returned success.
+
+Measured and verified results:
+- Static 1x1 KEEP: checksum `0x06d78d985ad50383`, equal-neighbors 0, fragment invocations 4096; submit/fence/readback PASS.
+- Static 2x2 KEEP: checksum `0xcad734dde7920383`, equal-neighbors 4096, pixel signature PASS; fragment invocations 1024; invocation reduction PASS (4x fewer invocations / 75% reduction).
+- Dynamic-state 2x2 KEEP: `vkCmdSetFragmentShadingRateKHR` recorded with rate 2x2 and combiner ops 0,0; submit/fence/readback PASS.
+- Dynamic 2x2 checksum exactly matches static 2x2 (`0xcad734dde7920383`), equal-neighbors 4096, pixel signature PASS.
+- Dynamic fragment invocations 1024, matching static 2x2 count 1024; comparison PASS.
+- Final result: `VRS GPU RENDER PASS`.
+
+This is the first actual-device runtime validation of the dynamic pipeline-rate command plus PanVK dynamic fragment-rate sysval path for this test. It validates the tested 2x2 KEEP scenario only. It does not validate other combiner modes, primitive/attachment shading rates, all render-pass configurations, application workloads, or performance gains in DXVK games. The hardware/driver-reported capability limits above remain unchanged; do not expose unsupported FSR modes.
+
+Next engineering action: move from isolated probe correctness to integration/performance validation. Add a controlled application-level A/B test that compares baseline 1x1 against dynamic 2x2 KEEP, first with a simple deterministic full-screen workload and GPU timestamps, then a real DXVK workload. Check image correctness and frame time, thermal/frequency stability, and CPU submission overhead. Keep the feature gated/opt-in until end-to-end results demonstrate a benefit. Do not merge into the performance-audit branch or alter the Android package/system driver without a separate review and explicit test evidence.
