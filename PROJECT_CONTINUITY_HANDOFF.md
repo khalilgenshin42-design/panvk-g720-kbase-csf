@@ -7263,3 +7263,14 @@ The performance-audit branch remains unchanged at driver-source commit `a2e5ac14
 - Wrapper run `42481461421` for handoff-branch commit `b4d4963f182ab198d10ad7184f8460e16da59855` has now completed SUCCESS.
 - A later documentation-only commit `cbf03e1225419db38f9d781c2a8c31b410bfa8f5` records the static VRS render result and triggered wrapper run `42481867670`. At the latest status recheck, that run was still in progress in the Release and Debugoptimized compile steps. It is a wrapper-only build on the handoff branch; it is not an Android-only PanVK build and does not change the performance-audit source status.
 - The current handoff branch head before this status note was `d5fa3bb1aa2f2b0388f4980069ec8a4e3207344b`. This documentation update uses `[skip ci]` to avoid another push-triggered wrapper run.
+
+
+## 2026-11-08 14:10 CET — VRS render-probe output clarification
+
+The Windows GPU render-probe source on `experiment/g720-dynamic-fsr-sysval` (HEAD `0804f245e8bf0e4fc7e6c70e6867a375a7bd73aa`) intentionally does not print its diagnostic stream to stdout. Its `LOG` macro writes only to `panvk_vrs_render_probe.log`, opened in the process working directory by `main()`. Therefore an immediate return to the CMD prompt with no console text is expected and is not evidence that the test did nothing or failed.
+
+The exact Windows probe artifact is `panvk-vrs-probe-win64`, artifact ID `13617397046`, from wrapper workflow run `42480864476` (artifact SHA-256 `7379f254796c736d4cf0a1336b0cf2a9037494162e56065b126b48018e7e39ce`). This is the render-probe build from the dynamic-FSR source snapshot, not merely the earlier capability-only probe.
+
+Device test procedure: run one case from `D:\\panvk-vrs-render-probe-win64>`, then inspect `type panvk_vrs_render_probe.log` in that same directory. The exact cases remain `--case=dynamic-keep` and `--case=dynamic-isolation`. Run each case separately because each invocation overwrites the same log file; copy/rename the first log before running the second if both are to be retained. Do not infer a PASS from a silent CMD prompt; only the log's final result and detailed comparisons count.
+
+No driver source or package changed in this clarification.
