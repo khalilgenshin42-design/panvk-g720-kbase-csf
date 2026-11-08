@@ -297,7 +297,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    };
    VkPipelineDynamicStateCreateInfo dynamic_state = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-      .dynamicStateCount = ARRAY_SIZE(dynamic_states),
+      .dynamicStateCount = 1,
       .pDynamicStates = dynamic_states,
    };
    VkGraphicsPipelineCreateInfo pipeline_info = {
