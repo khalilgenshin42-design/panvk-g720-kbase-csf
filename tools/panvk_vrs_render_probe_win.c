@@ -109,6 +109,7 @@ memory_type(const VkPhysicalDeviceMemoryProperties *props, uint32_t bits,
 static int
 create_mip_texture(VkDevice device,
                    const VkPhysicalDeviceMemoryProperties *mem_props,
+                   PFN_vkGetDeviceProcAddr get_device_proc_addr,
                    VkQueue queue, uint32_t queue_family,
                    VkImage *out_image, VkDeviceMemory *out_image_mem,
                    VkImageView *out_view, VkSampler *out_sampler)
@@ -1073,7 +1074,7 @@ main(int argc, char **argv)
       };
       update_descriptor_sets(device, 1, &counter_write, 0, NULL);
       if (probe_case==CASE_MIP_LOD && mip_resources_ok) {
-         mip_resources_ok=create_mip_texture(device,&mem_props,queue,qf,
+         mip_resources_ok=create_mip_texture(device,&mem_props,get_device_proc_addr,queue,qf,
             &mip_image,&mip_image_mem,&mip_view,&mip_sampler);
          LOG("mip texture upload/setup=%s\\n",mip_resources_ok?"PASS":"FAIL");
          if (mip_resources_ok) {
