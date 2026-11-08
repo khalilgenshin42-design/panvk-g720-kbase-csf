@@ -7108,3 +7108,28 @@ Correction to the preceding status note: .github/workflows/android-only-experime
 The allowlist now includes experiment/g720-dynamic-fsr-sysval. Workflow change commit: 927a24b620a496a61c2aab510995aae995dcbdc9. This push is intended to launch the Android-only PanVK build against the experimental branch head, including the sysval changes. The connected GitHub status endpoint currently returns no check records for that commit, so the run has not yet been independently confirmed as queued or completed. Do not claim build success until the Actions run and artifact are inspected.
 
 The source implementation remains experimental and unvalidated. No user device action is requested while the Android build is pending. The known-good experiment/g720-fragment-shading-rate branch and installed Android package remain unchanged.
+
+
+## 2026-11-08 — second-pass dynamic FSR source/FAU audit and CI guardrails
+
+Continued work on experiment/g720-dynamic-fsr-sysval. The NIR sysval path was traced through the actual PanVK push-constant lowering implementation:
+
+- load_sysval(b, graphics, 32, fs.frag_rate) creates a load_push_constant with base SYSVALS_PUSH_CONST_BASE and a constant byte offset from sysval_offset(graphics, fs.frag_rate).
+- collect_push_constant() recognizes that base as a driver sysval and marks the corresponding byte range with shader_use_sysval_range().
+- move_push_constant() remaps the sysval byte offset through shader_remapped_sysval_offset() before backend compilation.
+- The per-draw set_gfx_sysval() writes the same struct field into graphics sysvals, and the existing upload/packing machinery handles the field like other graphics sysvals.
+
+This confirms that the new field uses the established FAU/sysval mechanism rather than an untracked raw push-constant load. The field is placed after the existing blend descriptor array, preserving the required blend-constant prefix and 8-byte struct alignment (the new uint32_t is paired with a uint32_t pad).
+
+The Android-only workflow was strengthened in commit 0804f245e8bf0e4fc7e6c70e6867a375a7bd73aa. Its pre-build source verification now explicitly checks for:
+- the fs.frag_rate declaration;
+- per-draw set_gfx_sysval() population;
+- lower_dynamic_vrs_frag_center();
+- the load_sysval() read of fs.frag_rate;
+- static/dynamic shader-cache key handling.
+
+The workflow allowlist already includes experiment/g720-dynamic-fsr-sysval (commit 927a24b620a496a61c2aab510995aae995dcbdc9). GitHub combined-status queries for both workflow commits still return no check records, and the connected GitHub Actions tools exposed in this session do not include a list/dispatch workflow-run action. Therefore no Android build, artifact, or device test is claimed. The branch must still pass compiler/build validation.
+
+Current branch head after the CI guardrail change: 0804f245e8bf0e4fc7e6c70e6867a375a7bd73aa. The experimental source changes remain uncompiled. No device package or vendor/system driver was changed.
+
+Next: obtain and inspect the Android-only workflow run for this exact branch head; if it fails, fix the first actual compiler/build error rather than making speculative source changes. If it succeeds, inspect its artifact and package before asking for device-side testing. Device tests remain static 2x2 vs dynamic 2x2 coordinate output, same-command-buffer 1x1-to-2x2 transition, and sample-shading 1x1 effective-rate behavior.
