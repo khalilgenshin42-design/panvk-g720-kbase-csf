@@ -7383,3 +7383,17 @@ Experimental source fix committed on experiment/g720-dynamic-fsr-sysval:
 - This is a correctness/advertisement fix only; no claim of GPU timestamp hardware failure. No timestamp frequency is guessed, and no changes to Android system/vendor drivers are made.
 
 Next: verify Android-only CI completes successfully. Then produce a small Vulkan properties probe on the phone to confirm timestampComputeAndGraphics=0, timestampPeriod=0, graphics timestampValidBits=0, and KHR_calibrated_timestamps is not exposed. Only after this is validated should work resume on a separate calibration experiment; use paired Kbase timeinfo monotonic/timestamp/cycle_counter requests and prove which counter corresponds to MALI_CS_STATE_TIMESTAMP before computing a frequency. The existing dynamic FSR GPU render PASS remains valid and unaffected.
+
+## 2026-11-08 — Hard gate Kbase Vulkan timestamp exposure at the PanVK API boundary
+
+The user reran the VRS render probe and confirmed the same mismatch after the conservative Kbase backend change: `timestampComputeAndGraphics=1`, `timestampPeriod=0 ns`, and graphics `timestampValidBits=64`. The VRS static/dynamic render tests still pass. The user explicitly asked to stop repeating package-verification steps and fix the source directly.
+
+The prior Kbase initialization fix (`props->gpu_can_query_timestamp = false`) is necessary but did not change the runtime-reported Vulkan properties in the user's tested build. The Vulkan-facing capability logic was therefore hardened independently of that backend flag:
+
+- Commit `bb69bf30025796f29c03db4a6db1a1f37993e16d` on `experiment/g720-dynamic-fsr-sysval`: in `src/panfrost/vulkan/panvk_vX_physical_device.c`, all timestamp-dependent extension/feature exposure now additionally requires a nonzero `timestamp_frequency` and that the device is not using the Kbase backend (`!device->kbase_node_path[0]`). This covers KHR/EXT calibrated timestamps, shader clock extension/feature, optional present timing, and `timestampComputeAndGraphics`.
+- Commit `50cc2102a9ff737d775b47bfc57d5051aeaab965`: in `src/panfrost/vulkan/panvk_physical_device.c`, queue-family `timestampValidBits` now also requires a nonzero frequency and a non-Kbase backend. The timestamp period function already returns zero when frequency is zero.
+- Commit `cabe200fd0c72e1267269b308171d0747a43f24a`: Android-only CI workflow now asserts these independent API-boundary gates are present, in addition to the Kbase backend's false capability flag.
+
+Expected Vulkan result for the Kbase G720 build after this source revision: `timestampComputeAndGraphics=0`, `timestampPeriod=0 ns`, graphics `timestampValidBits=0`, and calibrated-timestamp/shader-clock extensions not exposed. This is an API capability consistency fix, not a claim that hardware timestamps are unusable in all possible Kbase implementations. No timestamp frequency is guessed. VRS code and its verified static/dynamic KEEP behavior are unchanged.
+
+Next action: wait for the Android-only workflow on commit `cabe200fd0c72e1267269b308171d0747a43f24a` to compile. Then install that experimental PanVK package in Winlator (never replace the Android system/vendor Vulkan driver) and rerun the existing properties/VRS probe. If the values remain true after this API-boundary hard gate is compiled and loaded, instrument the Vulkan property population path at runtime; do not ask the user to repeat generic package checks. Preserve the current VRS PASS and continue separate VRS combiner/workload tests after timestamp consistency is fixed.
