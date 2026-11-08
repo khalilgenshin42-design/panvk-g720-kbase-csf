@@ -541,7 +541,7 @@ main(int argc, char **argv)
    else if (!strcmp(case_name, "--case=rate-matrix"))
       probe_case = CASE_RATE_MATRIX;
    else {
-      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep|dynamic-isolation\n", argv[0]);
+      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep|dynamic-isolation|rate-matrix\n", argv[0]);
       return 2;
    }
    log_file = fopen("panvk_vrs_render_probe.log", "w");
