@@ -6887,3 +6887,12 @@ logs and asserts its fragment invocation count against static 2x2. The test
 only reports the intended sample-centre diagnosis if both shader variants
 execute at the same coarse invocation count and only the coordinate-derived
 pixels differ. Latest source commit: `c3ca013ac4568624a40aa97f0cb43f04ea52a3e7`.
+
+
+Final harness QA: two diagnostic log format strings were corrected from
+literal backslash-n output to actual line breaks. Latest source commit:
+`09d9684e45201933f0301175dc912a4a39606067`. An earlier successful Windows
+probe build is available, but it predates the coordinate invocation-count
+assertion and final log formatting fix; do not send that artifact for device
+testing. The latest build is queued. Keep current Android driver installed;
+no user-side action until the latest artifact is built and verified.
