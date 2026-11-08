@@ -282,3 +282,26 @@ Do not simply change the dynamic centre to `(1.0, 1.0)` globally: dynamic
 FSR can select multiple fragment sizes, and Vulkan's required center must
 follow the actual effective rate. Any fix must handle all supported sizes
 and interactions with multisampling/sample shading, not just this 2x2 case.
+
+
+## 2026-11-08 — dynamic FSR sample-centre isolation probe
+
+The device run of `--case=dynamic-keep` passed command recording, queue
+submission, fence wait, readback, and fragment-invocation comparison (1024
+static versus 1024 dynamic), but its coordinate-derived pixel checksum did
+not match static 2x2. Source inspection identifies a plausible compiler
+split: static FSR folds the fragment centre into NIR, whereas dynamic FSR
+bypasses that static lowering; the generic sample-position lowering may then
+supply the 1x1 centre. This is a hypothesis, not yet a confirmed root cause.
+
+A discriminating probe adds a second fragment shader that increments the same
+SSBO invocation counter but writes a constant colour and does not read
+`gl_FragCoord`. It compares static 2x2 and dynamic 2x2 output hashes and
+invocation counts, while retaining the coordinate shader's static/dynamic
+mismatch as the contrasting result. If constant-colour pixels and invocation
+counts match while coordinate pixels differ, the evidence isolates the failure
+to coordinate/sample-centre semantics rather than the rate state itself. If
+either constant-colour comparison fails, investigate the broader dynamic
+pipeline state path before touching compiler lowering.
+
+No driver feature bits or Android driver source are changed by this probe.
