@@ -738,6 +738,9 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
       cfg.flags_0.multisample_enable = fb->sample_count > 1;
       cfg.flags_0.evaluate_per_sample = shader->info.fs.sample_shading;
       cfg.flags_0.clean_fragment_write = true;
+#if PAN_ARCH >= 12
+      cfg.flags_0.disable_vrs_clamp_2x2 = true;
+#endif
 
 #if PAN_ARCH >= 12
       cfg.fragment_resources = res_table.gpu | res_table_size;
