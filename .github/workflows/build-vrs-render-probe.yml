@@ -9,6 +9,7 @@ on:
       - tools/panvk_vrs_render_probe_win.c
       - tools/run-vrs-cases.cmd
       - tools/run-vrs-keep-check.cmd
+      - tools/run-vrs-replace-check.cmd
       - tools/vrs_probe.vert
       - tools/vrs_probe.frag
       - .github/workflows/build-vrs-render-probe.yml
@@ -69,4 +70,5 @@ jobs:
             panvk-vrs-render-probe.exe
             tools/run-vrs-cases.cmd
             tools/run-vrs-keep-check.cmd
+            tools/run-vrs-replace-check.cmd
           if-no-files-found: error
