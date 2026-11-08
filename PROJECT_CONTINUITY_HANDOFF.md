@@ -6982,3 +6982,70 @@ No steps had started when checked. The connected GitHub toolset exposes no
 workflow-cancel operation. Future handoff-branch documentation commits should
 use `[skip ci]`; the monitoring correction commit does so and did not queue
 a further wrapper run.
+
+
+## 2026-11-08 — dynamic FSR isolation result received
+
+User supplied the complete `--case=dynamic-isolation` log from the verified
+Windows probe, using the already-installed Android PanVK package
+`git-c9d61e10a9` on the Mali-G720 MC7.
+
+### Device result
+
+- Static 1x1 KEEP: submit/fence/readback PASS; checksum
+  `0x06d78d985ad50383`; 4096 fragment invocations.
+- Static 2x2 KEEP: submit/fence/readback PASS; checksum
+  `0xcad734dde7920383`; 1024 fragment invocations; pixel signature PASS.
+- Constant-colour static 2x2: submit/fence/readback PASS.
+- Constant-colour dynamic 2x2: submit/fence/readback PASS.
+- Constant-colour checksums are identical:
+  `0x57ef86c490d1a383`; pixel comparison PASS.
+- Constant-colour fragment invocations: static 1024, dynamic 1024;
+  comparison PASS.
+- Coordinate shader dynamic render: submit/fence/readback PASS.
+- Coordinate shader fragment invocations: dynamic 1024, static 1024;
+  comparison PASS.
+- Coordinate-derived pixels still differ between static and dynamic 2x2.
+- Final probe status: `VRS GPU RENDER PASS` (the isolation assertions pass).
+
+### Interpretation
+
+This proves dynamic 2x2 VRS reaches the GPU and executes at the expected
+coarse rate. The constant-colour image is bit-identical to static 2x2, so
+there is no general output or render-target mismatch. The defect is exposed
+by `gl_FragCoord.xy`-dependent shader output. This strongly isolates the
+remaining issue to fragment-coordinate/sample-centre semantics, while not
+yet proving that sample-centre is the only possible coordinate-related
+cause.
+
+Source trace:
+- Static FSR shader lowering replaces
+  `nir_intrinsic_load_sample_pos_or_center` using the effective static rate.
+- Dynamic FSR bypasses that compile-time lowering.
+- Generic `pan_nir_lower_sample_pos_impl()` supplies (0.5, 0.5) when sample
+  shading is disabled.
+- CSF draw emission programs dynamic FSR from `dyns->fsr` into
+  `IDVS.TILER_FLAGS2`; measured invocation counts confirm hardware execution.
+
+Do not hardcode a 2x2 centre. Dynamic FSR is draw state and may change while a
+pipeline remains bound. A real implementation must deliver the effective
+rate/centre to the fragment shader at draw time or use a correct hardware
+sysval, and preserve sample-shading/multisample semantics.
+
+### Next engineering work
+
+1. Add spatial pixel-difference diagnostics to the probe so the exact
+   coordinate delta is observable.
+2. Audit hardware sysval support and PanVK FAU/sysval plumbing for a
+   per-draw dynamic rate value. Check all draw paths and state dirtiness
+   before changing compiler/driver code.
+3. Validate all advertised pipeline rates and sample-count interactions.
+4. Keep primitive/attachment FSR false and do not claim full dynamic FSR
+   correctness until coordinate semantics and relevant CTS tests pass.
+
+No Android driver source, system/vendor driver, kernel, or firmware was
+changed. No new device test is requested until a further diagnostic artifact
+is built and verified.
+
+Detailed audit:
+https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-fragment-shading-rate/docs/G720-VRS-IMPLEMENTATION-AUDIT.md
