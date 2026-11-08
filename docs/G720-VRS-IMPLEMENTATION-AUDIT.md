@@ -246,3 +246,39 @@ before changing compiler code.
 
 No Android driver source was modified by this test. No package reinstall or
 additional user-side test is requested at this point.
+
+
+### Follow-up compiler-path inspection
+
+A closer trace narrowed the likely coordinate discrepancy to the existing
+Bifrost/Valhall sample-position lowering:
+
+- `src/panfrost/compiler/pan_nir_lower_sample_position.c` handles
+  `nir_intrinsic_load_sample_pos_or_center`. When sample shading is
+  disabled, it unconditionally replaces the value with `(0.5, 0.5)`.
+- PanVK's static FSR pass runs earlier in `panvk_compile_nir()` and replaces
+  that intrinsic with a rate-derived center: for 2x2, `(1.0, 1.0)`.
+- For dynamic FSR, the static pass deliberately declines the shader. The
+  Bifrost lowering then supplies `(0.5, 0.5)`, even though the CSF draw path
+  programs a dynamic 2x2 tiler rate.
+
+This is a concrete, source-supported mechanism consistent with the observed
+result: static and dynamic 2x2 both execute 1024 fragment invocations and
+produce 4096 equal-neighbour pairs, but their coordinate-derived output
+checksums differ. It is still a leading diagnosis, not a proven complete
+root cause, because the current shader's only pixel signature is derived
+from `gl_FragCoord`.
+
+The next probe should use a second fragment shader that performs the same
+SSBO atomic invocation count but writes a constant colour and never reads
+`gl_FragCoord`. Run static 2x2 and dynamic 2x2 with that shader, then retain
+the current coordinate-reading shader as a separate test. If constant-colour
+outputs match while coordinate outputs differ, the problem is isolated to
+fragment-coordinate/sample-centre semantics. If they still differ, inspect
+other dynamic state / shader differences before changing sample-position
+lowering.
+
+Do not simply change the dynamic centre to `(1.0, 1.0)` globally: dynamic
+FSR can select multiple fragment sizes, and Vulkan's required center must
+follow the actual effective rate. Any fix must handle all supported sizes
+and interactions with multisampling/sample shading, not just this 2x2 case.
