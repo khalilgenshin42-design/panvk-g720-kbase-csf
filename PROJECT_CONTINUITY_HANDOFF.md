@@ -7733,3 +7733,24 @@ A follow-on semantic probe has been implemented on `experiment/g720-dynamic-fsr-
 - The test now validates derivative signatures for 1x1, 2x2, 2x1, 1x2, 4x2, 2x4, and 4x4; each matrix rate is tested in both static pipeline state and dynamic command-buffer state. The expected signatures scale with the actual WxH fragment footprint.
 - This remains a Windows diagnostic executable only. No new Android PanVK package was built or changed. Do not treat this as a driver update.
 - User action is now required for the device-side run. Capture the complete `panvk_vrs_render_probe.log` and return it unchanged; especially retain derivative-signature lines and the final PASS/FAIL line.
+
+
+## 2026-11-08 — G720 VRS derivative-signature device result
+
+The user ran the derivative-extended Windows probe on the target Winlator Mali-G720 MC7 device and supplied the complete log.
+
+- Log SHA-256: `c8356152429b8e523df8017096cb97cea04229ca816aec1c6f715584acde88a3`.
+- Runtime device: `Wrapper(Mali-G720 MC7)`, PanVK Mesa `26.3.0-devel (git-c027d4d8c7)`, Vulkan API `1.3.354`.
+- Final status: `advertised rate matrix: PASS` and `VRS GPU RENDER PASS`.
+- Derivative signatures passed for 1x1 control and 2x2 baseline, and for every static and dynamic matrix rate:
+  - 2x1: encoded dFdx=128, dFdy=64.
+  - 1x2: encoded dFdx=64, dFdy=128.
+  - 4x2: encoded dFdx=255, dFdy=128.
+  - 2x4: encoded dFdx=128, dFdy=255.
+  - 4x4: encoded dFdx=255, dFdy=255.
+  - Each measured channel exactly matched the expected encoded signature (within the probe's +/-2 tolerance).
+- Invocation counts remained exact: 1x1=4096; 2x1=2048; 1x2=2048; 2x2=1024; 4x2=512; 2x4=512; 4x4=256. Static and dynamic render checksums matched at each tested matrix rate.
+- This is consistent with Vulkan's fragment shading rate semantics: derivative results may be coarse or fine but implementations must choose consistently between x/y; pixel derivatives are recovered by dividing dFdx by fragment width and dFdy by fragment height. Implicit-LOD sampling uses those derivatives as its Grad operands. See the Vulkan specification fragment-shading-rate derivative discussion and implicit-LOD rule.
+- No evidence of a derivative scaling defect was found in the tested pipeline-only KEEP path. This is a targeted affine-varying derivative test, not yet a mipmapped texture sampling/implicit-LOD test, and does not validate all interpolant/helper-invocation edge cases.
+- No PanVK driver source change is indicated by this result. Next engineering step: add an actual mipmapped sampled-image test with implicit LOD (plus a stable reference signature), then test perspective-correct varying interpolation. Keep sample-shading and unsupported depth/stencil/sample-mask interactions separate and respect the advertised false interaction properties.
+- The uploaded log contains literal backslash-n sequences in some diagnostic messages due to escaped newline formatting in the probe's LOG strings; the actual test result and all derivative numeric values remain readable and unambiguous.
