@@ -1,5 +1,5 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-08 18:31 UTC
+Last updated: 2026-11-08 19:05 UTC
 
 ## Authoritative current state — 2026-11-08
 
@@ -12,7 +12,7 @@ This section supersedes older "next steps", queued-CI, and "no code changed" sta
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
 - Separate fragment-shading-rate work: `experiment/g720-fragment-shading-rate`, HEAD `157418c71475b9d96170a43f24157a80673d4160`; driver-source commit `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`. Android package, Android wrapper variants, and the Windows VRS capability probe all pass CI; package and probe artifacts were independently inspected. No device runtime test has been performed.
 
-- Current VRS continuation: `experiment/g720-dynamic-fsr-sysval` is now at `c027d4d8c747787c85256cfc0e9768e991262c16`. The original static/dynamic 2x2 render probe passed, but the expanded rate matrix exposed that 4x2 and 2x4 produced only 1024 invocations (2x2-equivalent) instead of 512. Source audit found the v12+ `DCD_FLAGS_0.Disable VRS Clamp 2x2` bit (bit 12) was left clear. Candidate fix commit `3b9e6a7d0f83abf929162ebef62cc96b3dc656f0` sets this bit; `3cfbf43` is formatting-only. The fix is not yet runtime validated. The complete candidate Android-only package from run `42509835857` succeeded for exact source `c027d4d` and is artifact `13628779694` (inner ADPKG SHA-256 `5ea2bb16e45cf4591a56786cdd531c41f454c6429103b3b48352aa0d8982c161`). Exact-shape Winlator render probe artifact `13628887002` (run `42509380933`, source `84b6c3d`) is ready. The next and only required action is a device-side rate-matrix run using those two artifacts. Wrapper run `42509835883` remains separate and is not required for the PanVK Android package test. A separate diagnostic-only Android package from run `42509014534` succeeded as artifact `13627869712`, but predates the DCD clamp fix and must not be used for the next rate-matrix test. The next device test is the full `tools/run-vrs-rate-matrix.cmd` with the candidate-fix package; keep VRS separate from the heap-threshold performance-audit experiment.
+- Current VRS continuation: `experiment/g720-dynamic-fsr-sysval` is at `c027d4d8c747787c85256cfc0e9768e991262c16`. The v12+ DCD `Disable VRS Clamp 2x2` bit (bit 12) was enabled in the regular graphics DCD and internal fullscreen/frame-shader DCD paths. This fix is now **runtime validated on the target Mali-G720 MC7** by the complete user-supplied `panvk_vrs_render_probe.log` (SHA-256 `846cdb67b7dcae4b6f70f597bc8b02e877433198842d29464970642aca869b75`). Static KEEP rates all pass with exact expected SSBO invocation counts and directional pixel signatures: 1x1=4096; 2x1=2048 (H=2048,V=0); 1x2=2048 (H=0,V=2048); 2x2=1024 (H=2048,V=2048); 4x2=512 (H=3072,V=2048); 2x4=512 (H=2048,V=3072); 4x4=256 (H=3072,V=3072). Dynamic command-buffer cases shown in the log for 2x1, 1x2, 4x2, 2x4, and 4x4 match their static invocation counts and checksums. Pipeline creation, submit, fence wait, and readback pass. The log ends with `advertised rate matrix: PASS` and `VRS GPU RENDER PASS`. This establishes pipeline VRS rasterization/invocation behavior for the tested simple shader and target; it does not yet validate derivative/implicit-LOD behavior, interpolation, helper invocations, discard/depth/sample interactions, attachment/primitive VRS, or game performance. Candidate Android package was run `42509835857`, artifact `13628779694`, inner package SHA-256 `5ea2bb16e45cf4591a56786cdd531c41f454c6429103b3b48352aa0d8982c161`; matching Win64 probe artifact `13628887002` from run `42509380933`. Keep this VRS work separate from the heap-threshold performance-audit experiment. Next engineering step: audit the exact VRS feature/property advertisement and shader lowering paths, then extend the probe with shader-semantic tests before any production-safety or performance claim.
 - These branches are parallel experiments. Do not merge or substitute their packages for one another without an explicit compatibility review.
 
 ### Current implementation state
@@ -7641,3 +7641,40 @@ Expected large-rate values if the DCD clamp fix works:
 - 4x4: DCD disable-clamp bit 12 = 1, TILER rate code 10, H=3072/V=3072, SSBO invocations=256.
 
 Keep the 1x1, 2x1, 1x2, and 2x2 controls passing. If the large rates pass, next validate the shader semantics that matter to real workloads (derivatives/implicit LOD, interpolation, discard/depth/sample behavior) before considering the feature production-safe. No game-FPS claim follows from this synthetic test.
+
+## 2026-11-08 — VRS full rate-matrix device validation passed
+
+The user supplied the complete panvk_vrs_render_probe.log after importing the candidate PanVK package into Winlator Mali 1.2 on the target Wrapper(Mali-G720 MC7) device. File SHA-256: 846cdb67b7dcae4b6f70f597bc8b02e877433198842d29464970642aca869b75.
+
+### Confirmed static pipeline-rate results
+
+| Rate | Expected invocations | Measured | Horizontal equal neighbors | Vertical equal neighbors | Result |
+|---|---:|---:|---:|---:|---|
+| 1x1 | 4096 | 4096 | 0 | 0 | PASS |
+| 2x1 | 2048 | 2048 | 2048 | 0 | PASS |
+| 1x2 | 2048 | 2048 | 0 | 2048 | PASS |
+| 2x2 | 1024 | 1024 | 2048 | 2048 | PASS |
+| 4x2 | 512 | 512 | 3072 | 2048 | PASS |
+| 2x4 | 512 | 512 | 2048 | 3072 | PASS |
+| 4x4 | 256 | 256 | 3072 | 3072 | PASS |
+
+The 4x2, 2x4, and 4x4 rates now produce the expected 4-wide/4-high pixel footprints and 8x/8x/16x invocation reductions relative to 1x1. This resolves the earlier 2x2 plateau. All static rate cases report render/pixel/count/shape success.
+
+### Dynamic command-buffer cases
+
+The complete log includes dynamic vkCmdSetFragmentShadingRateKHR cases for 2x1, 1x2, 4x2, 2x4, and 4x4. Each matches its corresponding static checksum and invocation count. The dynamic test path successfully records the command, submits, waits for a fence, and reads back the result. The log ends with `advertised rate matrix: PASS` and `VRS GPU RENDER PASS`.
+
+### What this proves — and what it does not
+
+- Proven on this target/package: pipeline VRS rate programming and the tested dynamic rate command produce the correct simple-shader pixel footprint and SSBO atomic invocation count for the seven listed rates.
+- Not yet proven: derivative/implicit texture LOD semantics, interpolation and centroid behavior, helper invocation semantics, shader discard/depth/stencil/coverage interactions, multisample/sample-shading interactions, render-pass attachment/primitive VRS, broader Vulkan conformance, stability in games, or measurable game-FPS gains.
+- Do not expose primitive- or attachment-based VRS features based on this result. Keep their feature bits disabled until their independent implementation and validation are complete.
+- Do not claim that 4x4 VRS makes games 16x faster; this is a shader invocation reduction in a controlled synthetic workload, not a frame-time measurement.
+
+### Next autonomous engineering work
+
+1. Audit vkGetPhysicalDeviceFragmentShadingRatesKHR, VkPhysicalDeviceFragmentShadingRatePropertiesKHR, pipeline FSR feature gating, dynamic FSR state storage/dirty tracking, and the NIR/FSR shader-lowering path on experiment/g720-dynamic-fsr-sysval.
+2. Audit how fs.frag_rate / sample-centre lowering interacts with the hardware rate, especially derivatives and implicit texture LOD. Do not change working hardware rate encoding or DCD clamp without new evidence.
+3. Extend the Windows render probe with targeted semantic tests: a varying texture-coordinate/implicit-LOD test with a mipmapped texture; interpolation gradients across coarse regions; discard/depth side effects; and sample-shading fallback. Keep each test isolated and report per-test pass/fail.
+4. Keep all new tests and source changes on the VRS experiment branch; do not merge into the performance-audit, descriptor-heap, clip/cull, or system-driver branches.
+5. Build the probe in CI and use a device run only after the probe is ready. No further user action is needed until a device runtime result is genuinely required.
