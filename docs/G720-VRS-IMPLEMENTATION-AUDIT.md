@@ -433,3 +433,38 @@ implementation.
 
 No Android driver source or package was changed by this device test. No new
 Android driver install is requested yet.
+
+
+### Follow-up source audit — per-draw FAU route identified (design only)
+
+The next source pass found a plausible implementation route without changing
+driver code:
+
+- `struct panvk_graphics_sysvals` in `panvk_shader.h` already carries
+  fragment-stage driver values in its `fs` block.
+- `panvk_per_arch(cmd_prepare_draw_sysvals)` in
+  `panvk_vX_cmd_draw.c` builds the per-draw graphics sysval update set and
+  intersects dirty sysvals with `fs->fau.used_sysvals` to set
+  `FS_PUSH_UNIFORMS`.
+- CSF `prepare_push_uniforms()` uploads the fragment FAU block when
+  `FS_PUSH_UNIFORMS` is dirty, then updates `IDVS.FRAGMENT_FAU`.
+- The current CSF draw path reads `dyns->fsr` at draw emission and programs
+  `IDVS.TILER_FLAGS2`. The same effective dynamic rate can therefore be
+  encoded into a driver sysval at draw preparation time, provided the shader
+  compiler marks that sysval as used and the dirty-state propagation is
+  correct.
+
+Candidate design: add a compact per-draw effective fragment-rate field to the
+fragment sysval ABI; lower the dynamic fragment-centre input to a read of that
+field; populate it from the effective Vulkan dynamic FSR state in
+`cmd_prepare_draw_sysvals`; and ensure it is refreshed on every relevant
+dynamic-state change before fragment FAU upload. The encoding must match the
+rate bitfield consumed by the static lowering and be validated against the
+combiner semantics. This is a design direction, not a patch: the helper
+macros, sysval remapping/usage accounting, dynamic-state dirty enum, indirect
+draw behavior, and all CSF draw paths still need a complete audit.
+
+A particularly important correctness constraint is that sample shading forces
+hardware VRS back to 1x1 in the CSF draw emitter. The shader-side effective
+rate must use the same rule, not merely copy `dyns->fsr.fragment_size`.
+Likewise, unsupported or non-pipeline combiner sources must remain fail-closed.
