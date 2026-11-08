@@ -11,8 +11,10 @@ on:
       - tools/run-vrs-keep-check.cmd
       - tools/run-vrs-replace-check.cmd
       - tools/run-vrs-dynamic-check.cmd
+      - tools/run-vrs-dynamic-isolation.cmd
       - tools/vrs_probe.vert
       - tools/vrs_probe.frag
+      - tools/vrs_probe_constant.frag
       - .github/workflows/build-vrs-render-probe.yml
 
 permissions:
@@ -34,6 +36,7 @@ jobs:
         run: |
           glslangValidator -V --target-env vulkan1.0 tools/vrs_probe.vert -o /tmp/vrs.vert.spv
           glslangValidator -V --target-env vulkan1.0 tools/vrs_probe.frag -o /tmp/vrs.frag.spv
+          glslangValidator -V --target-env vulkan1.0 tools/vrs_probe_constant.frag -o /tmp/vrs.frag.constant.spv
           python3 - <<'PY'
           from pathlib import Path
           def words(path):
@@ -49,6 +52,7 @@ jobs:
           header = "#pragma once\n#include <stdint.h>\n"
           header += emit("vrs_vert_spv", words("/tmp/vrs.vert.spv"))
           header += emit("vrs_frag_spv", words("/tmp/vrs.frag.spv"))
+          header += emit("vrs_frag_constant_spv", words("/tmp/vrs.frag.constant.spv"))
           Path("tools/vrs_probe_spv.h").write_text(header)
           PY
 
@@ -73,4 +77,5 @@ jobs:
             tools/run-vrs-keep-check.cmd
             tools/run-vrs-replace-check.cmd
             tools/run-vrs-dynamic-check.cmd
+            tools/run-vrs-dynamic-isolation.cmd
           if-no-files-found: error
