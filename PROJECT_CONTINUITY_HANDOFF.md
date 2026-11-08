@@ -6896,3 +6896,20 @@ probe build is available, but it predates the coordinate invocation-count
 assertion and final log formatting fix; do not send that artifact for device
 testing. The latest build is queued. Keep current Android driver installed;
 no user-side action until the latest artifact is built and verified.
+
+
+## 2026-11-08 12:08 UTC — scheduled build monitor refresh
+
+Read the canonical handoff and `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md` before checking the active performance-audit branch and GitHub Actions.
+
+- Active performance-audit branch at the start of this pass: `a8a6e5b904de570dc9984d45b5b0890c7ad98a0d`; latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`. Latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`. The intervening branch changes are documentation-only; no driver or workflow changes were found.
+- Latest Android-only run [42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218), job `127885224447`: SUCCESS; all returned steps completed, pending 0, failed 0.
+- Latest wrapper run [42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167): Release job `127885224388` and Debugoptimized job `127885224836` both SUCCESS; all returned steps completed, pending 0, failed 0. The original monitored runs `41947103034` and `41947103085` are superseded.
+- No failure logs were needed; no builds were triggered.
+- Android-only artifact `13501237590` was downloaded again. Outer SHA-256 `f5e58163b3caf3f9fa5791dedf56ade82fd87d17dcfdb42722cd846e51ed825a` and nested package SHA-256 `14f7b13ab1735daffd31a0723c1f6d949155e5c6570f1980f98291cb54383e86` match the GitHub artifact digest and prior record. ZIP integrity, all three embedded member hashes, metadata JSON, staged ICD JSON, AArch64/API 30 ELF headers, private libdrm dependency, and empty missing-DRM-symbol report were rechecked. Classification remains **static/package validated, not runtime validated**.
+- Wrapper Release artifact `13502135385`: outer SHA-256 `5647fe999a9225123116118eb26ef91f277eef38d4ea2c2a29e98e965d3b0f04`; extracted ELF SHA-256 `edce8b3dd4fea68ffda7e44622d4c778cdaf0a22fc219cc2b4368335060aa80a`.
+- Wrapper Debugoptimized artifact `13502061037`: outer SHA-256 `fcd0b4d2dcba93c67f3c09dedb6cdc4ab843cd7eef45f34813e90916adbd4159`; extracted ELF SHA-256 `eebdc6229236e4c91204bd01148409c2b91c71977d1cf71a44a25181b3617477`. Both are AArch64 Android API 30 ELF files, but each ZIP contains only the raw library; RUNPATH expects `$ORIGIN/../../android_stub`, and libdrm plus X11/XCB dependencies are not bundled. They remain **not standalone-package validated**.
+- Next gate: test only the flat Android-only package through Winlator Mali's separate custom-driver importer; gather runtime logs before claiming device success. Wrapper dependency closure remains unresolved.
+- No source, stock/vendor driver, or live kernel was modified.
+
+The detailed step list, manifest fields, dependency analysis, and artifact validation are recorded in the performance audit. Its monitoring update commit is `24c2e1957d9b4d0a11c07dda2e1d81ded14bcf1e`.
