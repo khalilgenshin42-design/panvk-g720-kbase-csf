@@ -7274,3 +7274,18 @@ The exact Windows probe artifact is `panvk-vrs-probe-win64`, artifact ID `136173
 Device test procedure: run one case from `D:\\panvk-vrs-render-probe-win64>`, then inspect `type panvk_vrs_render_probe.log` in that same directory. The exact cases remain `--case=dynamic-keep` and `--case=dynamic-isolation`. Run each case separately because each invocation overwrites the same log file; copy/rename the first log before running the second if both are to be retained. Do not infer a PASS from a silent CMD prompt; only the log's final result and detailed comparisons count.
 
 No driver source or package changed in this clarification.
+
+
+## 2026-11-08 — dynamic VRS probe argument-independent rebuild
+
+The user's repeated attempts to run `--case=dynamic-keep` continued to produce a log identifying `selected render case: --case=keep`. This is a static KEEP result only; dynamic FSR remains untested on device. To remove dependence on Winlator command-line argument forwarding, the dedicated Windows probe's no-argument default has been changed from `--case=keep` to `--case=dynamic-keep`.
+
+Repository changes on `experiment/g720-dynamic-fsr-sysval`:
+- Source change commit: `8e48bb6e0d6147b726ae8022f83dd41492fe7afb` — `tools/panvk_vrs_render_probe_win.c` now defaults to dynamic KEEP when no argument is supplied. Explicit supported case arguments remain available.
+- CI workflow change commit: `314daa08871f44029d8759402964fdc2fdd2753a` — include the dynamic-FSR branch in the Windows probe workflow push trigger and include the root runner script in the uploaded artifact.
+- One-click runner commit: `1cddda82b7c58549055a822561bd8dbe1b811a2b` — adds root-level `Run-Dynamic-VRS.cmd`; it deletes any old log, runs the executable with no arguments, prints the new log, and pauses.
+- Windows probe workflow run `42485499280` was triggered from workflow commit `314daa08871f44029d8759402964fdc2fdd2753a`; at handoff update time it was still in progress. Do not distribute the new executable until this run succeeds and its artifact is available.
+
+Next step after successful CI: user downloads the newly built `panvk-vrs-render-probe-win64` artifact from run `42485499280`, extracts it, and double-clicks `Run-Dynamic-VRS.cmd`. The expected first log marker is `selected render case: --case=dynamic-keep`; dynamic success additionally requires static-vs-dynamic checksum and invocation comparisons to PASS and final `VRS GPU RENDER PASS`. A static-only log remains insufficient evidence. The known-good static 1x1/2x2 result (4096 vs 1024 fragment invocations, 75% reduction) remains valid and unchanged.
+
+No PanVK driver implementation or Android package was modified by this probe harness fix. The VRS experiment remains isolated from the performance-audit branch; no system/vendor driver replacement is involved.
