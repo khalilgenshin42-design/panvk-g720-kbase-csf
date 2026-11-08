@@ -6806,3 +6806,37 @@ Detailed source audit and full measurements:
 
 No Android driver source was changed, and no new device test is requested
 until the next probe isolates the fragment-coordinate discrepancy.
+
+
+### 2026-11-08 follow-up: compiler path narrowed
+
+A further source trace found a specific likely cause for the dynamic pixel
+signature mismatch:
+
+- `src/panfrost/compiler/pan_nir_lower_sample_position.c` lowers
+  `nir_intrinsic_load_sample_pos_or_center` to constant `(0.5, 0.5)`
+  whenever sample shading is disabled.
+- The PanVK static FSR lowering runs before this pass and substitutes a
+  rate-derived fragment center (for static 2x2, `(1.0, 1.0)`).
+- Dynamic FSR is intentionally not handled by that static pass, so the
+  backend's normal `(0.5, 0.5)` lowering remains, while the CSF draw path
+  still programs the dynamic 2x2 rate.
+
+This explains the measured 1024 invocation count matching static 2x2 while
+the coordinate-derived output checksum differs. It is strongly supported
+by source, but still a leading diagnosis because the probe's pixel signature
+depends on `gl_FragCoord`.
+
+Next probe improvement: add a second fragment shader that increments the
+same SSBO counter but writes constant colour without reading
+`gl_FragCoord`. Compare static and dynamic 2x2 with that shader, then
+compare the existing coordinate-reading shader. If constant-colour output
+matches and coordinate output does not, the issue is isolated to
+sample-centre/fragment-coordinate lowering. Do not hardcode a dynamic 2x2
+center: a correct implementation must track the effective dynamic rate,
+support other advertised rates, and preserve multisample/sample-shading
+semantics.
+
+Detailed audit updated:
+[docs/G720-VRS-IMPLEMENTATION-AUDIT.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-fragment-shading-rate/docs/G720-VRS-IMPLEMENTATION-AUDIT.md)
+(commit `047f8244c39169af40f48001c3d1b1cf7ddc3fb6`).
