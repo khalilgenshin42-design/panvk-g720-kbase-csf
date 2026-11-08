@@ -58,6 +58,9 @@ memory_type(const VkPhysicalDeviceMemoryProperties *props, uint32_t bits,
    PFN_vkDestroyDevice destroy_device = LOAD_D(DestroyDevice); \
    PFN_vkGetDeviceQueue get_device_queue = LOAD_D(GetDeviceQueue); \
    PFN_vkCreateImage create_image = LOAD_D(CreateImage); \
+   PFN_vkCreateSampler create_sampler = LOAD_D(CreateSampler); \
+   PFN_vkDestroySampler destroy_sampler = LOAD_D(DestroySampler); \
+   PFN_vkCmdCopyBufferToImage cmd_copy_buffer_to_image = LOAD_D(CmdCopyBufferToImage); \
    PFN_vkDestroyImage destroy_image = LOAD_D(DestroyImage); \
    PFN_vkGetImageMemoryRequirements get_image_memory_requirements = LOAD_D(GetImageMemoryRequirements); \
    PFN_vkAllocateMemory allocate_memory = LOAD_D(AllocateMemory); \
@@ -554,7 +557,7 @@ main(int argc, char **argv)
 {
    const char *case_name = argc > 1 ? argv[1] : "--case=dynamic-keep";
    enum { CASE_KEEP, CASE_MAX, CASE_MIN, CASE_MUL, CASE_REPLACE,
-          CASE_DYNAMIC_KEEP, CASE_DYNAMIC_ISOLATION, CASE_RATE_MATRIX } probe_case;
+          CASE_DYNAMIC_KEEP, CASE_DYNAMIC_ISOLATION, CASE_RATE_MATRIX, CASE_MIP_LOD } probe_case;
 
    if (!strcmp(case_name, "--case=keep"))
       probe_case = CASE_KEEP;
@@ -572,6 +575,8 @@ main(int argc, char **argv)
       probe_case = CASE_DYNAMIC_ISOLATION;
    else if (!strcmp(case_name, "--case=rate-matrix"))
       probe_case = CASE_RATE_MATRIX;
+   else if (!strcmp(case_name, "--case=mip-lod"))
+      probe_case = CASE_MIP_LOD;
    else {
       fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep|dynamic-isolation|rate-matrix\n", argv[0]);
       return 2;
@@ -798,31 +803,33 @@ main(int argc, char **argv)
       VkQueue queue = VK_NULL_HANDLE;
       get_queue(device, qf, 0, &queue);
 
-      VkDescriptorSetLayoutBinding counter_binding = {
+      VkDescriptorSetLayoutBinding counter_bindings[2] = {{
          .binding = 0,
          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
          .descriptorCount = 1,
          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-      };
+      }, {
+         .binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+         .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+      }};
       VkDescriptorSetLayoutCreateInfo dslci = {
          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-         .bindingCount = 1,
-         .pBindings = &counter_binding,
+         .bindingCount = 2, .pBindings = counter_bindings,
       };
       VkDescriptorSetLayout invocation_layout = VK_NULL_HANDLE;
       result = create_descriptor_set_layout(device, &dslci, NULL, &invocation_layout);
       LOG("vkCreateDescriptorSetLayout(invocation counter)=%d\n", result);
       if (result != VK_SUCCESS) { destroy_dev(device, NULL); continue; }
 
-      VkDescriptorPoolSize pool_size = {
-         .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-         .descriptorCount = 1,
+      VkDescriptorPoolSize pool_sizes[2] = {
+         {.type=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,.descriptorCount=1},
+         {.type=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,.descriptorCount=1},
       };
       VkDescriptorPoolCreateInfo dpci = {
          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
          .maxSets = 1,
-         .poolSizeCount = 1,
-         .pPoolSizes = &pool_size,
+         .poolSizeCount = 2,
+         .pPoolSizes = pool_sizes,
       };
       VkDescriptorPool invocation_pool = VK_NULL_HANDLE;
       result = create_descriptor_pool(device, &dpci, NULL, &invocation_pool);
