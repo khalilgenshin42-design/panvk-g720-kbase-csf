@@ -7678,3 +7678,31 @@ The complete log includes dynamic vkCmdSetFragmentShadingRateKHR cases for 2x1, 
 3. Extend the Windows render probe with targeted semantic tests: a varying texture-coordinate/implicit-LOD test with a mipmapped texture; interpolation gradients across coarse regions; discard/depth side effects; and sample-shading fallback. Keep each test isolated and report per-test pass/fail.
 4. Keep all new tests and source changes on the VRS experiment branch; do not merge into the performance-audit, descriptor-heap, clip/cull, or system-driver branches.
 5. Build the probe in CI and use a device run only after the probe is ready. No further user action is needed until a device runtime result is genuinely required.
+
+## 2026-11-08 — Post-pass VRS capability and shader-lowering audit
+
+After the successful device rate matrix, the current VRS implementation was re-audited on experiment/g720-dynamic-fsr-sysval. No driver source change was made in this audit.
+
+### Feature and rate advertisement
+
+- src/panfrost/vulkan/panvk_vX_physical_device.c exposes VK_KHR_fragment_shading_rate only for PAN_ARCH >= 12 and enables pipelineFragmentShadingRate only. primitiveFragmentShadingRate and attachmentFragmentShadingRate remain false.
+- The queried rate list in src/panfrost/vulkan/panvk_physical_device.c matches the rates validated by the render probe: 4x4, 4x2, 2x4, 2x2, 2x1, 1x2, and 1x1. The 4x4 and 4x2 modes are advertised for 1x MSAA; 2x4 is advertised for 1x/2x; 2x2, 2x1, and 1x2 for 1x/2x/4x; 1x1 for all sample counts.
+- VkPhysicalDeviceFragmentShadingRatePropertiesKHR reports maxFragmentSize={4,4}, maxFragmentSizeAspectRatio=2, maxFragmentShadingRateCoverageSamples=16, and maxFragmentShadingRateRasterizationSamples=4x. Restrictions involving shader depth/stencil writes, sample mask, conservative rasterization, interlock, and custom sample locations remain false.
+- fragmentShadingRateNonTrivialCombinerOps remains false; primitive and attachment FSR remain disabled. The successful KEEP matrix does not justify changing these restrictions.
+
+### Static/dynamic shader-centre lowering
+
+- panvk_vX_shader.c lowers NIR load_sample_pos_or_center for static pipeline FSR to a compile-time center offset derived from the effective rate. The rate is included in the shader cache key, and the pipeline rate is combined against implicit 1x1 primitive/attachment rates for the supported pipeline-only configuration.
+- Dynamic pipeline FSR uses the 32-bit fs.frag_rate member in panvk_shader.h, loaded by lower_dynamic_vrs_frag_center() and populated per draw by cmd_prepare_draw_sysvals() in panvk_vX_cmd_draw.c. The rate encoding matches the hardware field: log2(width) in bits 2..3 and log2(height) in bits 0..1.
+- set_tiler_idvs_flags() marks FSR state dirty and programs PRIMITIVE_FLAGS_2 / IDVS.TILER_FLAGS2. The render matrix proves the tested static/dynamic KEEP path updates this state correctly.
+- The probe's current shader uses floor(gl_FragCoord.xy) to form its output pattern. Its directional pixel-footprint checks therefore also exercise the coarse fragment-coordinate centre path; this is stronger than invocation counts alone, but it does not test interpolated user varyings or texture derivatives/implicit LOD.
+
+### Remaining semantic test gaps
+
+1. Add a mipmapped texture sampled with implicit derivatives while a smooth UV gradient varies across the screen. Compare 1x1 and coarse rates using stable image-region/LOD signatures; avoid treating exact implementation-specific LOD as a fixed universal value.
+2. Add a varying-interpolation test that writes interpolated UV/color values to the target and checks that values are evaluated at the correct coarse-fragment location.
+3. Add isolated discard and depth/stencil side-effect cases, respecting the reported false interaction properties; unsupported combinations should be rejected or skipped rather than silently claimed supported.
+4. Add a sample-shading pipeline control to verify the existing driver fallback forces effective hardware rate 1x1 and matching shader sample centre.
+5. Keep all semantic tests at 1x MSAA initially. Only add sample-count variants that are present in the returned rate list and supported interaction properties.
+
+No additional user action is required yet. Continue with the semantic-probe design and CI build; request a device run only after a complete, deterministic probe artifact is ready.
