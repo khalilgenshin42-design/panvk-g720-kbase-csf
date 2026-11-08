@@ -7418,3 +7418,16 @@ The matrix was then widened to cover the complete set of currently enumerated no
 - Commit `9c7e4688a37cc6b709b320d49a50f8f99a9bd15d`: clarify the runner description to state that it exercises all advertised non-2x2 rates.
 
 Thus the next probe run checks all seven sizes returned by PanVK's current KHR rate enumeration (1x1 and 2x2 are the baseline/control paths; the new matrix covers 2x1, 1x2, 4x2, 2x4, 4x4), static and dynamic KEEP. A rate is not considered validated until both modes pass on the G720.
+
+
+## 2026-11-08 — VRS matrix probe build validation and combiner-spec correction
+
+The first Win64 probe CI attempts failed at link time because the standalone probe used Mesa's `ARRAY_SIZE` macro without including Mesa utility headers. This was a probe-only build issue, not a PanVK driver failure.
+
+- Commit `8eb434070300a2b641f7585b6a8109067acc693c` replaces that dependency with portable `sizeof(array) / sizeof(array[0])`.
+- GitHub Actions run `42507915708` completed successfully and produced artifact `13627523816` (`panvk-vrs-render-probe-win64`). The subsequent usage-string-only correction is commit `8d32632b50644bccd54392106b00fd00d424fbcb`; it does not change probe behavior.
+- The Android-only PanVK build at the timestamp API hard-gate source revision `cabe200fd0c72e1267269b308171d0747a43f24a` also completed successfully in run `42507009169`, producing artifact `13627504804` (`panvk-g720-android-only-experimental-package`). That build contains the timestamp API-boundary guards and the existing VRS implementation. The subsequent tool-only commits do not alter the driver binary.
+
+A Vulkan-spec audit corrected the earlier interpretation of the combiner tests: with both `primitiveFragmentShadingRate=false` and `attachmentFragmentShadingRate=false`, valid API use requires `combinerOps[0]` and `combinerOps[1]` to be KEEP. REPLACE is only valid for the corresponding enabled primitive/attachment input; MIN/MAX/MUL additionally require `fragmentShadingRateNonTrivialCombinerOps=true`. Therefore the probe's non-KEEP paths are correctly skipped for this device feature combination. Do not treat an invalid non-KEEP call/device-lost result as evidence of a Mali hardware defect. The current truthful capability report remains pipeline FSR only, KEEP/KEEP only.
+
+Next user-side validation is now justified: install the experimental PanVK package from run `42507009169` through Winlator's custom driver import (do not replace the Android system driver), then run the new `tools/run-vrs-rate-matrix.cmd` from the Win64 probe artifact. Send the complete `panvk_vrs_render_probe.log`; this is the only required action before deciding whether all advertised rates are genuinely supported.
