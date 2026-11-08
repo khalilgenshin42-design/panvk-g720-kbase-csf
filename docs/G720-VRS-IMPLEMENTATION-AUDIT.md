@@ -180,3 +180,69 @@ working `git-c9d61e10a9` package. The next user action is to run
 `tools/run-vrs-dynamic-check.cmd` from the extracted artifact and return
 only `panvk_vrs_dynamic.log`. The test is deliberately isolated from the
 invalid non-KEEP combiner cases.
+
+
+## 2026-11-08 device result — dynamic FSR render fails pixel signature
+
+The new `--case=dynamic-keep` probe was run on the already-installed
+`git-c9d61e10a9` PanVK package on the Mali-G720 MC7. Static controls remain
+green, and the dynamic draw submits and completes without device loss.
+
+### Exact result
+
+- Static 1x1 KEEP: submit/fence/readback PASS; checksum
+  `0x06d78d985ad50383`; equal-neighbours 0; fragment invocations 4096.
+- Static 2x2 KEEP: submit/fence/readback PASS; checksum
+  `0xcad734dde7920383`; equal-neighbours 4096; pixel signature PASS;
+  fragment invocations 1024.
+- Dynamic 2x2 KEEP: submit/fence/readback PASS; checksum
+  `0x0e61401d4af57b83`; equal-neighbours 4096; pixel signature FAIL
+  against static 2x2; fragment invocations 1024, matching static 2x2.
+- Overall probe: FAIL, solely because the dynamic pixel signature differs.
+
+### Interpretation
+
+The dynamic command is accepted, the draw executes, the GPU fence completes,
+the readback succeeds, and the SSBO counter confirms the same 4x reduction in
+fragment invocations as static 2x2. This demonstrates that the dynamic state
+is affecting the hardware fragment execution rate.
+
+It does **not** demonstrate correct dynamic fragment-centre/interpolation
+semantics. The driver source explains the discrepancy:
+
+- `panvk_get_static_pipeline_vrs_rate()` rejects
+  `MESA_VK_DYNAMIC_FSR`.
+- The static compiler lowering replaces
+  `nir_intrinsic_load_sample_pos_or_center` with the center derived from
+  the statically resolved rate.
+- For dynamic FSR, `panvk_compile_nir()` explicitly leaves the shader on
+  the native sample-centre path, with a source comment that Bifrost/Valhall
+  does not currently implement `nir_load_frag_shading_rate()`.
+
+The most likely explanation is therefore a missing dynamic fragment-centre
+lowering/sysval path: the hardware is executing 2x2 coarse shading, but the
+shader's observable fragment coordinate differs from the static path. This
+is a source-supported diagnosis, but it is not yet a proven root cause; a
+minimal shader isolating `gl_FragCoord`/sample-centre behavior is required
+before changing compiler code.
+
+### Next engineering steps — no new user test yet
+
+1. Inspect NIR's fragment shading-rate and sample-position intrinsics and
+   the Bifrost/Valhall backend's supported sysval lowering. Determine whether
+   the dynamic rate is exposed to the shader as a hardware sysval or must be
+   reconstructed from the dynamic command state.
+2. Add a focused probe with separate output channels for pixel coordinate,
+   `gl_FragCoord.xy`, and invocation ID/counter so the source of the checksum
+   difference is visible rather than inferred from one aggregate checksum.
+3. Compare dynamic and static 2x2 with a shader that does not read
+   `gl_FragCoord`. This separates hardware rate execution from fragment
+   coordinate lowering.
+4. Only then implement dynamic sample-centre handling (if the backend can
+   represent it safely) and rerun static controls plus dynamic KEEP.
+5. Keep primitive/attachment feature bits false and do not advertise full
+   dynamic FSR correctness until both output semantics and relevant CTS
+   coverage pass.
+
+No Android driver source was modified by this test. No package reinstall or
+additional user-side test is requested at this point.
