@@ -6632,3 +6632,76 @@ do not infer capability solely from the G720 product specification. Expose
 the feature only after a complete implementation path is verified.
 
 Device retest required: none at this stage. Continue source audit first.
+
+
+## 2026-11-08 — VRS source audit after the KEEP device pass
+
+Audited the device-tested VRS driver source
+`c9d61e10a9c3489d8193a8fb0767f4b5187d79f3`, the v12 GenXML, and the
+current VRS probe sources. This supersedes the earlier plan to immediately
+investigate non-KEEP hardware combiners: the corrected Vulkan feature gate
+shows that no non-KEEP combiner input is legally enabled in the current build.
+
+### Source findings
+
+- PanVK advertises `VK_KHR_fragment_shading_rate` on v12+ and reports
+  `pipelineFragmentShadingRate=true`, but
+  `primitiveFragmentShadingRate=false` and
+  `attachmentFragmentShadingRate=false`.
+- `fragmentShadingRateNonTrivialCombinerOps=false` remains conservative.
+- The pipeline path packs the draw rate and combiner fields into v12
+  `PRIMITIVE_FLAGS_2`, then writes `IDVS.TILER_FLAGS2`.
+- The v12 GenXML contains `Framebuffer Parameters.VRS Image Rate` and
+  `VRS Image Plane` fields, but the inspected PanVK CSF framebuffer
+  construction and `pan_fb.c` paths do not program a VRS image attachment.
+- No PanVK v12 shader-output path was found that consumes
+  `PrimitiveShadingRateKHR` and emits a per-primitive rate. Keep primitive
+  and attachment feature bits false.
+
+### Important dynamic-state gap
+
+The static pipeline path is the only VRS render path currently proven.
+`panvk_get_static_pipeline_vrs_rate()` rejects dynamic FSR state;
+`panvk_compile_nir()` leaves dynamic state on the native sample-center path,
+while its adjacent comment says the Bifrost/Valhall compiler does not
+implement `nir_load_frag_shading_rate()`. The existing capability probe
+records `vkCmdSetFragmentShadingRateKHR` but does not submit a draw. The
+render probe tests static pipeline FSR and `gl_FragCoord`, not dynamic FSR.
+
+Therefore the 1x1/2x2 static KEEP result remains valid, but dynamic FSR draw
+execution and fragment-center correctness are not yet established. Do not
+claim full extension validation until this is tested and, if necessary,
+implemented.
+
+### Combiner validity correction
+
+Because both primitive and attachment FSR features are false, Vulkan valid
+usage requires combiner slot 0 and slot 1 to be KEEP, respectively. The
+non-trivial-combiner property is also false. The earlier non-KEEP device-loss
+cases were not legal tests under the current feature set and do not prove the
+G720 hardware lacks those operations. The corrected probe's SKIP is expected.
+Do not force-enable the feature bits.
+
+### Next work
+
+1. Extend the Windows render probe with a dynamic-state 2x2 KEEP draw using
+   `VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR` and
+   `vkCmdSetFragmentShadingRateKHR`; use the existing static 1x1/2x2
+   renders as controls. The dynamic case must submit, wait, read back,
+   compare the `gl_FragCoord` pixel signature, and count fragment
+   invocations.
+2. Build and independently inspect the exact-head Windows probe artifact
+   before asking the user to run it. No Android driver reinstall is needed
+   for this probe-only test; retain the known-good `git-c9d61e10a9` package.
+3. Test all advertised pipeline rates at their advertised sample counts
+   before considering the rate list fully runtime-qualified.
+4. Keep primitive and attachment features false until complete shader-output
+   and framebuffer/image paths, format/usage/layout/synchronization behavior,
+   and CTS coverage exist.
+
+No Android driver source, kernel, firmware, or system/vendor driver changed
+in this audit. No new device test is requested until the dynamic render probe
+is built and independently checked.
+
+Detailed VRS source audit:
+[docs/G720-VRS-IMPLEMENTATION-AUDIT.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-fragment-shading-rate/docs/G720-VRS-IMPLEMENTATION-AUDIT.md).
