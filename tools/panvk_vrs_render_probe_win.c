@@ -624,6 +624,9 @@ main(int argc, char **argv)
           VK_VERSION_MAJOR(props.properties.apiVersion),
           VK_VERSION_MINOR(props.properties.apiVersion),
           VK_VERSION_PATCH(props.properties.apiVersion));
+      LOG("timestampComputeAndGraphics=%u timestampPeriod=%.9g ns\n",
+          props.properties.limits.timestampComputeAndGraphics,
+          props.properties.limits.timestampPeriod);
 
       uint32_t ext_count = 0;
       enum_ext(pds[d], NULL, &ext_count, NULL);
@@ -673,10 +676,23 @@ main(int argc, char **argv)
       if (!qprops) continue;
       get_queues(pds[d], &qcount, qprops);
       uint32_t qf = UINT32_MAX;
-      for (uint32_t q = 0; q < qcount; q++)
-         if (qprops[q].queueCount && (qprops[q].queueFlags & VK_QUEUE_GRAPHICS_BIT)) { qf = q; break; }
+      uint32_t timestamp_valid_bits = 0;
+      for (uint32_t q = 0; q < qcount; q++) {
+         if (qprops[q].queueCount && (qprops[q].queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
+            qf = q;
+            timestamp_valid_bits = qprops[q].timestampValidBits;
+            break;
+         }
+      }
       free(qprops);
+      LOG("graphicsQueueFamily=%u timestampValidBits=%u\n", qf, timestamp_valid_bits);
       if (qf == UINT32_MAX) { LOG("FAIL: no graphics queue\n"); continue; }
+      if (!props.properties.limits.timestampComputeAndGraphics ||
+          !props.properties.limits.timestampPeriod || !timestamp_valid_bits)
+         LOG("GPU timestamp queries unavailable; use fence timing only (CPU+GPU elapsed, not GPU-only)\n");
+      else
+         LOG("GPU timestamp queries available; period=%.9g ns, validBits=%u\n",
+             props.properties.limits.timestampPeriod, timestamp_valid_bits);
 
       float priority = 1.0f;
       VkDeviceQueueCreateInfo qci = {
