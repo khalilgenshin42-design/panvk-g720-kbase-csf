@@ -1,5 +1,5 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-08 12:42 UTC
+Last updated: 2026-11-08 18:22 UTC
 
 ## Authoritative current state — 2026-11-08
 
@@ -12,7 +12,7 @@ This section supersedes older "next steps", queued-CI, and "no code changed" sta
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
 - Separate fragment-shading-rate work: `experiment/g720-fragment-shading-rate`, HEAD `157418c71475b9d96170a43f24157a80673d4160`; driver-source commit `715cbc888cc0ccf12917b2aa38aa34f35ac39c3a`. Android package, Android wrapper variants, and the Windows VRS capability probe all pass CI; package and probe artifacts were independently inspected. No device runtime test has been performed.
 
-- Current VRS continuation: `experiment/g720-dynamic-fsr-sysval` at `0804f245e8bf0e4fc7e6c70e6867a375a7bd73aa` passed Android-only run `42480864484` and wrapper run `42480864476`; Android artifact `13617542479` was independently package-audited. A device-side static FSR render probe has now passed on the G720: 1x1 KEEP produced 4096 fragment invocations and static 2x2 KEEP produced 1024 (4:1 reduction), with image signatures/checksums passing. This proves the static pipeline FSR path renders, but does not validate the new dynamic FSR sysval lowering. The exact next device tests are `--case=dynamic-keep` and then `--case=dynamic-isolation`; do not benchmark games until both dynamic correctness paths are validated. Keep this branch/package separate from the heap-threshold performance-audit experiment.
+- Current VRS continuation: `experiment/g720-dynamic-fsr-sysval` is now at `3cfbf43c3db1d666392d76b494443eddd288175c`. The original static/dynamic 2x2 render probe passed, but the expanded rate matrix exposed that 4x2 and 2x4 produced only 1024 invocations (2x2-equivalent) instead of 512. Source audit found the v12+ `DCD_FLAGS_0.Disable VRS Clamp 2x2` bit (bit 12) was left clear. Candidate fix commit `3b9e6a7d0f83abf929162ebef62cc96b3dc656f0` sets this bit; `3cfbf43` is formatting-only. The fix is not yet runtime validated. Exact-shape Winlator render probe artifact `13628887002` (run `42509380933`, source `84b6c3d`) is ready. Android-only candidate builds are running: `42509483552` (commit `3b9e6a7`) and `42509540015` (branch tip `3cfbf43`); wrapper runs `42509483581` and `42509540011` are also running. A separate diagnostic-only Android package from run `42509014534` succeeded as artifact `13627869712`, but predates the DCD clamp fix and must not be used for the next rate-matrix test. The next device test is the full `tools/run-vrs-rate-matrix.cmd` with the candidate-fix package; keep VRS separate from the heap-threshold performance-audit experiment.
 - These branches are parallel experiments. Do not merge or substitute their packages for one another without an explicit compatibility review.
 
 ### Current implementation state
