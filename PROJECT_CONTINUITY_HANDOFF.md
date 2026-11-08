@@ -6840,3 +6840,22 @@ semantics.
 Detailed audit updated:
 [docs/G720-VRS-IMPLEMENTATION-AUDIT.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-fragment-shading-rate/docs/G720-VRS-IMPLEMENTATION-AUDIT.md)
 (commit `047f8244c39169af40f48001c3d1b1cf7ddc3fb6`).
+
+
+## 2026-11-08 — dynamic FSR isolation probe engineering
+
+The device's dynamic 2x2 KEEP run completed submit/fence/readback and matched
+the static fragment invocation count (1024), but the `gl_FragCoord`-derived
+pixel checksum differed from static 2x2. The leading source-level hypothesis
+is a fragment-centre lowering mismatch: static FSR resolves the 2x2 centre,
+while dynamic FSR bypasses the static NIR rewrite. This is not yet proven.
+
+A constant-colour fragment shader (same SSBO atomic counter, no
+`gl_FragCoord`) and a new `--case=dynamic-isolation` runner now compare static
+versus dynamic 2x2 hashes and invocation counts. A pass for constant-colour
+output/counts alongside the existing coordinate mismatch would isolate the
+problem to sample-centre/coordinate semantics. A failure in the constant
+colour case would instead point to a broader dynamic state issue. Do not patch
+the compiler or change the Android driver until this discriminating result is
+available. User testing waits until the Windows probe artifact builds and is
+verified.
