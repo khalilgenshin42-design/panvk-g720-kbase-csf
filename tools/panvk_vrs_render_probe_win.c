@@ -97,7 +97,8 @@ memory_type(const VkPhysicalDeviceMemoryProperties *props, uint32_t bits,
    PFN_vkCreateFence create_fence = LOAD_D(CreateFence); \
    PFN_vkDestroyFence destroy_fence = LOAD_D(DestroyFence); \
    PFN_vkWaitForFences wait_for_fences = LOAD_D(WaitForFences); \
-   PFN_vkDeviceWaitIdle device_wait_idle = LOAD_D(DeviceWaitIdle)
+   PFN_vkDeviceWaitIdle device_wait_idle = LOAD_D(DeviceWaitIdle); \
+   PFN_vkCmdSetFragmentShadingRateKHR cmd_set_fragment_shading_rate = LOAD_D(CmdSetFragmentShadingRateKHR)
 
 static int
 render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
@@ -106,7 +107,8 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
             VkRenderPass render_pass, VkPipelineLayout layout, VkShaderModule vs, VkShaderModule fs,
             VkFragmentShadingRateCombinerOpKHR op0,
             VkFragmentShadingRateCombinerOpKHR op1,
-            VkExtent2D rate, VkDescriptorSet invocation_set,
+            VkExtent2D rate, bool dynamic_rate,
+            VkDescriptorSet invocation_set,
             VkBuffer invocation_buffer, VkDeviceMemory invocation_mem,
             uint32_t *invocations, uint8_t *pixels)
 {
@@ -120,7 +122,8 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
        !begin_command_buffer || !end_command_buffer || !cmd_begin_render_pass ||
        !cmd_end_render_pass || !cmd_bind_pipeline || !cmd_bind_descriptor_sets || !cmd_draw ||
        !cmd_copy_image_to_buffer || !cmd_pipeline_barrier || !queue_submit ||
-       !create_fence || !wait_for_fences)
+       !create_fence || !wait_for_fences ||
+       (dynamic_rate && !cmd_set_fragment_shading_rate))
       return 0;
 
    VkImage image = VK_NULL_HANDLE;
@@ -289,9 +292,17 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .fragmentSize = rate,
       .combinerOps = {op0, op1},
    };
+   const VkDynamicState dynamic_states[] = {
+      VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR,
+   };
+   VkPipelineDynamicStateCreateInfo dynamic_state = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = ARRAY_SIZE(dynamic_states),
+      .pDynamicStates = dynamic_states,
+   };
    VkGraphicsPipelineCreateInfo pipeline_info = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .pNext = &fsr,
+      .pNext = dynamic_rate ? NULL : &fsr,
       .stageCount = 2, .pStages = stages,
       .pVertexInputState = &vertex_input,
       .pInputAssemblyState = &assembly,
@@ -299,6 +310,7 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
       .pRasterizationState = &raster,
       .pMultisampleState = &ms,
       .pColorBlendState = &blend,
+      .pDynamicState = dynamic_rate ? &dynamic_state : NULL,
       .layout = layout,
       .renderPass = render_pass,
       .subpass = 0,
@@ -359,6 +371,12 @@ render_rate(VkDevice device, VkPhysicalDeviceMemoryProperties *mem_props,
    cmd_bind_pipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
    cmd_bind_descriptor_sets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, layout,
                             0, 1, &invocation_set, 0, NULL);
+   if (dynamic_rate) {
+      const VkFragmentShadingRateCombinerOpKHR combiners[2] = {op0, op1};
+      cmd_set_fragment_shading_rate(cb, &rate, combiners);
+      LOG("    stage: vkCmdSetFragmentShadingRateKHR rate=%ux%u ops=%u,%u recorded\n",
+          rate.width, rate.height, (unsigned)op0, (unsigned)op1);
+   }
    cmd_draw(cb, 3, 1, 0, 0);
    cmd_end_render_pass(cb);
 
@@ -502,7 +520,8 @@ int
 main(int argc, char **argv)
 {
    const char *case_name = argc > 1 ? argv[1] : "--case=keep";
-   enum { CASE_KEEP, CASE_MAX, CASE_MIN, CASE_MUL, CASE_REPLACE } probe_case;
+   enum { CASE_KEEP, CASE_MAX, CASE_MIN, CASE_MUL, CASE_REPLACE,
+          CASE_DYNAMIC_KEEP } probe_case;
 
    if (!strcmp(case_name, "--case=keep"))
       probe_case = CASE_KEEP;
@@ -514,13 +533,15 @@ main(int argc, char **argv)
       probe_case = CASE_MUL;
    else if (!strcmp(case_name, "--case=replace"))
       probe_case = CASE_REPLACE;
+   else if (!strcmp(case_name, "--case=dynamic-keep"))
+      probe_case = CASE_DYNAMIC_KEEP;
    else {
-      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace\n", argv[0]);
+      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep\n", argv[0]);
       return 2;
    }
    log_file = fopen("panvk_vrs_render_probe.log", "w");
    if (!log_file) return 2;
-   LOG("PanVK VRS render probe: 1x1 control vs 2x2 pipeline rate\n");
+   LOG("PanVK VRS render probe: static and dynamic pipeline-rate cases\n");
    LOG("Vulkan FSR enum ABI: KEEP=%u REPLACE=%u MIN=%u MAX=%u MUL=%u\\n",
        (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
        (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR,
@@ -911,7 +932,7 @@ main(int argc, char **argv)
          uint32_t invocations_1x1 = 0, invocations_2x2 = 0, invocations_target = 0;
          int control_ok = render_rate(device, &mem_props, gdpa, queue, qf,
                                       format, rp, pl, vs, fs, keep, keep,
-                                      (VkExtent2D){1,1}, invocation_set,
+                                      (VkExtent2D){1,1}, false, invocation_set,
                                       invocation_buffer, invocation_mem,
                                       &invocations_1x1, image_1x1);
          LOG("1x1 KEEP control submit/fence/readback=%s\n",
@@ -924,7 +945,7 @@ main(int argc, char **argv)
 
          int vrs_ok = control_ok &&
             render_rate(device, &mem_props, gdpa, queue, qf, format, rp, pl,
-                        vs, fs, keep, keep, (VkExtent2D){2,2}, invocation_set,
+                        vs, fs, keep, keep, (VkExtent2D){2,2}, false, invocation_set,
                         invocation_buffer, invocation_mem, &invocations_2x2,
                         image_2x2);
          LOG("2x2 KEEP submit/fence/readback=%s\n",
@@ -953,6 +974,32 @@ main(int argc, char **argv)
 
           if (probe_case == CASE_KEEP) {
              passed = basic && invocation_reduction;
+          } else if (probe_case == CASE_DYNAMIC_KEEP) {
+             LOG("starting dynamic-state 2x2 KEEP render case\n");
+             int dynamic_ok = render_rate(device, &mem_props, gdpa, queue, qf,
+                                          format, rp, pl, vs, fs, keep, keep,
+                                          (VkExtent2D){2,2}, true, invocation_set,
+                                          invocation_buffer, invocation_mem,
+                                          &invocations_target, image_target);
+             LOG("2x2 dynamic KEEP submit/fence/readback=%s\n",
+                 dynamic_ok ? "PASS" : "FAIL");
+             if (dynamic_ok) {
+                uint64_t dynamic_hash = checksum(image_target);
+                uint32_t dynamic_equal = equal_neighbors(image_target);
+                int dynamic_pixels_match = dynamic_hash == hash_2x2;
+                int dynamic_invocations_match =
+                   invocations_target == invocations_2x2;
+                LOG("2x2 dynamic KEEP checksum=0x%016llx equal-neighbors=%u\n",
+                    (unsigned long long)dynamic_hash, dynamic_equal);
+                LOG("2x2 dynamic KEEP pixel-signature=%s\n",
+                    dynamic_pixels_match ? "PASS" : "FAIL");
+                LOG("2x2 dynamic KEEP fragment-invocations=%u static=%u comparison=%s\n",
+                    invocations_target, invocations_2x2,
+                    dynamic_invocations_match ? "PASS" : "FAIL");
+                passed = basic && invocation_reduction && dynamic_pixels_match &&
+                         dynamic_invocations_match &&
+                         dynamic_equal > equal_1x1 + W * H / 2;
+             }
           } else if (!fsr_features.primitiveFragmentShadingRate &&
                      !fsr_features.attachmentFragmentShadingRate) {
              LOG("SKIP: neither primitive nor attachment fragment shading rate is supported; no legal non-KEEP combiner input exists\n");
@@ -1003,7 +1050,7 @@ main(int argc, char **argv)
                  (unsigned)op0, (unsigned)op1, op_slot);
              int target_ok = render_rate(device, &mem_props, gdpa, queue, qf,
                                          format, rp, pl, vs, fs, op0, op1,
-                                         (VkExtent2D){2,2}, invocation_set,
+                                         (VkExtent2D){2,2}, false, invocation_set,
                                          invocation_buffer, invocation_mem,
                                          &invocations_target, image_target);
              LOG("%s submit/fence/readback=%s\n",
