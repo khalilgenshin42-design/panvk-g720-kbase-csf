@@ -6859,3 +6859,24 @@ colour case would instead point to a broader dynamic state issue. Do not patch
 the compiler or change the Android driver until this discriminating result is
 available. User testing waits until the Windows probe artifact builds and is
 verified.
+
+
+### Probe build correction / current CI state (2026-11-08)
+
+The first compile attempt exposed two harness errors: the constant shader's
+SPIR-V array was not yet embedded by the workflow revision used for that run,
+and the coordinate-render result was referenced outside its local scope.
+The workflow now compiles and embeds `vrs_probe_constant.frag`, and the
+isolation case explicitly re-renders the coordinate shader dynamically in
+its own scope. Log newline formatting was also corrected.
+
+Fix commits on `experiment/g720-fragment-shading-rate`:
+- `d32ac72d15a659c80d40a72865696b64be4ed9de` — scope dynamic coordinate comparison.
+- `68e1817825671ded7cf4b4d79cc8f9004ad59207` — clean isolation log formatting.
+
+The first failed Actions run was `42478566443` (compile failure, not device
+failure). A new build for the corrected source is queued as run
+`42478657493`; another earlier queued run is `42478639094`. Do not distribute
+or run an artifact until a corrected build succeeds and its ZIP contents and
+hashes have been checked. No Android driver update or device-side action is
+needed yet.
