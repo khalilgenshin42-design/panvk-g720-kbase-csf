@@ -48,7 +48,9 @@ panvk_per_arch(get_physical_device_extensions)(
       .KHR_bind_memory2 = true,
       .KHR_buffer_device_address = true,
       .KHR_calibrated_timestamps =
-         device->kmod.dev->props.gpu_can_query_timestamp,
+         (device->kmod.dev->props.gpu_can_query_timestamp &&
+          device->kmod.dev->props.timestamp_frequency != 0 &&
+          !device->kbase_node_path[0]),
       .KHR_compute_shader_derivatives = PAN_ARCH >= 9,
       .KHR_copy_commands2 = true,
       .KHR_copy_memory_indirect = PAN_ARCH >= 10,
@@ -98,7 +100,9 @@ panvk_per_arch(get_physical_device_extensions)(
       .KHR_sampler_mirror_clamp_to_edge = true,
       .KHR_sampler_ycbcr_conversion = true,
       .KHR_separate_depth_stencil_layouts = true,
-      .KHR_shader_clock = device->kmod.dev->props.gpu_can_query_timestamp,
+      .KHR_shader_clock = (device->kmod.dev->props.gpu_can_query_timestamp &&
+          device->kmod.dev->props.timestamp_frequency != 0 &&
+          !device->kbase_node_path[0]),
       .KHR_shader_draw_parameters = true,
       .KHR_shader_expect_assume = true,
       .KHR_shader_float_controls = true,
@@ -141,7 +145,9 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_border_color_swizzle = true,
       .EXT_buffer_device_address = true,
       .EXT_calibrated_timestamps =
-         device->kmod.dev->props.gpu_can_query_timestamp,
+         (device->kmod.dev->props.gpu_can_query_timestamp &&
+          device->kmod.dev->props.timestamp_frequency != 0 &&
+          !device->kbase_node_path[0]),
       .EXT_conditional_rendering = PAN_ARCH >= 10,
       .EXT_color_write_enable = true,
       .EXT_conservative_rasterization = PAN_ARCH >= 11,
@@ -193,7 +199,9 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_pipeline_robustness = true,
 #ifdef PANVK_USE_WSI_PLATFORM
 	  .EXT_present_timing =
-         device->kmod.dev->props.gpu_can_query_timestamp,
+         (device->kmod.dev->props.gpu_can_query_timestamp &&
+          device->kmod.dev->props.timestamp_frequency != 0 &&
+          !device->kbase_node_path[0]),
 #endif
       .EXT_private_data = true,
       .EXT_primitive_topology_list_restart = true,
@@ -645,8 +653,12 @@ panvk_per_arch(get_physical_device_features)(
       .shaderTileImageStencilReadAccess = PAN_ARCH >= 9,
 
       /* VK_KHR_shader_clock */
-      .shaderSubgroupClock = device->kmod.dev->props.gpu_can_query_timestamp,
-      .shaderDeviceClock = device->kmod.dev->props.timestamp_device_coherent,
+      .shaderSubgroupClock = (device->kmod.dev->props.gpu_can_query_timestamp &&
+          device->kmod.dev->props.timestamp_frequency != 0 &&
+          !device->kbase_node_path[0]),
+      .shaderDeviceClock = (device->kmod.dev->props.gpu_can_query_timestamp &&
+          device->kmod.dev->props.timestamp_frequency != 0 &&
+          !device->kbase_node_path[0]),
 
       /* VK_KHR_shader_quad_control */
       .shaderQuadControl = true,
@@ -1009,7 +1021,9 @@ panvk_per_arch(get_physical_device_properties)(
       .storageImageSampleCounts = VK_SAMPLE_COUNT_1_BIT,
       .maxSampleMaskWords = 1,
       .timestampComputeAndGraphics =
-         PAN_ARCH >= 10 && device->kmod.dev->props.gpu_can_query_timestamp,
+         PAN_ARCH >= 10 && (device->kmod.dev->props.gpu_can_query_timestamp &&
+          device->kmod.dev->props.timestamp_frequency != 0 &&
+          !device->kbase_node_path[0]),
       .timestampPeriod =
          PAN_ARCH >= 10 ? panvk_get_gpu_system_timestamp_period(device) : 0,
       .maxClipDistances = 0,
