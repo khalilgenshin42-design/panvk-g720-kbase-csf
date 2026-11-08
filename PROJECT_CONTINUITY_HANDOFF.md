@@ -7522,3 +7522,22 @@ Next steps:
 - The probe now emits separate horizontal and vertical equal-neighbor counts for each static matrix rate.
 - PanVK reports `pipelineStatisticsQuery=false`, so the probe cannot use `VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT` as a second hardware-side invocation measurement. Retain the SSBO atomic counter and directional pixel signature as two distinct observations.
 - Android-only diagnostic package run `42509014534` was still building at the time of this update. It is the preferred package for the next test because it includes the targeted CSF packed-state log from commit `6ff24e6`. The Winlator probe artifact above is already ready, but wait for the Android package before asking the user to test.
+
+
+### Directional pixel footprint is now checked against exact expected geometry
+
+Probe commit `84b6c3d745a4865595893da312f4ca20f627ee14` extends the previous axis logging:
+
+- The probe computes expected horizontal and vertical equal-neighbor counts from the requested fragment dimensions and 64x64 render target.
+- It reports actual/expected horizontal and vertical counts plus a `shape=PASS/FAIL` result.
+- The rate-matrix pass condition now requires the exact directional pixel footprint in addition to the SSBO invocation count and static/dynamic equivalence.
+- Expected signatures for the current 64x64 target are:
+  - 2x1: H=2048, V=0
+  - 1x2: H=0, V=2048
+  - 4x2: H=3072, V=2048
+  - 2x4: H=2048, V=3072
+  - 4x4: H=3072, V=3072
+  - 2x2 control: H=2048, V=2048
+- This provides a more discriminating readout than the previous aggregate equal-neighbor total. If larger requested rates still produce H=2048/V=2048, their rendered footprint is 2x2-like even if the CSF register encoding is correct.
+
+The previous probe build `42509283686` / artifact `13629050724` corresponds to commit `13824a9` and does not include the exact shape assertion. The new commit `84b6c3d` triggers a fresh probe build; do not ask the user to run the older artifact for the final directional test.
