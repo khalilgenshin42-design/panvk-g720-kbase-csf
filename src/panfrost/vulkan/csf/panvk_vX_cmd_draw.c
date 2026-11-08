@@ -2920,6 +2920,16 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
                                     cmdbuf->state.gfx.cb.info.needs_shader) &&
                                    (dyns->ms.rasterization_samples > 1);
 
+#if PAN_ARCH >= 12
+      /*
+       * v12+ clamps pipeline VRS to 2x2 unless this DCD bit is set.
+       * PanVK advertises larger pipeline rates, so disable the hardware
+       * clamp. Sample shading still forces an effective 1x1 rate in
+       * set_tiler_idvs_flags().
+       */
+      cfg.disable_vrs_clamp_2x2 = true;
+#endif
+
          cfg.shader_modifies_coverage = shader_modifies_coverage;
       } else {
          cfg.allow_forward_pixel_to_kill = true;
@@ -2981,6 +2991,17 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
 #endif
 #endif
    }
+
+#if PAN_ARCH >= 12
+   if (dyns->fsr.fragment_size.width > 2 ||
+       dyns->fsr.fragment_size.height > 2) {
+      mesa_logi("PANVK_VRS_DIAG DCD_FLAGS_0 disable_vrs_clamp_2x2=%u packed=0x%08x requested=%ux%u",
+                (out->flags_0.opaque[0] >> 12) & 1,
+                out->flags_0.opaque[0],
+                dyns->fsr.fragment_size.width,
+                dyns->fsr.fragment_size.height);
+   }
+#endif
 
    pan_pack(&out->flags_1, DCD_FLAGS_1, cfg) {
       cfg.sample_mask = dyns->ms.sample_mask;
