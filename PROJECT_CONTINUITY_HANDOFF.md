@@ -6742,3 +6742,67 @@ do not run the older REPLACE/MIN/MAX/MUL cases.
 
 Detailed audit:
 [docs/G720-VRS-IMPLEMENTATION-AUDIT.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-fragment-shading-rate/docs/G720-VRS-IMPLEMENTATION-AUDIT.md).
+
+
+## 2026-11-08 — dynamic pipeline FSR device test result
+
+The user ran `tools/run-vrs-dynamic-check.cmd` using the existing Android
+PanVK package `git-c9d61e10a9`. The dynamic probe completed all Vulkan
+operations without device loss, but the final render validation failed.
+
+### Exact device measurements
+
+| Case | Submit/fence/readback | Checksum | Equal neighbours | Fragment invocations |
+|---|---|---|---:|---:|
+| Static 1x1 KEEP | PASS | `0x06d78d985ad50383` | 0 | 4096 |
+| Static 2x2 KEEP | PASS | `0xcad734dde7920383` | 4096 | 1024 |
+| Dynamic 2x2 KEEP | PASS | `0x0e61401d4af57b83` | 4096 | 1024 |
+
+Static 2x2 pixel signature PASS. Dynamic 2x2 pixel signature FAIL against
+static 2x2. Dynamic invocation count equals static 2x2 (1024), proving that
+the dynamic command produces coarse 2x2 fragment execution, but not that
+fragment-coordinate/sample-centre semantics are correct. Overall probe
+result: `VRS GPU RENDER FAIL` because of the dynamic pixel-signature
+mismatch, not because of submit, fence, or readback failure.
+
+### Source-level likely cause
+
+Rechecked `panvk_vX_shader.c` and the CSF draw path at the device-tested
+source checkpoint:
+
+- `panvk_get_static_pipeline_vrs_rate()` rejects
+  `MESA_VK_DYNAMIC_FSR`.
+- Static FSR lowering replaces
+  `nir_intrinsic_load_sample_pos_or_center` using the statically resolved
+  fragment size.
+- `panvk_compile_nir()` explicitly leaves dynamic FSR on the native
+  sample-centre path; the source comment says Bifrost/Valhall does not
+  currently implement `nir_load_frag_shading_rate()`.
+- The CSF draw path does write dynamic fragment size/combiner state into
+  `IDVS.TILER_FLAGS2`, consistent with the measured 1024 invocations.
+
+The leading hypothesis is a missing dynamic fragment-centre/sysval lowering:
+hardware coarse shading works, while observable fragment coordinates differ
+from static 2x2. This is not yet proven as the root cause; do not patch
+compiler behavior until a focused probe isolates it.
+
+### Next engineering work
+
+1. Audit NIR fragment-rate/sample-position intrinsics and Bifrost/Valhall
+   sysval lowering to establish whether dynamic rate can be read in shader
+   code or reconstructed from command state.
+2. Extend the probe to isolate `gl_FragCoord.xy` and invocation identity,
+   and add a dynamic-vs-static shader that does not read `gl_FragCoord`.
+   This will separate coarse shading behavior from fragment-coordinate
+   lowering.
+3. Only then implement a correct dynamic sample-centre path if the backend
+   can support it. Rerun static 1x1/2x2 controls and dynamic 2x2.
+4. Keep primitive and attachment FSR features false. Do not claim complete
+   dynamic FSR support until pixel semantics and relevant CTS coverage pass.
+
+Detailed source audit and full measurements:
+[docs/G720-VRS-IMPLEMENTATION-AUDIT.md](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/blob/experiment/g720-fragment-shading-rate/docs/G720-VRS-IMPLEMENTATION-AUDIT.md)
+(updated in commit `40a93afad85ba0cf5d710a490ef94882baf2e8a4`).
+
+No Android driver source was changed, and no new device test is requested
+until the next probe isolates the fragment-coordinate discrepancy.
