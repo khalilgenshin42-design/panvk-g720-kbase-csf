@@ -7099,3 +7099,12 @@ Next steps:
 5. Only after the above passes, compare performance and stability in Winlator. Keep the existing known-good PanVK package available for rollback.
 
 No system/vendor driver, kernel, firmware, or installed Android package was modified. Primitive and attachment FSR remain disabled/unexposed. No new device-side action is requested yet.
+
+
+## 2026-11-08 — Android-only build allowlist corrected for dynamic FSR branch
+
+Correction to the preceding status note: .github/workflows/android-only-experiment.yml is not workflow_dispatch-only. It supports workflow_dispatch and push, but push is restricted to an explicit branch allowlist. The newly created experiment/g720-dynamic-fsr-sysval branch was initially absent from that allowlist, so its earlier source and audit-document commits did not trigger the Android-only build.
+
+The allowlist now includes experiment/g720-dynamic-fsr-sysval. Workflow change commit: 927a24b620a496a61c2aab510995aae995dcbdc9. This push is intended to launch the Android-only PanVK build against the experimental branch head, including the sysval changes. The connected GitHub status endpoint currently returns no check records for that commit, so the run has not yet been independently confirmed as queued or completed. Do not claim build success until the Actions run and artifact are inspected.
+
+The source implementation remains experimental and unvalidated. No user device action is requested while the Android build is pending. The known-good experiment/g720-fragment-shading-rate branch and installed Android package remain unchanged.
