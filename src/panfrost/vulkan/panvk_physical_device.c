@@ -1507,7 +1507,9 @@ panvk_GetPhysicalDeviceQueueFamilyProperties2(
          .queueCount = arch >= 10 ? 2 : 1,
          .timestampValidBits =
             arch >= 10 &&
-                  physical_device->kmod.dev->props.gpu_can_query_timestamp
+                  physical_device->kmod.dev->props.gpu_can_query_timestamp &&
+                  physical_device->kmod.dev->props.timestamp_frequency != 0 &&
+                  !physical_device->kbase_node_path[0]
                ? 64
                : 0,
          .minImageTransferGranularity = {1, 1, 1},
