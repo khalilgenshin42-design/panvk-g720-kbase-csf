@@ -7397,3 +7397,17 @@ The prior Kbase initialization fix (`props->gpu_can_query_timestamp = false`) is
 Expected Vulkan result for the Kbase G720 build after this source revision: `timestampComputeAndGraphics=0`, `timestampPeriod=0 ns`, graphics `timestampValidBits=0`, and calibrated-timestamp/shader-clock extensions not exposed. This is an API capability consistency fix, not a claim that hardware timestamps are unusable in all possible Kbase implementations. No timestamp frequency is guessed. VRS code and its verified static/dynamic KEEP behavior are unchanged.
 
 Next action: wait for the Android-only workflow on commit `cabe200fd0c72e1267269b308171d0747a43f24a` to compile. Then install that experimental PanVK package in Winlator (never replace the Android system/vendor Vulkan driver) and rerun the existing properties/VRS probe. If the values remain true after this API-boundary hard gate is compiled and loaded, instrument the Vulkan property population path at runtime; do not ask the user to repeat generic package checks. Preserve the current VRS PASS and continue separate VRS combiner/workload tests after timestamp consistency is fixed.
+
+
+## 2026-11-08 — Expand real-GPU VRS coverage beyond the verified 2x2 case
+
+The next VRS step is now implemented in the Winlator probe source on `experiment/g720-dynamic-fsr-sysval`:
+
+- Commit `c07f68f8e85ffbcfa5b648d832c2fe5cdfb9bf44`: add `--case=rate-matrix` to `tools/panvk_vrs_render_probe_win.c`. It exercises the advertised pipeline-only rates `2x1`, `1x2`, and `4x4`, in both static pipeline state and dynamic `vkCmdSetFragmentShadingRateKHR` state.
+- For each rate, the probe checks a changed pixel signature against the 1x1 control, repeated-neighbor structure, expected fragment invocation count (area-scaled), and exact static-vs-dynamic pixel/invocation equivalence. The existing 2x2 control and dynamic KEEP path remain prerequisites.
+- Commit `ebe68c68a96f92ac3229c9535bf24cb97651c6a6`: add `tools/run-vrs-rate-matrix.cmd` for a one-command Winlator run.
+- Commit `45a8b2b57457a7eb77c2cda95ad736e7bdabcbdf`: include the new runner in the VRS probe build workflow trigger paths and uploaded artifact.
+
+The rate set matches the current PanVK KHR rate enumeration: 2x1, 1x2 and 4x4 are advertised at 1x MSAA; the probe uses 1x MSAA. This is a test expansion, not a claim those three rates have passed. Existing verified status remains static 2x2 KEEP and dynamic 2x2 KEEP only. No combiner other than KEEP/KEEP is enabled or claimed. The next step is to obtain the rebuilt Win64 probe artifact, run `tools/run-vrs-rate-matrix.cmd` in Winlator with the experimental PanVK driver selected, and review the resulting log before changing advertised rate properties or recommending VRS for DXVK games.
+
+Source review also confirmed that the current dynamic fragment-rate sysval is populated once per draw and decoded in the fragment shader; the new matrix specifically checks that each dynamic rate produces the same output and invocation count as its static equivalent. This remains a targeted correctness probe, not a derivative/implicit-LOD compatibility proof for arbitrary game shaders.
