@@ -7774,3 +7774,16 @@ The user ran the derivative-extended Windows probe on the target Winlator Mali-G
 - Next implementation task: wire the image upload and combined-image-sampler descriptor into a separate `--case=mip-lod` mode; keep the existing rate-matrix mode unchanged and re-run its CI build before asking for device testing.
 
 - CI validation: workflow run `42516484489` completed successfully (all seven build/upload steps passed). Artifact `panvk-vrs-render-probe-win64`, ID `13631093217`, SHA-256 `fe9d35658ac7bd1ab1356d7ce71cc51181a6949d3de2d371cf080fadf6c0fdd8`. This confirms GLSL compilation and header generation; it does **not** yet mean the mip shader is invoked by the executable or that the GPU mip test exists.
+
+
+## 2026-11-08 — Implicit mip-LOD probe implementation
+
+- Added the isolated `--case=mip-lod` mode to `tools/panvk_vrs_render_probe_win.c` on `experiment/g720-dynamic-fsr-sysval`.
+- The probe now provisions a 256x256 RGBA8 sampled image with five mip levels; each mip is uploaded as a solid, unique RGBA signature through a host-visible staging buffer. It transitions all levels from UNDEFINED to TRANSFER_DST_OPTIMAL, copies each mip, then transitions to SHADER_READ_ONLY_OPTIMAL.
+- Added a nearest min/mag + nearest-mipmap sampler and binding 1 combined-image-sampler descriptor. Binding 0 remains the existing fragment invocation SSBO counter. Existing modes do not statically use binding 1.
+- Added static and dynamic KEEP render/readback comparisons at 1x1, 2x1, 1x2, 2x2, 4x2, 2x4 and 4x4. The shader uses implicit GLSL `texture()`, not explicit `textureLod()`. Expected mip levels are 2 for 1x1, 3 for rates with a 2-pixel major dimension, and 4 for rates with a 4-pixel major dimension. The probe checks the centre pixel signature and whole-image equality between static and dynamic cases.
+- RGBA8 optimal-tiling sampled-image and transfer-destination feature support is checked before texture creation. Upload completion is fence-checked. Unsupported format or setup failure is reported rather than silently treating an invalid sample as a mip result.
+- Implementation commits: descriptor layout/pool `ca097e93711a3edb9988e9e10847a35ebf294b1a`; mip texture upload helper `2169c0ec1343aa57ce555e86ed0637787c04409a`; descriptor/shader setup `0573a3771821f8fa8f0d953cab3f6e8a271aa699`; mip static/dynamic matrix `d0b13451291add3df328b372b3fbc091c50d4123`; proc-loader parameter fix `af90c9c44dc3566ec8f0b7107737135aca888703`; image-view handle type fix `907cc8f02dbde4eab27896a911ca2201cf2eae3f`.
+- First Windows compile attempts caught two genuine C issues: helper macro needed the device-proc-address parameter in scope, and the mip view local was mistakenly typed as VkImage. Both were corrected in `af90c9c` and `907cc8f`. The earlier failed CI run on `0573a377` predates these fixes.
+- Latest Windows probe CI run for the corrected source: `42516974283` (commit `907cc8f`); status pending at time of this note. Do not distribute a device-test artifact until the corrected build succeeds and executable verification/upload complete.
+- No PanVK driver source has been changed for this test. The purpose is to determine whether implicit texture LOD tracks the already-validated VRS derivative signatures; no GPU result or driver defect is claimed yet.
