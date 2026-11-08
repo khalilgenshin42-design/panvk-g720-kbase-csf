@@ -1248,6 +1248,40 @@ main(int argc, char **argv)
                          dynamic_invocations_match &&
                          dynamic_equal > equal_1x1 + W * H / 2;
              }
+          } else if (probe_case == CASE_MIP_LOD) {
+             static const VkExtent2D mip_rates[]={{1,1},{2,1},{1,2},{2,2},{4,2},{2,4},{4,4}};
+             static const uint8_t signatures[5][4]={{255,0,0,255},{0,255,0,255},
+                {0,0,255,255},{255,255,0,255},{255,0,255,255}};
+             int mip_matrix_pass=1;
+             for(uint32_t r=0;r<sizeof(mip_rates)/sizeof(mip_rates[0]);r++) {
+                VkExtent2D rate=mip_rates[r];
+                uint32_t major=rate.width>rate.height?rate.width:rate.height;
+                uint32_t expected_level=major==1?2:(major==2?3:4);
+                uint8_t *static_pixels=malloc(IMAGE_BYTES);
+                uint8_t *dynamic_pixels=malloc(IMAGE_BYTES);
+                uint32_t static_invocations=0,dynamic_invocations=0;
+                int static_ok=static_pixels&&render_rate(device,&mem_props,get_device_proc_addr,
+                   queue,qf,format,rp,pl,vs,fs_mip,keep,keep,rate,false,
+                   invocation_set,invocation_buffer,invocation_mem,&static_invocations,static_pixels);
+                int dynamic_ok=static_ok&&dynamic_pixels&&render_rate(device,&mem_props,get_device_proc_addr,
+                   queue,qf,format,rp,pl,vs,fs_mip,keep,keep,rate,true,
+                   invocation_set,invocation_buffer,invocation_mem,&dynamic_invocations,dynamic_pixels);
+                const uint8_t *sc=static_ok?&static_pixels[((H/2)*W+(W/2))*4]:NULL;
+                const uint8_t *dc=dynamic_ok?&dynamic_pixels[((H/2)*W+(W/2))*4]:NULL;
+                int static_match=sc&&!memcmp(sc,signatures[expected_level],4);
+                int dynamic_match=dc&&!memcmp(dc,signatures[expected_level],4);
+                int image_match=static_ok&&dynamic_ok&&!memcmp(static_pixels,dynamic_pixels,IMAGE_BYTES);
+                LOG("implicit mip LOD %ux%u expected-level=%u static=%s dynamic=%s static/dynamic=%s invocations=%u/%u\\n",
+                    rate.width,rate.height,expected_level,static_match?"PASS":"FAIL",
+                    dynamic_match?"PASS":"FAIL",image_match?"MATCH":"MISMATCH",
+                    static_invocations,dynamic_invocations);
+                if(sc)LOG(" static center RGBA=%u,%u,%u,%u\\n",sc[0],sc[1],sc[2],sc[3]);
+                if(dc)LOG(" dynamic center RGBA=%u,%u,%u,%u\\n",dc[0],dc[1],dc[2],dc[3]);
+                mip_matrix_pass &= static_match&&dynamic_match&&image_match;
+                free(static_pixels);free(dynamic_pixels);
+             }
+             LOG("implicit mip LOD matrix: %s\\n",mip_matrix_pass?"PASS":"FAIL");
+             passed=mip_matrix_pass;
           } else if (probe_case == CASE_DYNAMIC_ISOLATION) {
              uint8_t *constant_static = malloc(IMAGE_BYTES);
              uint8_t *constant_dynamic = malloc(IMAGE_BYTES);
@@ -1474,6 +1508,11 @@ main(int argc, char **argv)
       free(image_2x2);
       free(image_target);
       if (fs_constant) destroy_sm(device,fs_constant,NULL);
+      if (fs_mip) destroy_sm(device,fs_mip,NULL);
+      if (mip_sampler) { PFN_vkDestroySampler x=(PFN_vkDestroySampler)get_device_proc_addr(device,"vkDestroySampler"); if(x)x(device,mip_sampler,NULL); }
+      if (mip_view) { PFN_vkDestroyImageView x=(PFN_vkDestroyImageView)get_device_proc_addr(device,"vkDestroyImageView"); if(x)x(device,mip_view,NULL); }
+      if (mip_image) { PFN_vkDestroyImage x=(PFN_vkDestroyImage)get_device_proc_addr(device,"vkDestroyImage"); if(x)x(device,mip_image,NULL); }
+      if (mip_image_mem) { PFN_vkFreeMemory x=(PFN_vkFreeMemory)get_device_proc_addr(device,"vkFreeMemory"); if(x)x(device,mip_image_mem,NULL); }
       destroy_sm(device,vs,NULL);destroy_sm(device,fs,NULL);
       destroy_pl(device,pl,NULL);
       destroy_rp(device,rp,NULL);
