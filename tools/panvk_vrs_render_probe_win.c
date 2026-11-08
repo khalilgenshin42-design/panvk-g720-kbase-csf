@@ -623,7 +623,10 @@ main(int argc, char **argv)
          .pNext = &fsr_features,
       };
       get_features2(pds[d], &features);
-      LOG("pipelineFragmentShadingRate=%u\n", fsr_features.pipelineFragmentShadingRate);
+      LOG("pipelineFragmentShadingRate=%u primitiveFragmentShadingRate=%u attachmentFragmentShadingRate=%u\n",
+          fsr_features.pipelineFragmentShadingRate,
+          fsr_features.primitiveFragmentShadingRate,
+          fsr_features.attachmentFragmentShadingRate);
       LOG("nonTrivialCombinerOps=%u strictMultiplyCombiner=%u\n",
           fsr_props.fragmentShadingRateNonTrivialCombinerOps,
           fsr_props.fragmentShadingRateStrictMultiplyCombiner);
@@ -659,6 +662,8 @@ main(int argc, char **argv)
       VkPhysicalDeviceFragmentShadingRateFeaturesKHR enable_fsr = {
          .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR,
          .pipelineFragmentShadingRate = VK_TRUE,
+         .primitiveFragmentShadingRate = fsr_features.primitiveFragmentShadingRate,
+         .attachmentFragmentShadingRate = fsr_features.attachmentFragmentShadingRate,
       };
       if (!features.features.fragmentStoresAndAtomics) {
          LOG("SKIP: fragmentStoresAndAtomics is not supported; invocation counter unavailable\n");
@@ -946,52 +951,62 @@ main(int argc, char **argv)
              invocation_reduction ? "PASS" : "FAIL",
              invocations_1x1, invocations_2x2);
 
-         if (probe_case == CASE_KEEP) {
-            passed = basic && invocation_reduction;
-         } else if (!fsr_props.fragmentShadingRateNonTrivialCombinerOps &&
+          if (probe_case == CASE_KEEP) {
+             passed = basic && invocation_reduction;
+          } else if (!fsr_features.primitiveFragmentShadingRate &&
+                     !fsr_features.attachmentFragmentShadingRate) {
+             LOG("SKIP: neither primitive nor attachment fragment shading rate is supported; no legal non-KEEP combiner input exists\n");
+             passed = basic && invocation_reduction;
+          } else if (!fsr_props.fragmentShadingRateNonTrivialCombinerOps &&
                      probe_case != CASE_REPLACE) {
-             LOG("SKIP: MIN/MAX/MUL require fragmentShadingRateNonTrivialCombinerOps; KEEP and REPLACE remain supported\n");
+             LOG("SKIP: MIN/MAX/MUL require fragmentShadingRateNonTrivialCombinerOps; KEEP and REPLACE are the only permitted ops\n");
              passed = basic && invocation_reduction;
           } else if (basic) {
-            VkFragmentShadingRateCombinerOpKHR op0 = keep;
-            const char *label = NULL;
-            uint64_t expected_hash = hash_2x2;
-            switch (probe_case) {
-            case CASE_MAX:
-               op0 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR;
-               label = "2x2 MAX/KEEP";
-               expected_hash = hash_2x2;
-               break;
-            case CASE_MIN:
-               op0 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR;
-               label = "2x2 MIN/KEEP";
-               expected_hash = hash_1x1;
-               break;
-            case CASE_MUL:
-               op0 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR;
-               label = "2x2 MUL/KEEP";
-               expected_hash = hash_2x2;
-               break;
-            case CASE_REPLACE:
-               op0 = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
-               label = "2x2 REPLACE/KEEP";
-               expected_hash = hash_1x1;
-               break;
-            default:
-               break;
-            }
+             VkFragmentShadingRateCombinerOpKHR op0 = keep;
+             VkFragmentShadingRateCombinerOpKHR op1 = keep;
+             VkFragmentShadingRateCombinerOpKHR requested_op = keep;
+             const char *label = NULL;
+             uint64_t expected_hash = hash_2x2;
+             unsigned op_slot = fsr_features.primitiveFragmentShadingRate ? 0 : 1;
+             switch (probe_case) {
+             case CASE_MAX:
+                requested_op = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR;
+                label = "2x2 MAX/KEEP";
+                expected_hash = hash_2x2;
+                break;
+             case CASE_MIN:
+                requested_op = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR;
+                label = "2x2 MIN/KEEP";
+                expected_hash = hash_1x1;
+                break;
+             case CASE_MUL:
+                requested_op = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR;
+                label = "2x2 MUL/KEEP";
+                expected_hash = hash_2x2;
+                break;
+             case CASE_REPLACE:
+                requested_op = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
+                label = op_slot == 0 ? "2x2 REPLACE/KEEP (primitive input)" :
+                                       "2x2 KEEP/REPLACE (attachment input)";
+                expected_hash = hash_1x1;
+                break;
+             default:
+                break;
+             }
+             if (op_slot == 0)
+                op0 = requested_op;
+             else
+                op1 = requested_op;
 
-            LOG("starting isolated combiner case: %s\\n", label);
-            LOG("Vulkan FSR requested op0=%u op1=%u (MAX=%u MUL=%u)\\n",
-                (unsigned)op0, (unsigned)keep,
-                (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR,
-                (unsigned)VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR);
-            int target_ok = render_rate(device, &mem_props, gdpa, queue, qf,
-                                        format, rp, pl, vs, fs, op0, keep,
-                                        (VkExtent2D){2,2}, invocation_set,
-                                        invocation_buffer, invocation_mem,
-                                        &invocations_target, image_target);
-            LOG("%s submit/fence/readback=%s\n",
+             LOG("starting isolated combiner case: %s\n", label);
+             LOG("Vulkan FSR requested op0=%u op1=%u slot=%u\n",
+                 (unsigned)op0, (unsigned)op1, op_slot);
+             int target_ok = render_rate(device, &mem_props, gdpa, queue, qf,
+                                         format, rp, pl, vs, fs, op0, op1,
+                                         (VkExtent2D){2,2}, invocation_set,
+                                         invocation_buffer, invocation_mem,
+                                         &invocations_target, image_target);
+LOG("%s submit/fence/readback=%s\n",
                 label, target_ok ? "PASS" : "FAIL");
             if (target_ok) {
                uint64_t target_hash = checksum(image_target);
