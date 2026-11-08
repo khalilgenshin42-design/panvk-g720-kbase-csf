@@ -1098,7 +1098,7 @@ main(int argc, char **argv)
               * count. The 1x1 control is shared with the existing probe.
               */
              static const VkExtent2D matrix_rates[] = {
-                {2, 1}, {1, 2}, {4, 4},
+                {2, 1}, {1, 2}, {4, 2}, {2, 4}, {4, 4},
              };
              int matrix_pass = basic && invocation_reduction;
              for (uint32_t r = 0; r < ARRAY_SIZE(matrix_rates); r++) {
