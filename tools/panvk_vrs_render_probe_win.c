@@ -526,6 +526,29 @@ equal_neighbors(const uint8_t *p)
    return horizontal + vertical;
 }
 
+/*
+ * dFdx/dFdy are derivatives between fragment invocations, not pixels.
+ * For a linear varying spanning [0,1] over the 64x64 target, a WxH
+ * fragment therefore produces derivatives W/64 and H/64. The shader
+ * stores those values scaled by 64/4 into B/A, giving 8-bit signatures
+ * near W*255/4 and H*255/4. A +/-2 UNORM tolerance covers rounding.
+ */
+static int
+derivative_signature_ok(const uint8_t *p, VkExtent2D rate)
+{
+   const uint8_t *pixel = &p[((H / 2) * W + (W / 2)) * 4];
+   const int expected_x = (int)((rate.width * 255u + 2u) / 4u);
+   const int expected_y = (int)((rate.height * 255u + 2u) / 4u);
+   const int actual_x = pixel[2];
+   const int actual_y = pixel[3];
+   const int dx = actual_x - expected_x;
+   const int dy = actual_y - expected_y;
+   LOG("derivative signature rate=%ux%u: dFdx code=%d expected=%d, dFdy code=%d expected=%d result=%s\\n",
+       rate.width, rate.height, actual_x, expected_x, actual_y, expected_y,
+       (abs(dx) <= 2 && abs(dy) <= 2) ? "PASS" : "FAIL");
+   return abs(dx) <= 2 && abs(dy) <= 2;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -992,6 +1015,10 @@ main(int argc, char **argv)
             LOG("2x2 KEEP checksum=0x%016llx equal-neighbors=%u\n",
                 (unsigned long long)hash_2x2, equal_2x2);
          }
+         int derivative_control_ok = control_ok &&
+            derivative_signature_ok(image_1x1, (VkExtent2D){1,1});
+         int derivative_2x2_ok = vrs_ok &&
+            derivative_signature_ok(image_2x2, (VkExtent2D){2,2});
          int basic = control_ok && vrs_ok &&
                      hash_1x1 != hash_2x2 &&
                      equal_2x2 > equal_1x1 + W * H / 2;
@@ -1109,7 +1136,8 @@ main(int argc, char **argv)
              static const VkExtent2D matrix_rates[] = {
                 {2, 1}, {1, 2}, {4, 2}, {2, 4}, {4, 4},
              };
-             int matrix_pass = basic && invocation_reduction;
+             int matrix_pass = basic && invocation_reduction &&
+                               derivative_control_ok && derivative_2x2_ok;
              for (uint32_t r = 0; r < (uint32_t)(sizeof(matrix_rates) / sizeof(matrix_rates[0])); r++) {
                 const VkExtent2D rate = matrix_rates[r];
                 const uint32_t area = rate.width * rate.height;
@@ -1139,6 +1167,8 @@ main(int argc, char **argv)
                    static_vertical == expected_vertical;
                 int static_count_ok = static_ok &&
                    static_invocations == expected_invocations;
+                int static_derivative_ok = static_ok &&
+                   derivative_signature_ok(image_target, rate);
                 LOG("%ux%u static: render=%s checksum=0x%016llx equal-neighbors=%u horizontal=%u/%u vertical=%u/%u shape=%s invocations=%u expected=%u pixels=%s count=%s\\n",
                     rate.width, rate.height, static_ok ? "PASS" : "FAIL",
                     (unsigned long long)static_hash, static_equal,
@@ -1157,16 +1187,23 @@ main(int argc, char **argv)
                 int dynamic_pixels_ok = dynamic_ok && dynamic_hash == static_hash;
                 int dynamic_count_ok = dynamic_ok &&
                    dynamic_invocations == static_invocations;
+                int dynamic_derivative_ok = dynamic_ok &&
+                   derivative_signature_ok(image_2x2, rate);
                 LOG("%ux%u dynamic: render=%s checksum=0x%016llx invocations=%u static=%u pixels=%s count=%s\\n",
                     rate.width, rate.height, dynamic_ok ? "PASS" : "FAIL",
                     (unsigned long long)dynamic_hash, dynamic_invocations,
                     static_invocations,
                     dynamic_pixels_ok ? "PASS" : "FAIL",
                     dynamic_count_ok ? "PASS" : "FAIL");
+                LOG("%ux%u derivative signature: static=%s dynamic=%s\\n",
+                    rate.width, rate.height,
+                    static_derivative_ok ? "PASS" : "FAIL",
+                    dynamic_derivative_ok ? "PASS" : "FAIL");
 
                 matrix_pass &= static_pixels_ok && static_shape_ok &&
                                static_count_ok && dynamic_pixels_ok &&
-                               dynamic_count_ok;
+                               dynamic_count_ok && static_derivative_ok &&
+                               dynamic_derivative_ok;
              }
              LOG("advertised rate matrix: %s\\n",
                  matrix_pass ? "PASS" : "FAIL");
