@@ -1049,8 +1049,17 @@ main(int argc, char **argv)
                 LOG("constant fragment-invocations static=%u dynamic=%u comparison=%s\\n",
                     constant_static_invocations, constant_dynamic_invocations,
                     constant_invocations_match ? "PASS" : "FAIL");
-                int coordinate_shader_differs = dynamic_ok &&
+                int dynamic_coordinate_ok =
+                   render_rate(device, &mem_props, gdpa, queue, qf, format,
+                               rp, pl, vs, fs, keep, keep,
+                               (VkExtent2D){2,2}, true, invocation_set,
+                               invocation_buffer, invocation_mem,
+                               &invocations_target, image_target);
+                int coordinate_shader_differs = dynamic_coordinate_ok &&
                    checksum(image_target) != hash_2x2;
+                LOG("coordinate shader dynamic render=%s; static-vs-dynamic mismatch=%s\\n",
+                    dynamic_coordinate_ok ? "PASS" : "FAIL",
+                    coordinate_shader_differs ? "YES" : "NO");
                 LOG("coordinate shader static-vs-dynamic pixel mismatch=%s\\n",
                     coordinate_shader_differs ? "YES" : "NO");
                 passed = basic && invocation_reduction && constant_pixels_match &&
