@@ -7255,3 +7255,11 @@ The separate dynamic-FSR sysval branch has one new device result recorded in the
 - This VRS work remains on its isolated branch and is not merged into `experiment/g720-performance-audit`.
 
 The performance-audit branch remains unchanged at driver-source commit `a2e5ac142b4f0df71cb28204ece4337bace046de`; the audit document refresh is `de47624438c6951437855dfd66c65b526fdf0b51`. The heap-threshold A/B device test remains the next action for that branch.
+
+
+## 2026-11-08 — handoff-branch wrapper CI status recheck
+
+- Wrapper run `42481490094` for handoff-branch commit `2ead3df163443f8234ea0fead043de2f8c21fddb` has now completed SUCCESS.
+- Wrapper run `42481461421` for handoff-branch commit `b4d4963f182ab198d10ad7184f8460e16da59855` has now completed SUCCESS.
+- A later documentation-only commit `cbf03e1225419db38f9d781c2a8c31b410bfa8f5` records the static VRS render result and triggered wrapper run `42481867670`. At the latest status recheck, that run was still in progress in the Release and Debugoptimized compile steps. It is a wrapper-only build on the handoff branch; it is not an Android-only PanVK build and does not change the performance-audit source status.
+- The current handoff branch head before this status note was `d5fa3bb1aa2f2b0388f4980069ec8a4e3207344b`. This documentation update uses `[skip ci]` to avoid another push-triggered wrapper run.
