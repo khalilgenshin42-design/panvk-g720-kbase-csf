@@ -105,7 +105,7 @@ memory_type(const VkPhysicalDeviceMemoryProperties *props, uint32_t bits,
    PFN_vkCmdSetFragmentShadingRateKHR cmd_set_fragment_shading_rate = LOAD_D(CmdSetFragmentShadingRateKHR)
 
 
-/* Five constant-colour mip levels expose implicit-LOD selection in readback. */
+/* Constant-colour and spatial mip levels expose implicit-LOD selection and footprints. */
 static int
 create_mip_texture(VkDevice device,
                    const VkPhysicalDeviceMemoryProperties *mem_props,
@@ -169,9 +169,10 @@ create_mip_texture(VkDevice device,
    vr=bind_buffer_memory(device,upload,upload_mem,0); if(vr!=VK_SUCCESS)goto done;
    void *mapped=NULL; vr=map_memory(device,upload_mem,0,bytes,0,&mapped);
    if(vr!=VK_SUCCESS)goto done;
-   static const uint8_t rgba[5][4]={{255,0,0,255},{0,255,0,255},
-      {0,0,255,255},{255,255,0,255},{255,0,255,255}};
-   VkBufferImageCopy regions[5]; VkDeviceSize offset=0;
+   static const uint8_t rgba[7][4]={{255,0,0,255},{0,255,0,255},
+      {0,0,255,255},{255,255,0,255},{255,0,255,255},
+      {0,255,255,255},{255,255,255,255}};
+   VkBufferImageCopy regions[7]; VkDeviceSize offset=0;
    for(uint32_t l=0;l<levels;l++){
       uint32_t dim=1024u>>l; uint8_t *dst=(uint8_t*)mapped+offset;
       if (spatial_pattern) {
