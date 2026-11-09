@@ -720,8 +720,6 @@ main(int argc, char **argv)
       probe_case = CASE_RATE_MATRIX;
    else if (!strcmp(case_name, "--case=mip-lod"))
       probe_case = CASE_MIP_LOD;
-   else if (!strcmp(case_name, "--case=mip-lod"))
-      probe_case = CASE_MIP_LOD;
    else {
       fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep|dynamic-isolation|rate-matrix\n", argv[0]);
       return 2;
@@ -1272,11 +1270,26 @@ main(int argc, char **argv)
                 const uint8_t *dc=dynamic_ok?&dynamic_pixels[((H/2)*W+(W/2))*4]:NULL;
                 int static_match=sc&&!memcmp(sc,signatures[expected_level],4);
                 int dynamic_match=dc&&!memcmp(dc,signatures[expected_level],4);
+                uint32_t static_bad_pixels=0, dynamic_bad_pixels=0;
+                if (static_ok && dynamic_ok) {
+                   for (uint32_t p=0; p<W*H; p++) {
+                      const uint8_t *sp=&static_pixels[p*4];
+                      const uint8_t *dp=&dynamic_pixels[p*4];
+                      if (memcmp(sp,signatures[expected_level],4))
+                         static_bad_pixels++;
+                      if (memcmp(dp,signatures[expected_level],4))
+                         dynamic_bad_pixels++;
+                   }
+                }
+                int static_image_match=static_ok&&static_bad_pixels==0;
+                int dynamic_image_match=dynamic_ok&&dynamic_bad_pixels==0;
                 int image_match=static_ok&&dynamic_ok&&!memcmp(static_pixels,dynamic_pixels,IMAGE_BYTES);
-                LOG("implicit mip LOD %ux%u expected-level=%u static=%s dynamic=%s static/dynamic=%s invocations=%u/%u\\n",
+                LOG("implicit mip LOD %ux%u expected-level=%u static-center=%s dynamic-center=%s static-image=%s(%u bad) dynamic-image=%s(%u bad) static/dynamic=%s invocations=%u/%u\\n",
                     rate.width,rate.height,expected_level,static_match?"PASS":"FAIL",
-                    dynamic_match?"PASS":"FAIL",image_match?"MATCH":"MISMATCH",
-                    static_invocations,dynamic_invocations);
+                    dynamic_match?"PASS":"FAIL",
+                    static_image_match?"PASS":"FAIL",static_bad_pixels,
+                    dynamic_image_match?"PASS":"FAIL",dynamic_bad_pixels,
+                    image_match?"MATCH":"MISMATCH",static_invocations,dynamic_invocations);
                 if(sc)LOG(" static center RGBA=%u,%u,%u,%u\\n",sc[0],sc[1],sc[2],sc[3]);
                 if(dc)LOG(" dynamic center RGBA=%u,%u,%u,%u\\n",dc[0],dc[1],dc[2],dc[3]);
                 mip_matrix_pass &= static_match&&dynamic_match&&image_match;
