@@ -1300,3 +1300,57 @@ Use the verified 65,536-default package only, imported as a separate Winlator Ma
 5. Record min/max/average, frame pacing, visual correctness, hangs/device loss, and teardown. Prefer repeated A/B samples. If descriptor failure causes are still needed, collect a separate profiling-enabled diagnostic run after the uninstrumented A/B comparison.
 
 No source, allocator policy, heap topology, ring size, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed in this revalidation. Do not make further heap-policy changes until the override test is complete.
+
+
+## 2026-11-09 12:42 UTC — scheduled Android build and artifact revalidation
+
+### Branch and source provenance
+
+- Active source branch: `experiment/g720-performance-audit`, HEAD `de47624438c6951437855dfd66c65b526fdf0b51` (`docs: revalidate heap-threshold experiment and benchmark evidence [skip ci]`).
+- Latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`. GitHub compare from that source commit to branch HEAD reports 53 commits ahead / 0 behind; the only changed paths are `docs/G720_CAPABILITY_MATRIX_2026-11-05.md` and this audit. No driver source or workflow file changed after the latest CI-tested source snapshot.
+- Latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`. Later branch commits are documentation-only.
+
+### Latest relevant Actions runs
+
+The branch-filtered Actions listing returned 125 runs. No newer Android-only or Android-wrapper workflow run exists on this branch than the 2026-11-06 pair:
+
+- Android-only [run 42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218), job `127885224447`, source `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`: completed SUCCESS. All 15 returned steps completed successfully: setup, checkout, checkout verification, Python, dependencies, host tools, Android ARM64 libdrm, Android-only configure, compile/stage, driver/manifest/dependency/staging audit, flat package creation, artifact upload, post-Python, post-checkout, and job completion. Pending 0; failed 0.
+- Android wrapper [run 42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167), same source:
+  - Release job `127885224388`: completed SUCCESS; all 12 returned steps passed, including checkout, memfd_create compatibility patch, Python/dependencies, host tools, Meson configure, compilation, artifact upload, cleanup, and job completion. Pending 0; failed 0.
+  - Debugoptimized job `127885224836`: completed SUCCESS; all 12 returned steps passed. Pending 0; failed 0.
+- The immediately preceding duplicate runs for the earlier documentation snapshot `3aeb3e8a441b346d231f5f25198956f542271c1f` also completed successfully: Android-only run `42215702964`, job `127885035658`; wrapper run `42215702908`, Release job `127885036865`, Debugoptimized job `127885037206`. They are superseded by the later `b17b98c` pair.
+- No relevant job failed or remains pending, so no failure log diagnosis was required. No workflow was rerun and no build was triggered in this monitoring pass.
+
+### Fresh artifact download and independent validation
+
+Android-only artifact `13501237590` (16,753,940 bytes):
+- GitHub artifact digest and independently recomputed outer ZIP SHA-256 both equal `f5e58163b3caf3f9fa5791dedf56ade82fd87d17dcfdb42722cd846e51ed825a`; ZIP integrity passes.
+- The outer archive contains the staged Android install, ICD manifest, audit records, and nested `PanVK-G720-experimental.zip`. The staged tree includes `stage/usr/android_stub/libdrm.so`, `stage/usr/local/lib/libvulkan_panfrost.so`, and `stage/usr/local/share/vulkan/icd.d/panfrost_icd.aarch64.json`.
+- Nested flat package SHA-256: `14f7b13ab1735daffd31a0723c1f6d949155e5c6570f1980f98291cb54383e86`; nested ZIP integrity passes.
+- Exactly four nested members: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`. All three embedded checksums pass:
+  - driver `362ad05b978c673b82bf1e66b4ab553f8ea79154c8c5a0a6731b65648359bfb1`
+  - private libdrm `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`
+  - metadata `064c52b79a1d0dc14aab89fa98857d4a905c2167c41d7ee28536b81337b82e81`
+- Metadata JSON is valid: package version `26.3.0-devel-android-kbase-b17b98cef92f`, minimum API 30, library `libvulkan_panfrost.so`. It explicitly describes the package as experimental and not Vulkan conformant.
+- Both nested libraries are ELF64 AArch64 / Android API 30. Driver SONAME is `libvulkan_panfrost.so`, RUNPATH is `$ORIGIN`, and NEEDED includes the bundled private `libpanvk_drm.so`. That private library's only NEEDED entry is Android `libc.so`.
+- The staged ICD manifest parses as valid JSON and reports API version `1.4.354`, architecture 64, library path `/usr/local/lib/libvulkan_panfrost.so`. The audit's `missing-drm-symbols.txt` is empty.
+- Classification: **build passed / outer artifact and inner flat package statically validated**. This does not establish Winlator import, Kbase runtime compatibility, Vulkan conformance, WSI stability, or game performance.
+
+Wrapper Release artifact `13502135385`:
+- Outer ZIP SHA-256 matches GitHub digest: `5647fe999a9225123116118eb26ef91f277eef38d4ea2c2a29e98e965d3b0f04`; ZIP integrity passes.
+- Contains only `libvulkan_panfrost.so`; extracted ELF SHA-256 `edce8b3dd4fea68ffda7e44622d4c778cdaf0a22fc219cc2b4368335060aa80a`; ELF64 AArch64 / Android API 30.
+- RUNPATH is `$ORIGIN/../../android_stub`. NEEDED includes `libdrm.so`, `libxcb.so.1`, `libX11-xcb.so.1`, other XCB libraries, and `libxshmfence.so.1`.
+
+Wrapper Debugoptimized artifact `13502061037`:
+- Outer ZIP SHA-256 matches GitHub digest: `fcd0b4d2dcba93c67f3c09dedb6cdc4ab843cd7eef45f34813e90916adbd4159`; ZIP integrity passes.
+- Contains only `libvulkan_panfrost.so`; extracted ELF SHA-256 `eebdc6229236e4c91204bd01148409c2b91c71977d1cf71a44a25181b3617477`; ELF64 AArch64 / Android API 30 with debug information.
+- RUNPATH and NEEDED dependency set match Release.
+
+Neither wrapper ZIP bundles `android_stub/libdrm.so`, the X11/XCB dependency closure, an ICD manifest, or a checksum manifest. Classification for both: **build passed / raw ELF and ABI verified; complete package and runtime dependency closure not validated**. Do not describe these wrapper ZIPs as standalone Winlator import packages unless the intended runtime's companion dependency layout is independently demonstrated.
+
+### Blockers and safety
+
+- No newer active-branch build exists; all latest source build jobs remain passed.
+- The Android-only package is structurally validated but still needs a controlled separate Winlator Mali custom-driver import and device-runtime log. Runtime loading, Vulkan device creation, stability, and game performance are not verified by CI.
+- Wrapper packaging/dependency closure remains unresolved.
+- No source, workflow, allocator policy, Kbase ABI, kernel, or Android system/vendor driver was changed. This record is documentation-only and uses `[skip ci]`.
