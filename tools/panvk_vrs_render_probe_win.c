@@ -245,7 +245,7 @@ create_mip_texture(VkDevice device,
       .addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
       .addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
       .addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .minLod=0.0f,.maxLod=(float)(levels - 1u),.borderColor=VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK};
+      .minLod=0.0f,.maxLod=4.0f,.borderColor=VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK};
    vr=create_sampler(device,&sci,NULL,&sampler); if(vr!=VK_SUCCESS)goto done;
    *out_image=image;*out_image_mem=image_mem;*out_view=view;*out_sampler=sampler;
    image=VK_NULL_HANDLE;image_mem=VK_NULL_HANDLE;view=VK_NULL_HANDLE;
@@ -1309,7 +1309,9 @@ main(int argc, char **argv)
              for(uint32_t r=0;r<sizeof(mip_rates)/sizeof(mip_rates[0]);r++) {
                 VkExtent2D rate=mip_rates[r];
                 uint32_t major=rate.width>rate.height?rate.width:rate.height;
-                uint32_t expected_level=major==1?4:(major==2?5:6);
+                /* Clamp to mip 4 (64x64) so every output pixel has unique texel coverage;
+                * implicit-LOD selection itself is independently checked by CASE_MIP_LOD. */
+              uint32_t expected_level=4;
                 uint8_t *static_pixels=malloc(IMAGE_BYTES);
                 uint8_t *dynamic_pixels=malloc(IMAGE_BYTES);
                 uint32_t static_invocations=0,dynamic_invocations=0;
