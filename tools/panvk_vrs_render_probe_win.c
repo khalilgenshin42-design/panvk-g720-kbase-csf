@@ -110,7 +110,7 @@ static int
 create_mip_texture(VkDevice device,
                    const VkPhysicalDeviceMemoryProperties *mem_props,
                    PFN_vkGetDeviceProcAddr get_device_proc_addr,
-                   VkQueue queue, uint32_t queue_family,
+                   VkQueue queue, uint32_t queue_family, bool spatial_pattern,
                    VkImage *out_image, VkDeviceMemory *out_image_mem,
                    VkImageView *out_view, VkSampler *out_sampler)
 {
@@ -174,7 +174,18 @@ create_mip_texture(VkDevice device,
    VkBufferImageCopy regions[5]; VkDeviceSize offset=0;
    for(uint32_t l=0;l<levels;l++){
       uint32_t dim=256u>>l; uint8_t *dst=(uint8_t*)mapped+offset;
-      for(uint32_t p=0;p<dim*dim;p++)memcpy(dst+p*4u,rgba[l],4);
+      if (spatial_pattern) {
+         const uint8_t level_code=(uint8_t)(32u+l*48u);
+         for(uint32_t y=0;y<dim;y++) for(uint32_t x=0;x<dim;x++) {
+            uint8_t *px=&dst[((VkDeviceSize)y*dim+x)*4u];
+            px[0]=level_code;
+            px[1]=(uint8_t)((x*255u)/(dim-1u));
+            px[2]=(uint8_t)((y*255u)/(dim-1u));
+            px[3]=255;
+         }
+      } else {
+         for(uint32_t p=0;p<dim*dim;p++)memcpy(dst+p*4u,rgba[l],4);
+      }
       regions[l]=(VkBufferImageCopy){.bufferOffset=offset,
          .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,l,0,1},
          .imageExtent={dim,dim,1}};
@@ -695,12 +706,46 @@ derivative_signature_ok(const uint8_t *p, VkExtent2D rate)
    return abs(dx) <= 2 && abs(dy) <= 2;
 }
 
+static int
+mip_pattern_image_ok(const uint8_t *pixels, VkExtent2D rate,
+                     uint32_t expected_level, const char *path)
+{
+   const uint8_t expected_level_code=(uint8_t)(32u+expected_level*48u);
+   uint8_t min_x=255,max_x=0,min_y=255,max_y=0;
+   uint32_t bad_level=0,bad_alpha=0;
+   for(uint32_t p=0;p<W*H;p++) {
+      const uint8_t *px=&pixels[p*4u];
+      if(px[0]!=expected_level_code) bad_level++;
+      if(px[3]!=255) bad_alpha++;
+      if(px[1]<min_x) min_x=px[1];
+      if(px[1]>max_x) max_x=px[1];
+      if(px[2]<min_y) min_y=px[2];
+      if(px[2]>max_y) max_y=px[2];
+   }
+   uint32_t horizontal=0,vertical=0;
+   equal_neighbor_axes(pixels,&horizontal,&vertical);
+   const uint32_t expected_horizontal=(W/rate.width)*H*(rate.width-1u);
+   const uint32_t expected_vertical=W*(H/rate.height)*(rate.height-1u);
+   const int level_ok=bad_level==0, alpha_ok=bad_alpha==0;
+   const int gradient_ok=(max_x-min_x)>=160u && (max_y-min_y)>=160u;
+   const int block_ok=horizontal==expected_horizontal &&
+                      vertical==expected_vertical;
+   LOG("%s pattern level=%u bad-level=%u bad-alpha=%u x-range=%u..%u y-range=%u..%u neighbors H=%u/%u V=%u/%u level=%s gradient=%s blocks=%s\\n",
+       path,expected_level,bad_level,bad_alpha,min_x,max_x,min_y,max_y,
+       horizontal,expected_horizontal,vertical,expected_vertical,
+       level_ok&&alpha_ok?"PASS":"FAIL",gradient_ok?"PASS":"FAIL",
+       block_ok?"PASS":"FAIL");
+   return level_ok&&alpha_ok&&gradient_ok&&block_ok;
+}
+
+
 int
 main(int argc, char **argv)
 {
    const char *case_name = argc > 1 ? argv[1] : "--case=dynamic-keep";
    enum { CASE_KEEP, CASE_MAX, CASE_MIN, CASE_MUL, CASE_REPLACE,
-          CASE_DYNAMIC_KEEP, CASE_DYNAMIC_ISOLATION, CASE_RATE_MATRIX, CASE_MIP_LOD } probe_case;
+          CASE_DYNAMIC_KEEP, CASE_DYNAMIC_ISOLATION, CASE_RATE_MATRIX,
+          CASE_MIP_LOD, CASE_MIP_PATTERN } probe_case;
 
    if (!strcmp(case_name, "--case=keep"))
       probe_case = CASE_KEEP;
@@ -720,8 +765,10 @@ main(int argc, char **argv)
       probe_case = CASE_RATE_MATRIX;
    else if (!strcmp(case_name, "--case=mip-lod"))
       probe_case = CASE_MIP_LOD;
+   else if (!strcmp(case_name, "--case=mip-pattern"))
+      probe_case = CASE_MIP_PATTERN;
    else {
-      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep|dynamic-isolation|rate-matrix\n", argv[0]);
+      fprintf(stderr, "Usage: %s --case=keep|max|min|mul|replace|dynamic-keep|dynamic-isolation|rate-matrix|mip-lod|mip-pattern\n", argv[0]);
       return 2;
    }
    log_file = fopen("panvk_vrs_render_probe.log", "w");
@@ -1049,7 +1096,7 @@ main(int argc, char **argv)
       VkDeviceMemory mip_image_mem=VK_NULL_HANDLE;
       VkSampler mip_sampler=VK_NULL_HANDLE;
       int mip_resources_ok=1;
-      if (probe_case==CASE_MIP_LOD) {
+      if (probe_case==CASE_MIP_LOD || probe_case==CASE_MIP_PATTERN) {
          VkFormatProperties mip_fp;
          get_format_props(pds[d],VK_FORMAT_R8G8B8A8_UNORM,&mip_fp);
          VkFormatFeatureFlags mip_need=VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
@@ -1072,8 +1119,9 @@ main(int argc, char **argv)
          .pBufferInfo = &counter_desc,
       };
       update_descriptor_sets(device, 1, &counter_write, 0, NULL);
-      if (probe_case==CASE_MIP_LOD && mip_resources_ok) {
+      if ((probe_case==CASE_MIP_LOD || probe_case==CASE_MIP_PATTERN) && mip_resources_ok) {
          mip_resources_ok=create_mip_texture(device,&mem_props,get_device_proc_addr,queue,qf,
+            probe_case==CASE_MIP_PATTERN,
             &mip_image,&mip_image_mem,&mip_view,&mip_sampler);
          LOG("mip texture upload/setup=%s\\n",mip_resources_ok?"PASS":"FAIL");
          if (mip_resources_ok) {
@@ -1134,7 +1182,7 @@ main(int argc, char **argv)
       if(result==VK_SUCCESS)result=create_sm(device,&smf,NULL,&fs);
       if(result==VK_SUCCESS && probe_case==CASE_DYNAMIC_ISOLATION)
          result=create_sm(device,&smf_constant,NULL,&fs_constant);
-      if(result==VK_SUCCESS && probe_case==CASE_MIP_LOD && mip_resources_ok)
+      if(result==VK_SUCCESS && (probe_case==CASE_MIP_LOD || probe_case==CASE_MIP_PATTERN) && mip_resources_ok)
          result=create_sm(device,&smf_mip,NULL,&fs_mip);
       VkPipelineLayout pl=VK_NULL_HANDLE;
       VkPipelineLayoutCreateInfo plci = {
@@ -1144,7 +1192,7 @@ main(int argc, char **argv)
       };
       if(result==VK_SUCCESS)result=create_pl(device,&plci,NULL,&pl);
       LOG("shader modules/pipeline layout=%d\n",result);
-      if (probe_case==CASE_MIP_LOD && !mip_resources_ok) result=VK_ERROR_FORMAT_NOT_SUPPORTED;
+      if ((probe_case==CASE_MIP_LOD || probe_case==CASE_MIP_PATTERN) && !mip_resources_ok) result=VK_ERROR_FORMAT_NOT_SUPPORTED;
       if (result != VK_SUCCESS) {
          if (pl) destroy_pl(device, pl, NULL);
          if (fs_constant) destroy_sm(device, fs_constant, NULL);
@@ -1394,7 +1442,36 @@ main(int argc, char **argv)
              LOG("implicit mip LOD bias-boundary matrix: %s\\n",
                  bias_matrix_pass?"PASS":"FAIL");
              passed=mip_matrix_pass&&bias_matrix_pass;
-          } else if (probe_case == CASE_DYNAMIC_ISOLATION) {
+          } else if (probe_case == CASE_MIP_PATTERN) {
+              static const VkExtent2D pattern_rates[]={{1,1},{2,1},{1,2},{2,2},{4,2},{2,4},{4,4}};
+              int pattern_matrix_pass=1;
+              for(uint32_t r=0;r<sizeof(pattern_rates)/sizeof(pattern_rates[0]);r++) {
+                 VkExtent2D rate=pattern_rates[r];
+                 uint32_t major=rate.width>rate.height?rate.width:rate.height;
+                 uint32_t expected_level=major==1?2:(major==2?3:4);
+                 uint32_t expected_invocations=(W*H)/(rate.width*rate.height);
+                 uint8_t *static_pixels=malloc(IMAGE_BYTES),*dynamic_pixels=malloc(IMAGE_BYTES);
+                 uint32_t static_invocations=0,dynamic_invocations=0;
+                 int static_ok=static_pixels&&render_rate(device,&mem_props,get_device_proc_addr,
+                    queue,qf,format,rp,pl,vs,fs_mip,keep,keep,rate,false,
+                    invocation_set,invocation_buffer,invocation_mem,&static_invocations,static_pixels);
+                 int dynamic_ok=static_ok&&dynamic_pixels&&render_rate(device,&mem_props,get_device_proc_addr,
+                    queue,qf,format,rp,pl,vs,fs_mip,keep,keep,rate,true,
+                    invocation_set,invocation_buffer,invocation_mem,&dynamic_invocations,dynamic_pixels);
+                 int static_pattern=static_ok&&mip_pattern_image_ok(static_pixels,rate,expected_level,"static");
+                 int dynamic_pattern=dynamic_ok&&mip_pattern_image_ok(dynamic_pixels,rate,expected_level,"dynamic");
+                 int pixels_match=static_ok&&dynamic_ok&&!memcmp(static_pixels,dynamic_pixels,IMAGE_BYTES);
+                 int counts_match=static_ok&&dynamic_ok&&static_invocations==expected_invocations&&dynamic_invocations==expected_invocations;
+                 LOG("spatial mip pattern %ux%u level=%u static=%s dynamic=%s pixels=%s invocations=%u/%u expected=%u count=%s\\n",
+                     rate.width,rate.height,expected_level,static_pattern?"PASS":"FAIL",
+                     dynamic_pattern?"PASS":"FAIL",pixels_match?"MATCH":"MISMATCH",
+                     static_invocations,dynamic_invocations,expected_invocations,counts_match?"PASS":"FAIL");
+                 pattern_matrix_pass &= static_pattern&&dynamic_pattern&&pixels_match&&counts_match;
+                 free(static_pixels);free(dynamic_pixels);
+              }
+              LOG("spatially varying mip-content matrix: %s\\n",pattern_matrix_pass?"PASS":"FAIL");
+              passed=pattern_matrix_pass;
+           } else if (probe_case == CASE_DYNAMIC_ISOLATION) {
              uint8_t *constant_static = malloc(IMAGE_BYTES);
              uint8_t *constant_dynamic = malloc(IMAGE_BYTES);
              uint32_t constant_static_invocations = 0;
