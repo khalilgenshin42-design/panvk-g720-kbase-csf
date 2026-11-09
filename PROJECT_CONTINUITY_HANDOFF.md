@@ -7875,3 +7875,12 @@ A direct commit comparison confirms the successful CI runs include the latest Pa
 - No PanVK source modification is warranted from these results. The existing VRS pipeline-rate/KEEP path is now validated for rate selection, invocation footprint, affine derivatives, and implicit nearest-mip sampling on the target device. Keep the VRS branch isolated and do not merge or enable unsupported primitive/attachment shading-rate or non-KEEP combiners based on this evidence.
 - Next useful test: exercise implicit LOD with non-constant mip contents and a texture-gradient pattern that crosses mip boundaries, then test a shader with divergent control flow / helper lanes and compare against a trusted reference. After correctness, benchmark game-level VRS behavior separately; these probes establish correctness, not FPS uplift.
 - Uploaded device log: `/mnt/data/panvk_vrs_render_probe.log` (29,561 bytes). Key result lines include all seven `implicit mip LOD ... static-image=PASS(0 bad) dynamic-image=PASS(0 bad)` records and final PASS markers.
+
+
+## 2026-11-09 — Follow-up: nearest-mipmap LOD boundary probe in progress
+
+- After the all-pixel implicit mip-LOD device pass, added a stricter sampler-bias boundary matrix to the existing --case=mip-lod probe. This does not modify PanVK; it tests Vulkan sampler LOD selection around nearest-mipmap half-integer boundaries.
+- At base implicit LOD 2 (1x1) and 3 (2x1), the new cases apply sampler mipLodBias values -0.51, -0.49, +0.49, +0.51. Expected selected levels are respectively 1,2,2,3 for base LOD2 and 2,3,3,4 for base LOD3. Static and dynamic KEEP paths are both rendered; every output pixel is checked against the expected per-mip signature and both image equality and invocation equality are checked.
+- Source commits: initial test 913308ab63b16dbb1cad18a2152878bf5e07e351; follow-up scope fix restoring the descriptor with a local write structure 4905b10cd045914be024d3c61dc3a0c2f2617111.
+- CI runs for the updated source are currently in progress (latest build-probe run ID 42635072034, source SHA 4905b10cd045914be024d3c61dc3a0c2f2617111). Do not distribute until the final source SHA has a successful build and artifact upload.
+- The all-pixel mip test itself has already passed on-device (see preceding 2026-11-09 entry). The sampler-bias matrix is an additional test and has no device result yet.
