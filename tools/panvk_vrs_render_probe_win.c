@@ -1308,10 +1308,10 @@ main(int argc, char **argv)
              int mip_matrix_pass=1;
              for(uint32_t r=0;r<sizeof(mip_rates)/sizeof(mip_rates[0]);r++) {
                 VkExtent2D rate=mip_rates[r];
-                uint32_t major=rate.width>rate.height?rate.width:rate.height;
-                /* Clamp to mip 4 (64x64) so every output pixel has unique texel coverage;
-                * implicit-LOD selection itself is independently checked by CASE_MIP_LOD. */
-              uint32_t expected_level=4;
+                /* The spatial-pattern sampler clamps maxLod to 4 for every rate.
+                 * This case validates spatial footprints, not implicit LOD selection;
+                 * CASE_MIP_LOD independently validates rate-dependent LOD. */
+                const uint32_t expected_level=4;
                 uint8_t *static_pixels=malloc(IMAGE_BYTES);
                 uint8_t *dynamic_pixels=malloc(IMAGE_BYTES);
                 uint32_t static_invocations=0,dynamic_invocations=0;
