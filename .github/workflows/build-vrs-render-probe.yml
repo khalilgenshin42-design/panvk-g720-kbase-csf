@@ -15,6 +15,7 @@ on:
       - tools/run-vrs-dynamic-isolation.cmd
       - tools/run-vrs-rate-matrix.cmd
       - tools/run-vrs-mip-lod.cmd
+      - tools/run-vrs-mip-pattern.cmd
       - tools/vrs_probe.vert
       - tools/vrs_probe.frag
       - tools/vrs_probe_constant.frag
@@ -86,5 +87,6 @@ jobs:
             tools/run-vrs-dynamic-isolation.cmd
             tools/run-vrs-rate-matrix.cmd
             tools/run-vrs-mip-lod.cmd
+            tools/run-vrs-mip-pattern.cmd
             Run-Dynamic-VRS.cmd
           if-no-files-found: error
