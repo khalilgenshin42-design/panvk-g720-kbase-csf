@@ -1375,8 +1375,18 @@ main(int argc, char **argv)
                           match?"MATCH":"MISMATCH",si,di);
                       bias_matrix_pass &= spass&&dpass&&match;
                       free(sp);free(dp);
-                      /* The queue is fence-complete before this sampler is destroyed. */
-                      update_descriptor_sets(device,1,&image_write,0,NULL);
+                      /* Restore the long-lived sampler before destroying this one. */
+                      VkDescriptorImageInfo restore_image_info={
+                         .sampler=mip_sampler,.imageView=mip_view,
+                         .imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                      };
+                      VkWriteDescriptorSet restore_write={
+                         .sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                         .dstSet=invocation_set,.dstBinding=1,.descriptorCount=1,
+                         .descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                         .pImageInfo=&restore_image_info,
+                      };
+                      update_descriptor_sets(device,1,&restore_write,0,NULL);
                       destroy_bias_sampler(device,bias_sampler,NULL);
                    }
                 }
