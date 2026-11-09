@@ -126,9 +126,13 @@ create_mip_texture(VkDevice device,
        !create_fence || !destroy_fence || !wait_for_fences)
       return 0;
 
-   const uint32_t levels = 7;
-   const VkDeviceSize bytes = (1024u*1024u + 512u*512u + 256u*256u +
-                               128u*128u + 64u*64u + 32u*32u + 16u*16u) * 4u;
+   const uint32_t base_dim = spatial_pattern ? 1024u : 256u;
+   const uint32_t levels = spatial_pattern ? 7u : 5u;
+   VkDeviceSize bytes = 0;
+   for (uint32_t l = 0; l < levels; l++) {
+      const VkDeviceSize dim = base_dim >> l;
+      bytes += dim * dim * 4u;
+   }
    VkImage image=VK_NULL_HANDLE;
    VkDeviceMemory image_mem=VK_NULL_HANDLE, upload_mem=VK_NULL_HANDLE;
    VkBuffer upload=VK_NULL_HANDLE;
@@ -140,7 +144,7 @@ create_mip_texture(VkDevice device,
    VkResult vr;
    VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
-      .extent={1024,1024,1},.mipLevels=levels,.arrayLayers=1,
+      .extent={base_dim,base_dim,1},.mipLevels=levels,.arrayLayers=1,
       .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
       .usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
       .sharingMode=VK_SHARING_MODE_EXCLUSIVE,.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED};
@@ -174,7 +178,7 @@ create_mip_texture(VkDevice device,
       {0,255,255,255},{255,255,255,255}};
    VkBufferImageCopy regions[7]; VkDeviceSize offset=0;
    for(uint32_t l=0;l<levels;l++){
-      uint32_t dim=1024u>>l; uint8_t *dst=(uint8_t*)mapped+offset;
+      uint32_t dim=base_dim>>l; uint8_t *dst=(uint8_t*)mapped+offset;
       if (spatial_pattern) {
          const uint8_t level_code=(uint8_t)(32u+l*48u);
          for(uint32_t y=0;y<dim;y++) for(uint32_t x=0;x<dim;x++) {
@@ -241,7 +245,7 @@ create_mip_texture(VkDevice device,
       .addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
       .addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
       .addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .minLod=0.0f,.maxLod=4.0f,.borderColor=VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK};
+      .minLod=0.0f,.maxLod=(float)(levels - 1u),.borderColor=VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK};
    vr=create_sampler(device,&sci,NULL,&sampler); if(vr!=VK_SUCCESS)goto done;
    *out_image=image;*out_image_mem=image_mem;*out_view=view;*out_sampler=sampler;
    image=VK_NULL_HANDLE;image_mem=VK_NULL_HANDLE;view=VK_NULL_HANDLE;
@@ -1305,7 +1309,7 @@ main(int argc, char **argv)
              for(uint32_t r=0;r<sizeof(mip_rates)/sizeof(mip_rates[0]);r++) {
                 VkExtent2D rate=mip_rates[r];
                 uint32_t major=rate.width>rate.height?rate.width:rate.height;
-                uint32_t expected_level=major==1?2:(major==2?3:4);
+                uint32_t expected_level=major==1?4:(major==2?5:6);
                 uint8_t *static_pixels=malloc(IMAGE_BYTES);
                 uint8_t *dynamic_pixels=malloc(IMAGE_BYTES);
                 uint32_t static_invocations=0,dynamic_invocations=0;
