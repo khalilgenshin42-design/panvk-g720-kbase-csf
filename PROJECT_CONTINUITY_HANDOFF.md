@@ -7851,3 +7851,10 @@ A direct commit comparison confirms the successful CI runs include the latest Pa
 - Every rate reports static=PASS, dynamic=PASS, static/dynamic=MATCH, and expected invocation count. Final markers: `implicit mip LOD matrix: PASS` and `VRS GPU RENDER PASS`. All render/submit/fence/readback stages in the log succeeded.
 - Together with the earlier derivative-signature matrix, this validates invocation reduction, affine varying derivative scaling, and sampled implicit mip selection for the tested KEEP-only rates. It does not establish full Vulkan conformance, helper-lane/primitive-edge behavior, non-KEEP combiners, implicit anisotropic filtering, or a real-game FPS gain.
 - No PanVK driver source change is warranted from these results. Keep the existing VRS implementation and advertised matrix unchanged pending more targeted coverage. Next useful validation is texture LOD across a spatially varying gradient / non-constant texture and boundary/helper-lane behavior, followed by a controlled in-game performance comparison only after correctness coverage.
+
+
+## 2026-11-09 — Strengthen mip-LOD probe to validate every pixel
+
+- After the initial device run passed, source review found that the mip-level signature assertion sampled only the center pixel, while the full-frame check compared static versus dynamic images. This could miss a region where both paths selected the same incorrect mip.
+- Updated `tools/panvk_vrs_render_probe_win.c` in commit `c8c803fa4e0f4a146cd784fe3c869da095044516`: each static and dynamic frame now checks every RGBA pixel against the expected mip signature and reports bad-pixel counts separately; it still checks full-frame static/dynamic equality. Also removed a duplicate `--case=mip-lod` parser branch and added `mip-lod` to the usage text.
+- The enhanced probe workflow run `42633932428` is in progress. Do not distribute its artifact until compile, executable verification, and upload pass. This is a stricter validation of the same already-passing device behavior; it does not alter the PanVK driver.
