@@ -7884,3 +7884,12 @@ A direct commit comparison confirms the successful CI runs include the latest Pa
 - Source commits: initial test 913308ab63b16dbb1cad18a2152878bf5e07e351; follow-up scope fix restoring the descriptor with a local write structure 4905b10cd045914be024d3c61dc3a0c2f2617111.
 - CI runs for the updated source are currently in progress (latest build-probe run ID 42635072034, source SHA 4905b10cd045914be024d3c61dc3a0c2f2617111). Do not distribute until the final source SHA has a successful build and artifact upload.
 - The all-pixel mip test itself has already passed on-device (see preceding 2026-11-09 entry). The sampler-bias matrix is an additional test and has no device result yet.
+
+
+## 2026-11-09 — Sampler mip-LOD boundary probe package ready
+
+- Final probe source commit: 4905b10cd045914be024d3c61dc3a0c2f2617111. The Windows probe workflow run 42635071991 completed successfully; all shader compile, MinGW build, PE verification, and artifact upload steps passed.
+- Artifact panvk-vrs-render-probe-win64, ID 13682751633, size 125,761 bytes; ZIP SHA-256 d4a0bfbc3c4855e9b8cab0c1830641a5495fdec7b0d7fd347493e7b06591ec26. Executable SHA-256 6b1b594f10313d10b46bfd1d1a61f75edaf860938a9a01b073e6f4aa249e843f. PE32+ x86-64; imported DLLs KERNEL32.dll and msvcrt.dll.
+- Download URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42635071991/artifacts/13682751633. Package includes tools/run-vrs-mip-lod.cmd. This is a Windows test executable only, not a driver package.
+- New --case=mip-lod stage tests nearest mip selection around half-integer LOD boundaries by sampler mipLodBias. At implicit base LOD2 (1x1), biases -0.51/-0.49/+0.49/+0.51 should select mip 1/2/2/3; at base LOD3 (2x1), they should select mip 2/3/3/4. Each case compares every pixel for static and dynamic KEEP and requires static/dynamic pixels and invocation counts to match. The test skips/fails the bias stage if maxSamplerLodBias is below 0.51; the G720 is expected to support it, but the device log must confirm.
+- Device test pending. Keep the same PanVK experimental driver selected. Extract the ZIP and run tools/run-vrs-mip-lod.cmd; provide the full panvk_vrs_render_probe.log. No driver change is included or implied.
