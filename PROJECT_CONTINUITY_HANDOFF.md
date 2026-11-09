@@ -1,12 +1,12 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-09 12:58 UTC
+Last updated: 2026-11-09 12:59 UTC
 
 ## Authoritative current state — 2026-11-09
 
 This section supersedes older "next steps", queued-CI, and "no code changed" statements in the historical addenda below. Keep the historical record, but use the branch-specific state here when deciding what is current.
 
-- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file. Its pre-this-pass HEAD was `c094cea4a7c0b83257453c26bee3d12a30cc368a` (`docs: record 2026-11-09 PanVK build and artifact monitoring [skip ci]`). This monitoring update uses `[skip ci]`.
-- Current task branch: `experiment/g720-performance-audit`. Its pre-this-pass HEAD was `c756ad757eedd8499d84a0e098b5ced54ee79a7c`; it remains documentation-only beyond driver-source commit `a2e5ac142b4f0df71cb28204ece4337bace046de`. The latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`; Android-only run `42215758218` and wrapper run `42215758167` both succeeded, with all steps passing. The 12:58 UTC audit refresh is commit `e012f4e9d71c90bb28a992e11d3418a398163c04`.
+- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file. Its pre-this-pass HEAD was `be75921df7c760a373a648c6d4c105f76bf72cf8` (`docs: record 2026-11-09 PanVK source and package revalidation [skip ci]`). This monitoring update uses `[skip ci]`.
+- Current task branch: `experiment/g720-performance-audit`. Its pre-this-pass HEAD was `e012f4e9d71c90bb28a992e11d3418a398163c04`; it remains documentation-only beyond driver-source commit `a2e5ac142b4f0df71cb28204ece4337bace046de`. The latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`; Android-only run `42215758218` and wrapper run `42215758167` both succeeded, with all steps passing. The 12:59 UTC audit refresh is commit `977e22667a38aedc7544e6c332c0363bd733ac24`.
 - Separate 4x heap-threshold candidate: `experiment/g720-heap-renew-262k`, HEAD `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`. It changes the compiled default from 65,536 to 262,144; it is not an environment-variable propagation test.
 - Separate descriptor-heap implementation: `experiment/g720-descriptor-heaps`, HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. Its exact-head Android and wrapper builds now pass; the package is independently audited below. No device runtime test has been performed.
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
@@ -7825,3 +7825,13 @@ The user ran the derivative-extended Windows probe on the target Winlator Mali-G
 - The newly attached 65K-default package is the same verified artifact, SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`. ZIP integrity and all embedded checksums pass; four expected members, ELF64 AArch64, driver RUNPATH `$ORIGIN`, bundled private libdrm dependency, and API-30 package metadata were verified. This is static/package validation only.
 - No new Tomb Raider log or FPS result was attached. Historical metrics and limitations are unchanged: diagnostic 7.7/19.7/13.6; clean 65K 9.0/17.6/13.5; separate 262K-default candidate 7.8/18.9/13.9. No gain is claimed and the compiled-default candidate does not prove Winlator environment propagation.
 - Exact next device test: use the verified 65K-default package as a separate Winlator Mali custom driver. Run once with the variable absent and require the first-use log to say 65,536; restart the process with `PANVK_KBASE_HEAP_RENEW_WORK=262144` set before first submission and require 262,144. If not, mark invalid. Keep all profiling variables unset in both matched performance runs, then collect a separate descriptor-profile diagnostic only if needed. Do not change allocator policy or system/vendor driver/kernel.
+
+
+### CI/source ancestry clarification — 2026-11-09 12:59 UTC
+
+A direct commit comparison confirms the successful CI runs include the latest PanVK driver source:
+
+- Latest driver-source commit: `a2e5ac142b4f0df71cb28204ece4337bace046de`.
+- CI-tested commit: `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`.
+- The CI-tested commit is 45 commits ahead / 0 behind the driver-source commit. Only `docs/G720_CAPABILITY_MATRIX_2026-11-05.md` and `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md` changed between them; no driver source or workflow changed. Thus Android-only run `42215758218` and wrapper run `42215758167` cover the latest source. No rebuild was necessary.
+- The audit clarification is commit `977e22667a38aedc7544e6c332c0363bd733ac24`. This handoff update uses `[skip ci]`.
