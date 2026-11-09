@@ -126,9 +126,9 @@ create_mip_texture(VkDevice device,
        !create_fence || !destroy_fence || !wait_for_fences)
       return 0;
 
-   const uint32_t levels = 5;
-   const VkDeviceSize bytes = (256u*256u + 128u*128u + 64u*64u +
-                               32u*32u + 16u*16u) * 4u;
+   const uint32_t levels = 7;
+   const VkDeviceSize bytes = (1024u*1024u + 512u*512u + 256u*256u +
+                               128u*128u + 64u*64u + 32u*32u + 16u*16u) * 4u;
    VkImage image=VK_NULL_HANDLE;
    VkDeviceMemory image_mem=VK_NULL_HANDLE, upload_mem=VK_NULL_HANDLE;
    VkBuffer upload=VK_NULL_HANDLE;
@@ -140,7 +140,7 @@ create_mip_texture(VkDevice device,
    VkResult vr;
    VkImageCreateInfo ii={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType=VK_IMAGE_TYPE_2D,.format=VK_FORMAT_R8G8B8A8_UNORM,
-      .extent={256,256,1},.mipLevels=levels,.arrayLayers=1,
+      .extent={1024,1024,1},.mipLevels=levels,.arrayLayers=1,
       .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
       .usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
       .sharingMode=VK_SHARING_MODE_EXCLUSIVE,.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED};
@@ -173,7 +173,7 @@ create_mip_texture(VkDevice device,
       {0,0,255,255},{255,255,0,255},{255,0,255,255}};
    VkBufferImageCopy regions[5]; VkDeviceSize offset=0;
    for(uint32_t l=0;l<levels;l++){
-      uint32_t dim=256u>>l; uint8_t *dst=(uint8_t*)mapped+offset;
+      uint32_t dim=1024u>>l; uint8_t *dst=(uint8_t*)mapped+offset;
       if (spatial_pattern) {
          const uint8_t level_code=(uint8_t)(32u+l*48u);
          for(uint32_t y=0;y<dim;y++) for(uint32_t x=0;x<dim;x++) {
