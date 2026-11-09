@@ -7975,3 +7975,12 @@ A direct commit comparison confirms the successful CI runs include the latest Pa
 - Corrected the probe source on `experiment/g720-dynamic-fsr-sysval`: commit `43e7901ec96de49275e64d09c94ebdc0f675a70e`. Removed obsolete `major`-based expected mip calculation and made expected spatial level explicitly 4 with explanatory comments.
 - Target Windows probe workflow run `42644478495` was queued/in progress when recorded; job `129253906955` had completed setup/checkout and was installing shader compiler/MinGW. Other two workflows also triggered by shared source path filters; don't confuse their outputs with the Windows probe artifact.
 - No PanVK driver change. Await successful Windows probe artifact, then have user rerun `tools/run-vrs-mip-pattern.cmd` in Winlator. Once this test passes, advance to divergent-control-flow/helper-invocation coverage rather than revisiting already-passing rate, derivative, or implicit-LOD tests.
+
+
+## 2026-11-09 — Spatial mip-pattern expectation fix packaged
+
+- Corrected source commit `43e7901ec96de49275e64d09c94ebdc0f675a70e` passed the Windows probe workflow run `42644478495` (job `129253906955`). Shader compilation, MinGW build, executable verification, and artifact upload all succeeded.
+- Artifact `panvk-vrs-render-probe-win64`, ID `13687320639`, size 128,375 bytes. GitHub artifact digest and independently computed ZIP SHA-256: `7bb511da15b43751c7aea806eae65354c4dccc856130d69f0ec39155a824173b`. Executable SHA-256: `73359b0693e0905cf27b47cf010b3836b5b5cc921f33ff6dd36e66c0e58ca957`. Runner SHA-256 unchanged: `c4cb46521e6ce4892aa6d6011c3345959b9f980d4a23058baaf63e1775de5b41`.
+- Downloaded ZIP inspected: contains expected executable and `tools/run-vrs-mip-pattern.cmd` (10 files). Exact artifact URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42644478495/artifacts/13687320639.
+- User must rerun `tools/run-vrs-mip-pattern.cmd` using this newer package in Winlator Mali 1.2 / experimental PanVK and upload the full log. Expected outcome: all seven spatial pattern rates pass mip4 identity, gradients, block footprint, static/dynamic image equality, and invocation count.
+- The previous device run did not expose a GPU failure: all render/submit/readback paths succeeded, static/dynamic images matched, and gradients, footprints and invocation counts passed. Only the stale expected-level check failed for four rates. No driver-source change was made.
