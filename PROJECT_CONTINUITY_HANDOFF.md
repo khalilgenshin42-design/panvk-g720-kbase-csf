@@ -7925,3 +7925,10 @@ A direct commit comparison confirms the successful CI runs include the latest Pa
 - Corrective probe-only change committed on `experiment/g720-dynamic-fsr-sysval`: `2bbfc00a806ebd29bf831af2fc8ba406d43c9fd8` — increase spatial mip source to 1024x1024 and seven mip levels. Selected mip2/mip3/mip4 are now 256x256 / 128x128 / 64x64, so nearest sampling has sufficient spatial resolution to expose the 64x64 target's per-pixel variation before VRS repetition. Upload staging size and mip upload dimensions were updated consistently.
 - No PanVK driver code was changed. The existing VRS static/dynamic implementation remains unmodified.
 - Next: verify CI build/package for source commit `2bbfc00a806ebd29bf831af2fc8ba406d43c9fd8`, then rerun `tools/run-vrs-mip-pattern.cmd` on device and inspect the complete log. If the asymmetric block checks now match the expected footprint, continue to helper-invocation/control-flow edge cases. If they do not, inspect the new pixel pattern and derivatives before considering any driver change.
+
+
+### Follow-up static review: seven-level array bounds fixed
+
+- Static review of the 1024x1024 / seven-mip conversion found two arrays still sized for the old five-level chain: the upload `VkBufferImageCopy regions[5]` and solid-colour lookup `rgba[5][4]`. With seven levels these would cause stack overwrite and out-of-bounds colour reads in the non-spatial mip LOD path.
+- Fixed both in source commit `357312bda1eff81335e6b3d7fe7254b30ec308ee`: both arrays now have seven entries; added two distinct solid colours for mip5/mip6. This is probe-only safety/correctness work, not a driver change.
+- Current source branch HEAD expected: `357312bda1eff81335e6b3d7fe7254b30ec308ee`. CI build/package validation remains pending. Do not run an artifact built from the intermediate `2bbfc00...` commit; use the package produced from this corrected HEAD.
