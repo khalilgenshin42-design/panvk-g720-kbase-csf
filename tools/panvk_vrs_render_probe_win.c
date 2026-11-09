@@ -1454,8 +1454,13 @@ main(int argc, char **argv)
               int pattern_matrix_pass=1;
               for(uint32_t r=0;r<sizeof(pattern_rates)/sizeof(pattern_rates[0]);r++) {
                  VkExtent2D rate=pattern_rates[r];
-                 uint32_t major=rate.width>rate.height?rate.width:rate.height;
-                 uint32_t expected_level=major==1?2:(major==2?3:4);
+                 /*
+                  * The spatial texture's UV gradient starts at LOD 4 for 1x1.
+                  * Larger fragment rates increase implicit LOD, but maxLod=4
+                  * clamps every rate to mip 4. This checks spatial footprints
+                  * at the same fixed mip; CASE_MIP_LOD checks rate-dependent LOD.
+                  */
+                 const uint32_t expected_level=4;
                  uint32_t expected_invocations=(W*H)/(rate.width*rate.height);
                  uint8_t *static_pixels=malloc(IMAGE_BYTES),*dynamic_pixels=malloc(IMAGE_BYTES);
                  uint32_t static_invocations=0,dynamic_invocations=0;
