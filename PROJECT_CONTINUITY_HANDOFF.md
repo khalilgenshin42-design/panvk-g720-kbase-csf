@@ -1,5 +1,5 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-09 12:59 UTC
+Last updated: 2026-11-09 14:43 UTC
 
 ## Authoritative current state — 2026-11-09
 
@@ -14,6 +14,16 @@ This section supersedes older "next steps", queued-CI, and "no code changed" sta
 
 - Current VRS continuation: `experiment/g720-dynamic-fsr-sysval` is at `c027d4d8c747787c85256cfc0e9768e991262c16`. The v12+ DCD `Disable VRS Clamp 2x2` bit (bit 12) was enabled in the regular graphics DCD and internal fullscreen/frame-shader DCD paths. This fix is now **runtime validated on the target Mali-G720 MC7** by the complete user-supplied `panvk_vrs_render_probe.log` (SHA-256 `846cdb67b7dcae4b6f70f597bc8b02e877433198842d29464970642aca869b75`). Static KEEP rates all pass with exact expected SSBO invocation counts and directional pixel signatures: 1x1=4096; 2x1=2048 (H=2048,V=0); 1x2=2048 (H=0,V=2048); 2x2=1024 (H=2048,V=2048); 4x2=512 (H=3072,V=2048); 2x4=512 (H=2048,V=3072); 4x4=256 (H=3072,V=3072). Dynamic command-buffer cases shown in the log for 2x1, 1x2, 4x2, 2x4, and 4x4 match their static invocation counts and checksums. Pipeline creation, submit, fence wait, and readback pass. The log ends with `advertised rate matrix: PASS` and `VRS GPU RENDER PASS`. This establishes pipeline VRS rasterization/invocation behavior for the tested simple shader and target; it does not yet validate derivative/implicit-LOD behavior, interpolation, helper invocations, discard/depth/sample interactions, attachment/primitive VRS, or game performance. Candidate Android package was run `42509835857`, artifact `13628779694`, inner package SHA-256 `5ea2bb16e45cf4591a56786cdd531c41f454c6429103b3b48352aa0d8982c161`; matching Win64 probe artifact `13628887002` from run `42509380933`. Keep this VRS work separate from the heap-threshold performance-audit experiment. Next engineering step: audit the exact VRS feature/property advertisement and shader lowering paths, then extend the probe with shader-semantic tests before any production-safety or performance claim.
 - These branches are parallel experiments. Do not merge or substitute their packages for one another without an explicit compatibility review.
+
+## 2026-11-09 14:43 UTC — Spatially varying VRS mip-content probe added
+
+- Continued the isolated `experiment/g720-dynamic-fsr-sysval` branch from the previously device-validated implicit-LOD and sampler-bias tests. No PanVK driver code or device package was changed.
+- Probe source commit: `64ecae77279a77fcc0e4f4efcad6f322862ebd35` (`test: add spatially varying VRS mip-content probe`). Runner commit: `974d2287959b60a3de85d81f84ab9d805a815113`. Workflow/package commit and branch HEAD: `c7b211e74a7087201b432aab3007598681b882b2`.
+- Added `--case=mip-pattern` and `tools/run-vrs-mip-pattern.cmd`. The existing five mip levels now have an optional spatial-pattern upload mode: R encodes mip identity (32 + 48×level), G encodes normalized texel X, B encodes normalized texel Y, and A remains 255. The existing `--case=mip-lod` constant-colour mode remains unchanged.
+- The new matrix renders static pipeline KEEP and dynamic command-buffer KEEP for 1x1, 2x1, 1x2, 2x2, 4x2, 2x4, and 4x4. It checks the expected implicit mip identity at every pixel, nontrivial X/Y gradient ranges, repeated fragment-footprint geometry, exact static/dynamic image agreement, and exact expected invocation counts (4096, 2048, 2048, 1024, 512, 512, 256).
+- GitHub Actions probe build run `42637304536` was triggered from the latest branch HEAD. At handoff update time it was still in progress; no artifact is approved for device testing until shader compilation, Windows build, executable verification, and artifact upload all pass.
+- Device-side validation is pending. After CI passes, test only the new `run-vrs-mip-pattern.cmd` runner in the existing Winlator Mali 1.2 environment with the same experimental PanVK driver, then provide the complete `panvk_vrs_render_probe.log`. Do not replace the Android system/vendor Vulkan driver.
+- Next after this test: helper-invocation and primitive/viewport-edge coverage, with undefined implicit-derivative cases excluded from conformance expectations.
 
 ### Current implementation state
 
