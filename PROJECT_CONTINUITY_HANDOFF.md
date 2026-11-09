@@ -7965,3 +7965,13 @@ A direct commit comparison confirms the successful CI runs include the latest Pa
 - This is a Windows-side Vulkan probe, not a PanVK Android driver package. No PanVK driver source or system/vendor driver was changed by this test commit.
 - Device test is now unblocked. In Winlator Mali 1.2, keep the existing experimental PanVK custom driver selected and run `tools/run-vrs-mip-pattern.cmd`; upload the complete `panvk_vrs_render_probe.log`. The spatial test intentionally fixes sampling to mip4 (64x64) for every rate, so it checks the repeated-pixel footprint independently of the separately validated implicit-LOD matrix.
 - After the device log passes, proceed to divergent-control-flow/helper-invocation coverage. Do not infer full Vulkan conformance or a game FPS gain from this probe. Preserve the isolated VRS branch and do not modify the Android system/vendor Vulkan driver.
+
+
+## 2026-11-09 — Device result: spatial mip-pattern test expectation corrected
+
+- User supplied `panvk_vrs_render_probe.log` from the verified artifact for source `6e0e4cedab19aa7b52a45d405ef4f250d1bd135e`. Device: Wrapper(Mali-G720 MC7), PanVK Mesa 26.3.0-devel (`git-c027d4d8c7`), Vulkan 1.3.354.
+- The test completed every static and dynamic render/submit/fence/readback path successfully. All seven invocation counts were exact (4096, 2048, 2048, 1024, 512, 512, 256); static/dynamic images matched exactly. X/Y gradients and expected repeated-pixel neighbor counts passed for every rate.
+- Spatial mip identity failed only for rates 1x1, 2x1, 1x2, 2x2. Log data and source review isolate this to a stale expected-level expression: the spatial sampler has `maxLod=4` and the spatial test is explicitly intended to validate footprints at mip4 for every rate, while implicit LOD selection is already separately tested by `CASE_MIP_LOD`. The GPU output is consistent with mip4; no evidence of a PanVK rendering defect.
+- Corrected the probe source on `experiment/g720-dynamic-fsr-sysval`: commit `43e7901ec96de49275e64d09c94ebdc0f675a70e`. Removed obsolete `major`-based expected mip calculation and made expected spatial level explicitly 4 with explanatory comments.
+- Target Windows probe workflow run `42644478495` was queued/in progress when recorded; job `129253906955` had completed setup/checkout and was installing shader compiler/MinGW. Other two workflows also triggered by shared source path filters; don't confuse their outputs with the Windows probe artifact.
+- No PanVK driver change. Await successful Windows probe artifact, then have user rerun `tools/run-vrs-mip-pattern.cmd` in Winlator. Once this test passes, advance to divergent-control-flow/helper-invocation coverage rather than revisiting already-passing rate, derivative, or implicit-LOD tests.
