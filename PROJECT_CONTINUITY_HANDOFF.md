@@ -7835,3 +7835,19 @@ A direct commit comparison confirms the successful CI runs include the latest Pa
 - CI-tested commit: `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`.
 - The CI-tested commit is 45 commits ahead / 0 behind the driver-source commit. Only `docs/G720_CAPABILITY_MATRIX_2026-11-05.md` and `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md` changed between them; no driver source or workflow changed. Thus Android-only run `42215758218` and wrapper run `42215758167` cover the latest source. No rebuild was necessary.
 - The audit clarification is commit `977e22667a38aedc7544e6c332c0363bd733ac24`. This handoff update uses `[skip ci]`.
+
+
+## 2026-11-09 — G720 implicit mip-LOD device validation PASS
+
+- User ran artifact from workflow `42517071053` on device: `Wrapper(Mali-G720 MC7)`, PanVK Mesa `26.3.0-devel (git-c027d4d8c7)`, Vulkan API `1.3.354`.
+- Complete log: `panvk_vrs_render_probe.log`, 29,782 bytes, SHA-256 `a09b5ed9d926ec22ede81ccb3ae9e4681d18cc00ff2fc6236817569b0aabb5b7`.
+- Texture image creation, five-mip staging upload, upload fence, and setup all passed. The log reports `mip texture upload/setup=PASS`.
+- Real implicit GLSL `texture()` sampling (not textureLod) selected the expected solid-color mip signature at the center pixel for all rates, for both static pipeline and dynamic command-buffer FSR:
+  - 1x1 expected mip2: blue RGBA 0,0,255,255; 4096 invocations.
+  - 2x1 and 1x2 expected mip3: yellow RGBA 255,255,0,255; 2048 invocations each.
+  - 2x2 expected mip3: yellow; 1024 invocations.
+  - 4x2 and 2x4 expected mip4: magenta RGBA 255,0,255,255; 512 invocations each.
+  - 4x4 expected mip4: magenta; 256 invocations.
+- Every rate reports static=PASS, dynamic=PASS, static/dynamic=MATCH, and expected invocation count. Final markers: `implicit mip LOD matrix: PASS` and `VRS GPU RENDER PASS`. All render/submit/fence/readback stages in the log succeeded.
+- Together with the earlier derivative-signature matrix, this validates invocation reduction, affine varying derivative scaling, and sampled implicit mip selection for the tested KEEP-only rates. It does not establish full Vulkan conformance, helper-lane/primitive-edge behavior, non-KEEP combiners, implicit anisotropic filtering, or a real-game FPS gain.
+- No PanVK driver source change is warranted from these results. Keep the existing VRS implementation and advertised matrix unchanged pending more targeted coverage. Next useful validation is texture LOD across a spatially varying gradient / non-constant texture and boundary/helper-lane behavior, followed by a controlled in-game performance comparison only after correctness coverage.
