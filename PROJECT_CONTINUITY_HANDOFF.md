@@ -8001,3 +8001,11 @@ Device log uploaded after the spatial mip-pattern package run:
 - Source commit: `c4f091e86c29eae88d2a659813d80b416f95fbf0`.
 - Build workflow run `42645674514` (Build Winlator VRS render probe) was observed in progress for that exact source SHA. Do not use the prior artifact from run `42644478495`; it contains the stale expectation.
 - Next: wait for run `42645674514` to succeed, verify artifact and hashes, then have the user import/run `tools/run-vrs-mip-pattern.cmd` from that newly built package and upload the full log. No PanVK driver source change is indicated by this result.
+
+- Follow-up build completed successfully: workflow run `42645674514`, exact source SHA `c4f091e86c29eae88d2a659813d80b416f95fbf0`.
+- New artifact ID `13685924631`, name `panvk-vrs-render-probe-win64`, size 128,189 bytes.
+- Artifact ZIP SHA-256 independently verified against GitHub digest: `8c70c4cae93e1f12bd8d7b4d284f63e1ca1686fa3a38ce8ce233b309c8812af4`.
+- Executable SHA-256: `5e0526c4735fed05a83647825a210653bf83740dc403a94128a8141d6e9a639b`.
+- ZIP contents inspected: expected executable, all case runners including `tools/run-vrs-mip-pattern.cmd`, and `Run-Dynamic-VRS.cmd`.
+- New artifact URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42645674514/artifacts/13685924631
+- Device action: import/use this new artifact only; run `tools/run-vrs-mip-pattern.cmd` and upload the complete resulting log. The previous artifact from run `42644478495` is stale and must not be reused.
