@@ -1405,3 +1405,14 @@ Use the verified 65,536-default package only, imported as a separate Winlator Ma
 5. Only after the uninstrumented comparison, run a separate `PANVK_DESCRIPTOR_PROFILE=1` diagnostic capture if new descriptor failure counts are needed.
 
 No driver source, allocator policy, heap topology, ring size, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed. The experimental package remains a separate Winlator import; keep the stock System Driver available for rollback.
+
+
+### CI/source ancestry clarification — 2026-11-09 12:59 UTC
+
+A direct GitHub comparison was made to ensure the successful CI run actually contains the last driver-source change:
+
+- Base: latest driver-source commit `a2e5ac142b4f0df71cb28204ece4337bace046de`.
+- Head: CI-tested commit `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`.
+- Result: `b17b98c` is 45 commits ahead and 0 behind `a2e5ac1`; the only changed paths in the comparison are `docs/G720_CAPABILITY_MATRIX_2026-11-05.md` and `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md`. No driver source or workflow changed between them.
+- Therefore Android-only run `42215758218` and wrapper run `42215758167` do cover the latest driver source at `a2e5ac1`; they are not stale relative to that source. This resolves the apparent source/CI snapshot gap in the preceding addendum.
+- No new build was needed or triggered. No source or runtime result changed.
