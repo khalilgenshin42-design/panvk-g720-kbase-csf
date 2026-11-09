@@ -7984,3 +7984,20 @@ A direct commit comparison confirms the successful CI runs include the latest Pa
 - Downloaded ZIP inspected: contains expected executable and `tools/run-vrs-mip-pattern.cmd` (10 files). Exact artifact URL: https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42644478495/artifacts/13687320639.
 - User must rerun `tools/run-vrs-mip-pattern.cmd` using this newer package in Winlator Mali 1.2 / experimental PanVK and upload the full log. Expected outcome: all seven spatial pattern rates pass mip4 identity, gradients, block footprint, static/dynamic image equality, and invocation count.
 - The previous device run did not expose a GPU failure: all render/submit/readback paths succeeded, static/dynamic images matched, and gradients, footprints and invocation counts passed. Only the stale expected-level check failed for four rates. No driver-source change was made.
+
+
+## 2026-11-09 — spatial mip-pattern retest and correction
+
+Device log uploaded after the spatial mip-pattern package run:
+- Device: Wrapper(Mali-G720 MC7), PanVK Mesa 26.3.0-devel git `c027d4d8c7`, Vulkan 1.3.354.
+- All seven rates completed pipeline creation, rendering, queue submission, fence wait, image readback, and cleanup.
+- Invocation counts were exact for all rates: 4096, 2048, 2048, 1024, 512, 512, 256.
+- Static and dynamic images matched exactly at all rates.
+- Spatial X/Y gradients and repeated-pixel block/neighbor checks passed at all rates.
+- Mip marker check failed at 1x1, 2x1, 1x2, and 2x2; passed at 4x2, 2x4, and 4x4.
+- The uploaded log printed expected levels 2, 3, 3, 3, 4, 4, 4. This exposed that the source at commit `43e7901ec96de49275e64d09c94ebdc0f675a70e` still contained the old `major==1?2:(major==2?3:4)` expectation. The earlier continuity note claiming that commit had replaced the expression with fixed level 4 was inaccurate.
+- Spatial texture is 1024x1024, rendered to 64x64, and sampler `maxLod=4`. Its base implicit LOD is already 4 at 1x1; larger VRS rates increase computed LOD but the sampler clamps it to mip 4. Therefore the spatial-footprint test must expect mip 4 for every rate. The separate CASE_MIP_LOD matrix already tests rate-dependent implicit LOD (2/3/4) using its distinct 256x256 texture and sampler.
+- Corrected `tools/panvk_vrs_render_probe_win.c` to use `const uint32_t expected_level=4;` and added a comment distinguishing the fixed-mip spatial footprint test from CASE_MIP_LOD.
+- Source commit: `c4f091e86c29eae88d2a659813d80b416f95fbf0`.
+- Build workflow run `42645674514` (Build Winlator VRS render probe) was observed in progress for that exact source SHA. Do not use the prior artifact from run `42644478495`; it contains the stale expectation.
+- Next: wait for run `42645674514` to succeed, verify artifact and hashes, then have the user import/run `tools/run-vrs-mip-pattern.cmd` from that newly built package and upload the full log. No PanVK driver source change is indicated by this result.
