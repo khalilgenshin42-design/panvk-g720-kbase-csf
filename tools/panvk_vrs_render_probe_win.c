@@ -1296,7 +1296,94 @@ main(int argc, char **argv)
                 free(static_pixels);free(dynamic_pixels);
              }
              LOG("implicit mip LOD matrix: %s\\n",mip_matrix_pass?"PASS":"FAIL");
-             passed=mip_matrix_pass;
+
+             /*
+              * Probe nearest-mipmap selection around the half-integer LOD
+              * boundaries using sampler mipLodBias. At base LOD 2/3, +/-0.49
+              * must retain the current mip while +/-0.51 crosses to its
+              * neighbour. This distinguishes correct implicit LOD from a
+              * path that merely happens to return the expected integer mip.
+              */
+             int bias_matrix_pass=1;
+             if (props.properties.limits.maxSamplerLodBias < 0.51f) {
+                LOG("SKIP: maxSamplerLodBias=%.3f is below required 0.51\\n",
+                    props.properties.limits.maxSamplerLodBias);
+                bias_matrix_pass=0;
+             } else {
+                PFN_vkCreateSampler create_bias_sampler =
+                   (PFN_vkCreateSampler)get_device_proc_addr(device,"vkCreateSampler");
+                PFN_vkDestroySampler destroy_bias_sampler =
+                   (PFN_vkDestroySampler)get_device_proc_addr(device,"vkDestroySampler");
+                static const float biases[]={-0.51f,-0.49f,0.49f,0.51f};
+                static const VkExtent2D bias_rates[]={{1,1},{2,1}};
+                for(uint32_t rr=0;rr<2;rr++) {
+                   VkExtent2D rate=bias_rates[rr];
+                   uint32_t base_level=rr==0?2:3;
+                   for(uint32_t bi=0;bi<4;bi++) {
+                      float bias=biases[bi];
+                      int expected_level=(int)base_level+(bias < -0.5f ? -1 :
+                                                               (bias > 0.5f ? 1 : 0));
+                      VkSampler bias_sampler=VK_NULL_HANDLE;
+                      VkSamplerCreateInfo bias_sci={
+                         .sType=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                         .magFilter=VK_FILTER_NEAREST,
+                         .minFilter=VK_FILTER_NEAREST,
+                         .mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                         .addressModeU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                         .addressModeV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                         .addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                         .mipLodBias=bias,.minLod=0.0f,.maxLod=4.0f,
+                         .borderColor=VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+                      };
+                      int sampler_ok=create_bias_sampler&&destroy_bias_sampler&&
+                         create_bias_sampler(device,&bias_sci,NULL,&bias_sampler)==VK_SUCCESS;
+                      if(!sampler_ok) {
+                         LOG("mip bias boundary %ux%u bias=%.2f sampler=FAIL\\n",
+                             rate.width,rate.height,bias);
+                         bias_matrix_pass=0;
+                         continue;
+                      }
+                      VkDescriptorImageInfo bias_image_info={
+                         .sampler=bias_sampler,.imageView=mip_view,
+                         .imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                      };
+                      VkWriteDescriptorSet bias_write={
+                         .sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                         .dstSet=invocation_set,.dstBinding=1,.descriptorCount=1,
+                         .descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                         .pImageInfo=&bias_image_info,
+                      };
+                      update_descriptor_sets(device,1,&bias_write,0,NULL);
+                      uint8_t *sp=malloc(IMAGE_BYTES),*dp=malloc(IMAGE_BYTES);
+                      uint32_t si=0,di=0;
+                      int sok=sp&&render_rate(device,&mem_props,get_device_proc_addr,
+                         queue,qf,format,rp,pl,vs,fs_mip,keep,keep,rate,false,
+                         invocation_set,invocation_buffer,invocation_mem,&si,sp);
+                      int dok=sok&&dp&&render_rate(device,&mem_props,get_device_proc_addr,
+                         queue,qf,format,rp,pl,vs,fs_mip,keep,keep,rate,true,
+                         invocation_set,invocation_buffer,invocation_mem,&di,dp);
+                      uint32_t sbad=0,dbad=0;
+                      if(sok&&dok) for(uint32_t px=0;px<W*H;px++) {
+                         if(memcmp(&sp[px*4],signatures[expected_level],4))sbad++;
+                         if(memcmp(&dp[px*4],signatures[expected_level],4))dbad++;
+                      }
+                      int spass=sok&&sbad==0, dpass=dok&&dbad==0;
+                      int match=sok&&dok&&!memcmp(sp,dp,IMAGE_BYTES)&&si==di;
+                      LOG("mip bias boundary %ux%u bias=%+.2f expected-level=%d static=%s(%u bad) dynamic=%s(%u bad) static/dynamic=%s invocations=%u/%u\\n",
+                          rate.width,rate.height,bias,expected_level,
+                          spass?"PASS":"FAIL",sbad,dpass?"PASS":"FAIL",dbad,
+                          match?"MATCH":"MISMATCH",si,di);
+                      bias_matrix_pass &= spass&&dpass&&match;
+                      free(sp);free(dp);
+                      /* The queue is fence-complete before this sampler is destroyed. */
+                      update_descriptor_sets(device,1,&image_write,0,NULL);
+                      destroy_bias_sampler(device,bias_sampler,NULL);
+                   }
+                }
+             }
+             LOG("implicit mip LOD bias-boundary matrix: %s\\n",
+                 bias_matrix_pass?"PASS":"FAIL");
+             passed=mip_matrix_pass&&bias_matrix_pass;
           } else if (probe_case == CASE_DYNAMIC_ISOLATION) {
              uint8_t *constant_static = malloc(IMAGE_BYTES);
              uint8_t *constant_dynamic = malloc(IMAGE_BYTES);
