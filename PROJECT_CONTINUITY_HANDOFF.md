@@ -1,12 +1,12 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-10 12:56 UTC
+Last updated: 2026-11-10 12:57 UTC
 
 ## Authoritative current state — 2026-11-10
 
 This section supersedes older "next steps", queued-CI, and "no code changed" statements in the historical addenda below. Keep the historical record, but use the branch-specific state here when deciding what is current.
 
-- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file. Its pre-this-pass HEAD is `dc7ef23bd6738654ffedc404fe7c78a653e69a54`. This monitoring update uses `[skip ci]`.
-- Current task branch: `experiment/g720-performance-audit`. Its pre-this-pass HEAD is `05da2a13d95aa914e2dcd9b51906c0325302fe6a`; it remains documentation-only beyond driver-source commit `a2e5ac142b4f0df71cb28204ece4337bace046de`. The latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`; Android-only run `42215758218` and wrapper run `42215758167` still pass. GitHub compare confirms 57 commits ahead / 0 behind from the driver-source commit, with only the capability matrix and performance-audit documentation paths changed. The 2026-11-10 12:55 UTC monitoring update records the current job and artifact revalidation.
+- Canonical continuity branch: `docs/project-continuity-handoff-2026-11-03`. It remains the only branch containing the root handoff file. Its pre-this-pass HEAD was `dc7ef23bd6738654ffedc404fe7c78a653e69a54`; current HEAD after this documentation update is `37dd8af8ee393258058e84c09c4551ab4f89fdea`. These monitoring updates use `[skip ci]`.
+- Current task branch: `experiment/g720-performance-audit`. Its pre-this-pass HEAD was `05da2a13d95aa914e2dcd9b51906c0325302fe6a`; current HEAD after this documentation update is `218739b263c8e8d17ac0d8dd5018f4d8067e28b4`. It remains documentation-only beyond driver-source commit `a2e5ac142b4f0df71cb28204ece4337bace046de`. The latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`; Android-only run `42215758218` and wrapper run `42215758167` still pass. GitHub compare now confirms 58 commits ahead / 0 behind from the driver-source commit, with only the capability matrix and performance-audit documentation paths changed. The 2026-11-10 12:55 UTC monitoring update records the current source audit, CI, and artifact revalidation.
 - Separate 4x heap-threshold candidate: `experiment/g720-heap-renew-262k`, HEAD `8d6ec93a0d3435d2a08c8a62eb478cb9a207d2f7`. It changes the compiled default from 65,536 to 262,144; it is not an environment-variable propagation test.
 - Separate descriptor-heap implementation: `experiment/g720-descriptor-heaps`, HEAD `04947cb94a9987bbe8f6b98d63142a5b64b1abf3`. Its exact-head Android and wrapper builds now pass; the package is independently audited below. No device runtime test has been performed.
 - Separate clip/cull work: `experiment/g720-clip-cull-capabilities`, HEAD `9188e7bf92a032431ca16ac02d54d81be5a5e12e`. Android, wrapper, and NIR compiler-test workflows pass; feature exposure remains disabled pending full stage-path validation.
