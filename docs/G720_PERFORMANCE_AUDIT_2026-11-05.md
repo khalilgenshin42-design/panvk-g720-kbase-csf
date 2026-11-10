@@ -1459,3 +1459,53 @@ A direct GitHub comparison was made to ensure the successful CI run actually con
 - Android-only package's next gate is a controlled import through Winlator Mali's separate custom-driver importer, followed by device Vulkan initialization/device creation and stability logs. No device-runtime result is implied by CI.
 - Wrapper dependency closure remains unverified.
 - No source code, workflow, allocator policy, Kbase ABI, kernel, or Android system/vendor driver was changed. This update is documentation-only and uses `[skip ci]`; no new workflow was triggered.
+
+
+## 2026-11-10 12:55 UTC — scheduled source, CI, and package revalidation
+
+### Branch and source provenance
+
+- Re-read this audit and the canonical `PROJECT_CONTINUITY_HANDOFF.md` before inspecting the repository.
+- Performance-audit branch HEAD before this documentation update: `05da2a13d95aa914e2dcd9b51906c0325302fe6a` (commit message: `docs: record 2026-11-10 PanVK build monitoring [skip ci]`). The documentation branch HEAD before its update: `dc7ef23bd6738654ffedc404fe7c78a653e69a54`.
+- Latest PanVK driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`. Comparing it with the performance-audit HEAD reports 57 commits ahead / 0 behind; the only changed paths are `docs/G720_CAPABILITY_MATRIX_2026-11-05.md` and this performance-audit document. No PanVK source or workflow file changed after the tested source snapshot.
+- Latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`.
+
+### Source audit: descriptor failure classification
+
+- Re-read `src/panfrost/vulkan/panvk_vX_descriptor_set.c` and `src/panfrost/vulkan/panvk_descriptor_set_layout.h` at the active branch.
+- The three failure categories are present and each failed allocation path increments exactly one category plus the aggregate:
+  - `overflow`: variable descriptor-count arithmetic overflow or final descriptor count above `UINT32_MAX`; existing result remains `VK_ERROR_OUT_OF_POOL_MEMORY`.
+  - `capacity`: no free set slot or insufficient descriptor heap free bytes; existing result remains `VK_ERROR_OUT_OF_POOL_MEMORY`.
+  - `vma`: `util_vma_heap_alloc()` returns zero; existing result remains `VK_ERROR_FRAGMENTED_POOL`.
+- The layout's `desc_count` and binding counts are `unsigned` (32-bit on the Android target). The variable-count path asserts `base_descs <= num_descs`, so `adjusted_descs` cannot exceed the original 32-bit layout count before the `UINT32_MAX - adjusted_descs` check. Non-inline variable descriptor multiplication is promoted to `uint64_t`. No arithmetic-underflow defect was found in this path under its current invariants.
+- Counters use relaxed atomics and are process-global. `panvk_desc_profile_dump()` logs on each failure, so keep `PANVK_DESCRIPTOR_PROFILE=1` strictly to a separate diagnostic run; it is not suitable for FPS measurement. No allocation policy, descriptor layout, or Vulkan return code was changed.
+
+### Source audit: heap renewal threshold semantics
+
+- `kbase_tiler_heap_renew_work()` still reads `PANVK_KBASE_HEAP_RENEW_WORK` once via `debug_get_num_option()`, with compiled default `KBASE_TILER_HEAP_RENEW_WORK=65536`, and logs the effective value.
+- The call site guards work-triggered renewal with `renew_work && queue->kbase_tiler_work_count >= renew_work`; an effective value of zero disables the work trigger rather than renewing every submission.
+- The separate interval trigger remains enabled by default at 128 tiler submissions. Its independent override is `PANVK_KBASE_HEAP_RENEW_INTERVAL`; leave it unset during the work-threshold A/B test.
+- The work threshold is cached on first use. Set the environment variable before the first Kbase queue submission and restart the game/container process between variants.
+
+### CI status
+
+- Android-only [run 42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218), source `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`: SUCCESS; job `127885224447`, all 15 steps completed successfully.
+- Android wrapper [run 42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167), same source: SUCCESS; Release job `127885224388` and Debugoptimized job `127885224836`, all 12 steps in each completed successfully.
+- The branch-filtered Actions listing returned 125 runs; the newest Android-only and wrapper runs for this branch remain the two above. No newer performance-audit build was found. No build was triggered by this documentation-only update.
+
+### Newly attached package recheck
+
+- The newly attached `PanVK-G720-65k-env-override-test.zip` is byte-for-byte the already recorded 65K-default package: SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`.
+- ZIP integrity passes. It contains exactly `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`; all three embedded member checksums pass.
+- Metadata identifies `26.3.0-devel-android-kbase-fb70e9b5cf8b`, minimum Android API 30, and explicitly labels the package experimental/non-conformant with device/game compatibility unverified.
+- Both libraries are ELF64 AArch64. The driver has RUNPATH `$ORIGIN` and NEEDED `libpanvk_drm.so`; the private libdrm library has SONAME `libpanvk_drm.so` and depends only on Android `libc.so`.
+- This is static/package verification only. It does not establish Winlator import, runtime initialization, Kbase ABI compatibility, WSI correctness, or game performance.
+
+### Benchmark and device gate
+
+- No new Tomb Raider benchmark log was attached. The available Tomb Raider archive remains the 2026-11-05 02:03:50 capture; no new FPS or telemetry data can be inferred from the repeated package upload.
+- Retain the documented results without reinterpretation: clean 65,536 baseline 9.0 / 17.6 / 13.5 FPS; 262,144 compiled-default candidate 7.8 / 18.9 / 13.9 FPS (one run each, inconclusive); 7.7 / 19.7 / 13.6 FPS was instrumented and is diagnostic only. No FPS improvement is claimed.
+- Use this 65K-default package for the environment-propagation test: first run with `PANVK_KBASE_HEAP_RENEW_WORK` absent and require the startup log to show 65536; then restart with exactly `PANVK_KBASE_HEAP_RENEW_WORK=262144` set before first Kbase submission and require 262144. If the second log is absent or remains 65536, the override was not demonstrated and the run is invalid for comparison.
+- Keep all profiling variables unset in both performance runs. Match the Tomb Raider scene/settings, DXVK 1.7.2, wrapper, resolution, and thermal starting conditions; record min/max/average, frame pacing, visual correctness, stability, and teardown. Collect descriptor-category counts only in a separate `PANVK_DESCRIPTOR_PROFILE=1` diagnostic run.
+
+No driver source, allocator policy, heap topology, ring sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor Vulkan driver was changed. The experimental package remains a separate Winlator import.
