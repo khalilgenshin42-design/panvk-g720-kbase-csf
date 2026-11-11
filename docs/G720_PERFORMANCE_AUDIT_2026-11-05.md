@@ -1509,3 +1509,42 @@ A direct GitHub comparison was made to ensure the successful CI run actually con
 - Keep all profiling variables unset in both performance runs. Match the Tomb Raider scene/settings, DXVK 1.7.2, wrapper, resolution, and thermal starting conditions; record min/max/average, frame pacing, visual correctness, stability, and teardown. Collect descriptor-category counts only in a separate `PANVK_DESCRIPTOR_PROFILE=1` diagnostic run.
 
 No driver source, allocator policy, heap topology, ring sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor Vulkan driver was changed. The experimental package remains a separate Winlator import.
+
+
+## 2026-11-11 12:08 UTC — scheduled active-branch CI and artifact revalidation
+
+### Branch and source provenance
+- Re-read this handoff and the performance audit at their requested branches before monitoring.
+- Pre-update branch heads: `docs/project-continuity-handoff-2026-11-03` = `15acf3c5b3a9bdfa3827082cc9754b27c8037593`; `experiment/g720-performance-audit` = `218739b263c8e8d17ac0d8dd5018f4d8067e28b4`.
+- The latest driver-source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`; latest CI-tested source snapshot remains `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`. No newer relevant Android-only or Android-wrapper run is present on the active branch. The latest relevant runs remain the 2026-11-06 runs below.
+- The active branch HEAD is a documentation-only update after the tested source snapshot; no new driver build was triggered or inferred.
+
+### Latest active-branch Actions
+- Branch-filtered Actions listing returned 125 runs; newest relevant Android-only and wrapper entries remain run `42215758218` and `42215758167`. The originally tracked 41947103034 / 41947103085 are superseded.
+- Android-only [run 42215758218](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758218), job `127885224447`, source `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24`: completed SUCCESS. All 15 returned steps completed: job setup, selected-branch checkout and verification, Python/dependencies, host tools, Android ARM64 libdrm, Meson configuration, compile/stage, driver/manifest/dependency audit, flat package creation, artifact upload, post steps, and completion. Pending 0; failed 0.
+- Android wrapper [run 42215758167](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167), same source:
+  - Release job `127885224388`: SUCCESS; all 12 returned steps completed, including checkout, `memfd_create` compatibility patch, Python/dependencies, host tools, Meson configuration, compilation, upload, cleanup, and completion. Pending 0; failed 0.
+  - Debugoptimized job `127885224836`: SUCCESS; all 12 returned steps completed. Pending 0; failed 0.
+- No job failed or remained pending. No failure-log investigation was needed. No build was triggered during this monitoring pass.
+
+### Fresh artifact download and validation
+
+**Android-only artifact 13501237590**
+- GitHub reports 16,753,940 bytes, not expired, expires 2027-02-04. Freshly downloaded ZIP integrity passes. Its SHA-256 is `f5e58163b3caf3f9fa5791dedf56ade82fd87d17dcfdb42722cd846e51ed825a`, matching GitHub's artifact digest.
+- Outer ZIP contains 28 files, including the staged install, audit reports, and nested `PanVK-G720-experimental.zip`. The nested flat package SHA-256 is `14f7b13ab1735daffd31a0723c1f6d949155e5c6570f1980f98291cb54383e86`; ZIP integrity passes.
+- Inner flat package contains exactly `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`. All three embedded member hashes independently match: driver `362ad05b978c673b82bf1e66b4ab553f8ea79154c8c5a0a6731b65648359bfb1`; private libdrm `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`; metadata `064c52b79a1d0dc14aab89fa98857d4a905c2167c41d7ee28536b81337b82e81`.
+- Metadata is valid JSON, version `26.3.0-devel-android-kbase-b17b98cef92f`, minimum API 30, and explicitly labels the driver experimental/non-conformant with device/game compatibility unverified.
+- Inner driver and private libdrm are ELF64 AArch64 Android API 30. The flat driver RUNPATH is `$ORIGIN` and its private `libpanvk_drm.so` dependency is bundled; that library needs only Android `libc.so`.
+- The outer staged install includes `stage/usr/android_stub/libdrm.so`, the staged driver, and a valid ICD manifest at `stage/usr/local/share/vulkan/icd.d/panfrost_icd.aarch64.json`. Manifest API is `1.4.354`, architecture 64, path `/usr/local/lib/libvulkan_panfrost.so`. Staged ELF files are AArch64. The 24 listed undefined DRM symbols resolve against the bundled stub's defined-symbol set; `missing-drm-symbols.txt` is empty.
+- Classification: **build passed; outer staged artifact and inner flat package statically/package validated**. No Winlator import, device runtime, Kbase compatibility, Vulkan conformance, WSI, or game-performance claim is made.
+
+**Android-wrapper artifacts**
+- Release artifact [13502135385](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167/artifacts/13502135385): 4,288,169 bytes; fresh ZIP SHA-256 `5647fe999a9225123116118eb26ef91f277eef38d4ea2c2a29e98e965d3b0f04`, matching GitHub digest. Its sole member `libvulkan_panfrost.so` SHA-256 is `edce8b3dd4fea68ffda7e44622d4c778cdaf0a22fc219cc2b4368335060aa80a`.
+- Debugoptimized artifact [13502061037](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42215758167/artifacts/13502061037): 50,663,624 bytes; fresh ZIP SHA-256 `fcd0b4d2dcba93c67f3c09dedb6cdc4ab843cd7eef45f34813e90916adbd4159`, matching GitHub digest. Its sole member `libvulkan_panfrost.so` SHA-256 is `eebdc6229236e4c91204bd01148409c2b91c71977d1cf71a44a25181b3617477`.
+- Both ZIPs pass integrity checks. Both libraries are ELF64 AArch64 Android API 30. Both use RUNPATH `$ORIGIN/../../android_stub` and need `libdrm.so`, `libxcb.so.1`, `libX11-xcb.so.1`, `libxcb-dri3.so.0`, `libxcb-present.so.0`, `libxcb-xfixes.so.0`, `libxcb-sync.so.1`, `libxcb-randr.so.0`, `libxcb-shm.so.0`, and `libxshmfence.so.1`, in addition to Android platform libraries.
+- Each ZIP contains only the ELF. Neither includes the referenced Android stub, X11/XCB dependency closure, ICD manifest, or checksum manifest. Classification: **build passed; raw ELF and ABI verified; complete package/dependency closure not validated**.
+
+### Blockers and safety
+- Android-only: next gate is controlled import of the inner flat ZIP through Winlator Mali's separate custom-driver importer, followed by Vulkan initialization, device creation, and runtime stability capture.
+- Wrapper: dependency closure and runtime layout remain unresolved/unverified; do not describe either wrapper ZIP as a standalone import package.
+- No source code, workflow, allocator policy, Kbase ABI, kernel, or Android system/vendor Vulkan driver was changed. This monitoring update is documentation-only and uses `[skip ci]`; no new build was triggered.
