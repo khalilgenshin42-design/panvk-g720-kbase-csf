@@ -1548,3 +1548,33 @@ No driver source, allocator policy, heap topology, ring sizing, shader schedulin
 - Android-only: next gate is controlled import of the inner flat ZIP through Winlator Mali's separate custom-driver importer, followed by Vulkan initialization, device creation, and runtime stability capture.
 - Wrapper: dependency closure and runtime layout remain unresolved/unverified; do not describe either wrapper ZIP as a standalone import package.
 - No source code, workflow, allocator policy, Kbase ABI, kernel, or Android system/vendor Vulkan driver was changed. This monitoring update is documentation-only and uses `[skip ci]`; no new build was triggered.
+
+
+
+## 2026-11-11 13:09 UTC — uploaded package provenance and Tomb Raider archive recheck
+
+### Branch/source provenance
+- Pre-update heads: `experiment/g720-performance-audit` = `218739b263c8e8d17ac0d8dd5018f4d8067e28b4`; `docs/project-continuity-handoff-2026-11-03` = `15acf3c5b3a9bdfa3827082cc9754b27c8037593`.
+- Current PanVK source commit remains `a2e5ac142b4f0df71cb28204ece4337bace046de`; active performance-audit HEAD remains documentation-only after it. GitHub compare from `a2e5ac14` to CI snapshot `b17b98cef92ff24b0ecb4e72fd1bd0d39b2a4a24` is 45 commits ahead / 0 behind, with only `docs/G720_CAPABILITY_MATRIX_2026-11-05.md` and this audit document changed.
+- The newly uploaded `PanVK-G720-experimental-396c924.zip` identifies package version `26.3.0-devel-android-kbase-396c924ccccb`. Commit `396c924ccccb07b15b429b5cdc82fd9318374664` is an ancestor of the current source commit; compare reports 10 commits ahead / 0 behind to `a2e5ac14`. The only driver source files changed in that interval are `panvk_vX_gpu_queue.c` (+2 lines for the effective threshold log) and `panvk_vX_descriptor_set.c` (+25/-4 for failure classification).
+- Consequently, the 396c924 package is stale for the current experiment: it contains the `PANVK_KBASE_HEAP_RENEW_WORK` option string but not the effective-threshold startup log, and its descriptor profile format contains only aggregate `set_failures`, without `overflow/capacity/vma` counters. Do not use it for the controlled threshold A/B or the descriptor-category diagnostic.
+- The current 65K package remains the correct candidate. Its version is `26.3.0-devel-android-kbase-fb70e9b5cf8b`; it contains both the threshold log and the expanded descriptor-profile format. The re-upload is byte-identical to the already audited package.
+
+### Uploaded package validation
+- `PanVK-G720-experimental-396c924.zip` SHA-256: `2f82639a4c1a8ccf60c264f9a754edf0c10d75cad352487587648b328c3ff00a`. ZIP integrity and all three embedded member checksums pass. Four expected members are present: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, `SHA256SUMS`.
+- Its driver is ELF64 AArch64 Android API 30, build ID `f82887f99420283de47618241282efb519cc0ed4`, RUNPATH `$ORIGIN`, and depends on the bundled `libpanvk_drm.so`. All 24 undefined DRM symbols resolve against the private library's exports. This is static package validation only; no runtime compatibility is inferred.
+- Re-uploaded 65K package SHA-256 remains `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`; driver build ID `fe696905a32984ab33360d6ffdd298efd050d94c`. Its ZIP/member checksums, AArch64/API 30 metadata, `$ORIGIN` RUNPATH, and all 24 DRM-symbol resolutions pass. This is still not a device-runtime result.
+
+### Tomb Raider archive recheck
+- The attached `TombRaider_logs_2026-11-05_02-03-50.zip` is the existing 2026-11-05 02:03 capture, SHA-256 `6f54b17e422795673411dfc3106a184922ea283024801f1e257ed5dbd9f68a56`; it contains the same four logs and no new benchmark run.
+- DXVK is 1.7.2 and the Vulkan device is `Wrapper(Mali-G720 MC7)`; DXVK reports four compiler threads. The final cumulative Kbase snapshot reports 16,160 submits; 68,077 waits; zero wait timeouts/errors; 41,704 ring jobs; zero ring wraps; 1.8 KiB sampled occupancy high-water; 4,068 heap renewals (4,066 work-triggered, 2 interval-triggered); 52,804.121 ms aggregate renewal wait and 61,272.081 ms total renewal time.
+- Final transient-pool snapshot: 8,817,664 allocation calls; 46,981.32 MiB cumulative requested; zero allocation failures; 145,499 small-BO reuses; 2,680 large-BO reuses; 680 BO creates / 539.07 MiB cumulative created; zero BO creation failures; 42 MiB largest BO.
+- Final descriptor snapshot remains aggregate-only: 9 pools / 4.43 MiB requested / 1.40 MiB largest; zero pool failures; 596,561 set allocations / 85.30 MiB requested; 299 set allocation failures. The archive has no effective-threshold log and no category breakdown. Its descriptor log format is the pre-split format; it cannot classify those 299 failures.
+- The archive ends with `VK_ERROR_SURFACE_LOST_KHR`, a destroyed-mutex FORTIFY report, and Wine's `vkWaitForFences` assertion during teardown. Preserve this as a stability/teardown issue to investigate separately; the capture does not establish that it caused the measured frame rate.
+- No new FPS measurement was supplied. Keep 7.7 / 19.7 / 13.6 FPS classified as instrumented diagnostic data; clean 65K 9.0 / 17.6 / 13.5 and the single 262K compiled-default 7.8 / 18.9 / 13.9 remain inconclusive. No FPS gain is claimed.
+
+### CI and next gate
+- Latest active-branch CI remains Android-only run `42215758218` (SUCCESS, 15/15 steps) and wrapper run `42215758167` (SUCCESS, Release and Debugoptimized, 12/12 steps each), both on `b17b98c`. No newer performance-audit Android build was found; this update triggers no CI because it is documentation-only.
+- Use only the verified 65K-default package for the environment test. With the variable absent, require `tiler heap renewal work threshold=65536`; restart the process with exactly `PANVK_KBASE_HEAP_RENEW_WORK=262144` set before first Kbase submission and require `262144`. If missing or still 65536, the override is not proven.
+- Keep all profiling variables unset for both matched FPS runs. Then run a separate `PANVK_DESCRIPTOR_PROFILE=1` diagnostic to obtain overflow/capacity/VMA counts. Do not use the 396c924 package for either test.
+- No driver source, allocator policy, heap topology, ring size, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed.
