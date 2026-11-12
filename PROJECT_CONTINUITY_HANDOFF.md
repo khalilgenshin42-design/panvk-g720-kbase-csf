@@ -1,5 +1,5 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-12 12:46 UTC
+Last updated: 2026-11-12 13:02 UTC
 
 ## Authoritative current state — 2026-11-10
 
@@ -8175,3 +8175,16 @@ Device log uploaded after the spatial mip-pattern package run:
 - Android-only: controlled import of the inner flat ZIP through Winlator Mali's separate custom-driver importer, followed by Vulkan initialization, device creation, and stability capture.
 - Wrapper: establish or verify the complete dependency layout in its intended runtime before packaging it as a complete import.
 - No source code, workflow, allocator policy, Kbase ABI, kernel, or Android system/vendor Vulkan driver was changed. This is documentation-only; preserve the stock System Driver as fallback.
+
+
+## 2026-11-12 13:02 UTC — descriptor failure classification refinement
+
+- Re-read this handoff and the performance audit before continuing. The latest performance-audit source commit is `64c43833ae5e5f8e7f7a27e872a1ac5449188aee`; the preceding source commits are `b91fa8e0ff114f002b438026671b2bc3595430ca` and `07725210d9b463496e5974b4a2d4315bfafa6df4`.
+- Descriptor allocation diagnostics now use five mutually exclusive failure buckets: overflow; no free descriptor-set slot only; insufficient descriptor-heap capacity only; both capacity guards simultaneously; and VMA allocation failure. This corrects the earlier precedence ambiguity where a no-free-set condition could mask simultaneous heap exhaustion.
+- The aggregate set-allocation failure counter remains. For failure paths in `panvk_desc_pool_allocate_set()`, it should equal the sum of the five buckets. Existing Vulkan return codes and allocation semantics are unchanged.
+- The final refinement in `64c43833` performs the extra heap-capacity read only after an allocation failure and only when `PANVK_DESCRIPTOR_PROFILE=1` is enabled. The uninstrumented successful allocation path retains its prior short-circuit behavior. Per-failure profile logging remains diagnostic-only.
+- Exact-head CI for `b91fa8e` passed: Android-only run `43221907435`; wrapper run `43221907406` passed Release and Debugoptimized. Builds for final source HEAD `64c43833` were pending at the 2026-11-12 13:02 UTC check: Android-only run `43223244479`; wrapper run `43223244570`. Do not distribute a new package until both exact-head workflows pass and the Android artifact is independently verified.
+- The re-uploaded `PanVK-G720-65k-env-override-test.zip` is still the prior package, SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`. It includes the threshold log and 65,536 compiled default but predates the five-bucket descriptor counters. It can support threshold propagation testing, but not the new descriptor-category diagnostic; prefer the latest exact-head package once CI completes.
+- No new Tomb Raider benchmark log or FPS measurement was attached. The available archive remains the 2026-11-05 02:03:50 capture. Keep clean 65K 9.0 / 17.6 / 13.5 FPS, single 262K compiled-default 7.8 / 18.9 / 13.9 FPS, and instrumented 7.7 / 19.7 / 13.6 FPS unchanged and inconclusive. The old 299 descriptor failures cannot be classified retroactively.
+- Next device gate: use the exact-head 65K-default package after CI passes. Run the threshold A/B with profiling variables unset (65536 absent-variable control, then 262144 override set before first Kbase submission and verified by the startup log). Then run a separate `PANVK_DESCRIPTOR_PROFILE=1` diagnostic and report all five category counters plus aggregate failures.
+- No allocator policy, heap topology, ring sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed. The experimental driver remains a separate Winlator custom import.
