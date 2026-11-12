@@ -1602,3 +1602,28 @@ No driver source, allocator policy, heap topology, ring sizing, shader schedulin
 - Next Android-only gate: controlled Winlator Mali custom-driver import of the inner flat ZIP, then Vulkan initialization, device creation, and stability testing.
 - Wrapper dependency closure must be supplied or proven by the target runtime before either ZIP is treated as a complete package.
 - No source, workflow, allocator policy, Kbase ABI, kernel, or system/vendor Vulkan driver change. No device runtime result is inferred from CI.
+
+
+## 2026-11-12 13:02 UTC — descriptor failure buckets made mutually exclusive
+
+### Source changes
+- Source commit `b91fa8e0ff114f002b438026671b2bc3595430ca` split the former combined descriptor-capacity failure bucket into no-free-set and descriptor-heap-capacity conditions. Its Android-only run `43221907435` and wrapper run `43221907406` both completed successfully; Release and Debugoptimized wrapper jobs passed.
+- Review identified a classification ambiguity: both guards can be true for the same allocation (the set-slot bitmap can be exhausted while the descriptor heap also lacks the requested range). The first split used no-free-set precedence and would hide the simultaneous heap-capacity condition.
+- Commit `07725210d9b463496e5974b4a2d4315bfafa6df4` added an explicit combined-capacity bucket. The resulting mutually exclusive diagnostic categories are: overflow, no-free-set only, heap-capacity only, both capacity conditions, and VMA allocation failure. The aggregate `set_alloc_failures` counter remains and, for paths in this function, should equal the sum of those five buckets.
+- Commit `64c43833ae5e5f8e7f7a27e872a1ac5449188aee` moved the second heap-capacity read inside the profiling-enabled failure branch. The uninstrumented allocation fast path retains the original short-circuit guard and does not perform an additional `free_size` read. This keeps the diagnostic refinement out of successful allocation hot paths.
+- All changes are opt-in telemetry only. Descriptor allocation policy, heap layout, Vulkan result codes, VMA behavior, and object lifetime are unchanged. Profiling still logs on each failure and must be used only in a separate diagnostic run.
+
+### CI status
+- The source commit `b91fa8e` passed Android-only run `43221907435` and wrapper run `43221907406` (Release and Debugoptimized).
+- Latest source HEAD is `64c43833ae5e5f8e7f7a27e872a1ac5449188aee`. Its Android-only run `43223244479` and wrapper run `43223244570` were still in progress at the 13:02 UTC check. Do not package or recommend the latest counters until these exact-head builds pass and the Android artifact is inspected.
+- The previous 65K package hash `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72` was re-uploaded again and is byte-identical to the prior package. It has the effective threshold log but predates the five-bucket descriptor profile; it remains usable for the threshold-only test, not for the new category diagnostic. Prefer the latest exact-head package once CI completes.
+
+### Benchmark and device evidence
+- No new Tomb Raider log or FPS result was supplied. The only mounted Tomb Raider archive remains `TombRaider_logs_2026-11-05_02-03-50.zip`; the newly attached file is the repeated 65K driver package.
+- Keep the measured results unchanged: clean 65K baseline 9.0 / 17.6 / 13.5 FPS; one 262K compiled-default run 7.8 / 18.9 / 13.9 FPS; instrumented diagnostic 7.7 / 19.7 / 13.6 FPS. These remain inconclusive and the instrumented result is not a clean comparator. No FPS gain is claimed.
+- The old archive's 299 descriptor allocation failures cannot be retrospectively classified. A new run with the five-bucket build and `PANVK_DESCRIPTOR_PROFILE=1` is required. Do not enable descriptor profiling in the threshold A/B performance runs.
+
+### Next step and safety
+- Wait for Android-only and both wrapper builds at `64c43833` to pass. Independently verify the exact-head Android package, then use that 65K-default package for the threshold A/B and a separate descriptor diagnostic.
+- For the A/B, restart between variants; with `PANVK_KBASE_HEAP_RENEW_WORK` absent require the log value 65536, then set exactly 262144 before the first Kbase submission and require 262144. Keep all profiling variables unset for both FPS runs.
+- No allocator policy, heap topology, ring sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed. Keep the experimental driver as a separate Winlator custom import.
