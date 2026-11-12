@@ -42,8 +42,8 @@
 struct panvk_desc_profile_stats {
    uint64_t pool_creates, pool_create_bytes, pool_create_failures;
    uint64_t pool_max_bytes, set_allocs, set_alloc_bytes, set_alloc_failures;
-   uint64_t set_alloc_overflow_failures, set_alloc_capacity_failures;
-   uint64_t set_alloc_vma_failures;
+   uint64_t set_alloc_overflow_failures, set_alloc_no_free_set_failures;
+   uint64_t set_alloc_heap_capacity_failures, set_alloc_vma_failures;
 };
 static struct panvk_desc_profile_stats panvk_desc_profile;
 
@@ -77,7 +77,8 @@ panvk_desc_profile_dump(void)
    mesa_logi("descriptor profile: pools=%" PRIu64
              " requested_MiB=%.2f max_pool_MiB=%.2f pool_failures=%" PRIu64
              " set_allocs=%" PRIu64 " set_alloc_MiB=%.2f set_failures=%" PRIu64
-             " (overflow=%" PRIu64 " capacity=%" PRIu64 " vma=%" PRIu64 ")",
+             " (overflow=%" PRIu64 " no_free_set=%" PRIu64
+             " heap_capacity=%" PRIu64 " vma=%" PRIu64 ")",
              panvk_desc_profile_read(&panvk_desc_profile.pool_creates),
              panvk_desc_profile_read(&panvk_desc_profile.pool_create_bytes) /
                 (1024.0 * 1024.0),
@@ -89,7 +90,8 @@ panvk_desc_profile_dump(void)
                 (1024.0 * 1024.0),
              panvk_desc_profile_read(&panvk_desc_profile.set_alloc_failures),
              panvk_desc_profile_read(&panvk_desc_profile.set_alloc_overflow_failures),
-             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_capacity_failures),
+             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_no_free_set_failures),
+             panvk_desc_profile_read(&panvk_desc_profile.set_alloc_heap_capacity_failures),
              panvk_desc_profile_read(&panvk_desc_profile.set_alloc_vma_failures));
 }
 
@@ -670,11 +672,14 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
    }
    uint32_t first_free_set =
       __bitset_ffs(pool->free_sets, BITSET_WORDS(pool->max_sets));
-   if (first_free_set == 0 || pool->desc_heap.free_size < descs_size) {
+   const bool no_free_set = first_free_set == 0;
+   if (no_free_set || pool->desc_heap.free_size < descs_size) {
       if (panvk_desc_profile_enabled()) {
+         uint64_t *failure_counter =
+            no_free_set ? &panvk_desc_profile.set_alloc_no_free_set_failures
+                        : &panvk_desc_profile.set_alloc_heap_capacity_failures;
          panvk_desc_profile_add(&panvk_desc_profile.set_alloc_failures, 1);
-         panvk_desc_profile_add(
-            &panvk_desc_profile.set_alloc_capacity_failures, 1);
+         panvk_desc_profile_add(failure_counter, 1);
          panvk_desc_profile_dump();
       }
       return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
