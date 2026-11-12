@@ -676,9 +676,10 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
    uint32_t first_free_set =
       __bitset_ffs(pool->free_sets, BITSET_WORDS(pool->max_sets));
    const bool no_free_set = first_free_set == 0;
-   const bool insufficient_heap = pool->desc_heap.free_size < descs_size;
-   if (no_free_set || insufficient_heap) {
+   if (no_free_set || pool->desc_heap.free_size < descs_size) {
       if (panvk_desc_profile_enabled()) {
+         const bool insufficient_heap =
+            pool->desc_heap.free_size < descs_size;
          uint64_t *failure_counter =
             no_free_set && insufficient_heap
                ? &panvk_desc_profile.set_alloc_both_capacity_failures
