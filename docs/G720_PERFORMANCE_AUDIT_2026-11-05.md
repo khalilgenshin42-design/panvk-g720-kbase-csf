@@ -1627,3 +1627,35 @@ No driver source, allocator policy, heap topology, ring sizing, shader schedulin
 - Wait for Android-only and both wrapper builds at `64c43833` to pass. Independently verify the exact-head Android package, then use that 65K-default package for the threshold A/B and a separate descriptor diagnostic.
 - For the A/B, restart between variants; with `PANVK_KBASE_HEAP_RENEW_WORK` absent require the log value 65536, then set exactly 262144 before the first Kbase submission and require 262144. Keep all profiling variables unset for both FPS runs.
 - No allocator policy, heap topology, ring sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed. Keep the experimental driver as a separate Winlator custom import.
+
+
+## 2026-11-12 13:08 UTC — exact-head descriptor diagnostics build and package verified
+
+### Source and classification
+- Latest driver-source commit: `64c43833ae5e5f8e7f7a27e872a1ac5449188aee`. The descriptor profile has five mutually exclusive failure buckets: overflow; no free descriptor-set slot only; descriptor-heap capacity only; both capacity conditions simultaneously; and VMA allocation failure.
+- The aggregate `set_alloc_failures` counter remains. At a quiescent final snapshot, the five category totals should sum to the aggregate for `panvk_desc_pool_allocate_set()` failure paths.
+- The final hot-path refinement keeps the original short-circuit capacity guard. The second heap-capacity read needed to distinguish the simultaneous case occurs only after a failure and only when `PANVK_DESCRIPTOR_PROFILE=1` is enabled. No allocator policy, descriptor layout, VMA behavior, Vulkan result code, or lifetime semantics changed.
+
+### Exact-head CI
+- Android-only [run 43223244479](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43223244479): SUCCESS, all 15 build/audit/package/upload steps completed.
+- Android wrapper [run 43223244570](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43223244570): SUCCESS; Release and Debugoptimized jobs both completed all 12 steps.
+- The immediately preceding source commits also passed: `b91fa8e` (Android `43221907435`, wrapper `43221907406`) and `07725210` (Android `43223015215`, wrapper `43223015197`). Latest source HEAD `64c43833` is now exact-head build tested.
+
+### Fresh Android artifact verification
+- Artifact [13946901882](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43223244479/artifacts/13946901882), 16,758,519 bytes; outer ZIP SHA-256 `5d5afcafdc3423e7a18b535f941d95a4391093720dd17d174a890ef6e490494e`, matching the GitHub digest. ZIP integrity passes.
+- The nested flat Winlator package SHA-256 is `83ebb994328d6ba2e52fbd63f16c25b567f4fbe3763b853a1e17584df23f8433`; both copies in the outer archive are byte-identical and ZIP integrity passes.
+- Package metadata version: `26.3.0-devel-android-kbase-64c43833ae5e`, minimum Android API 30, explicitly experimental/non-conformant. Four flat members: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, `SHA256SUMS`. All embedded hashes pass: driver `ce03eeadea586804a3f9761e739ec6916cea184956eba39ce323c98a76628266`; private libdrm `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`; metadata `61c4b6b1fa5224f7b96f281068bbfaa23d61697d1b347f9685710bdeb9ab63cb`.
+- Both inner libraries are ELF64 AArch64 Android API 30. Driver RUNPATH is `$ORIGIN`; its private `libpanvk_drm.so` dependency is bundled. The private library has SONAME `libpanvk_drm.so` and depends only on Android `libc.so`. Independently recomputed: 24 undefined DRM imports, 212 private-library DRM exports, zero unresolved DRM imports. Outer staged ICD JSON is valid (API 1.4.354, architecture 64, staged library path correct); staged libdrm stub is present and `audit/missing-drm-symbols.txt` is empty.
+- Binary strings confirm the effective-threshold startup log and all five descriptor profile labels, including `no_free_set_only`, `heap_capacity_only`, and `both_capacity`. Classification: exact-head build and static/package audits pass; Winlator runtime and game compatibility remain unverified.
+
+### Uploaded package and benchmark
+- The newly attached `PanVK-G720-65k-env-override-test.zip` is still the old package (SHA-256 `42f63022e8b65aca79e47a1cd37808a53bbe793d61b8a2d7b544ec651fd2ac72`, metadata commit `fb70e9b5cf8b`). It contains the threshold log but only the older aggregate capacity label; do not use it for the five-bucket descriptor diagnostic.
+- The latest exact-head package is the new artifact above. It retains the compiled 65,536 work threshold and is suitable for both the threshold propagation A/B and the separate five-bucket diagnostic.
+- No new Tomb Raider log or FPS measurement was supplied. The only archive remains the 2026-11-05 02:03:50 capture. Keep clean 65K 9.0 / 17.6 / 13.5 FPS, one 262K compiled-default run 7.8 / 18.9 / 13.9 FPS, and instrumented 7.7 / 19.7 / 13.6 FPS unchanged and inconclusive. No FPS gain is claimed.
+
+### Exact next device test and safety
+- Import only the exact-head flat package as a separate Winlator Mali custom driver; preserve the stock System Driver as fallback.
+- For the uninstrumented A/B, restart between variants. With `PANVK_KBASE_HEAP_RENEW_WORK` absent, require startup log value 65536. Then set exactly `PANVK_KBASE_HEAP_RENEW_WORK=262144` before the first Kbase submission and require 262144. If the value is missing or remains 65536, the override is not demonstrated.
+- Keep `PANVK_KBASE_PROFILE`, `PANVK_DESCRIPTOR_PROFILE`, `PANVK_MEMPOOL_PROFILE`, `PANVK_KBASE_DIAG_MEM_FLAGS`, and `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` unset for both FPS runs. Match scene, settings, DXVK 1.7.2, wrapper, and thermal starting conditions; repeat A/B runs if possible.
+- After performance runs, perform a separate `PANVK_DESCRIPTOR_PROFILE=1` diagnostic. Capture aggregate failures and all five buckets; verify their sum. Profiling logs on every failure and is not suitable for FPS comparisons.
+- No heap/allocator policy, topology, ring size, shader scheduling, Kbase ABI, kernel, or Android system/vendor driver was changed.
