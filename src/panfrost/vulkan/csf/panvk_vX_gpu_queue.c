@@ -223,8 +223,9 @@ struct kbase_gpu_wait {
 };
 
 /* Diagnostic override for the tiler-heap renewal cadence.
- * PANVK_KBASE_HEAP_RENEW_INTERVAL=0 disables renewal entirely; any positive
- * value replaces the default interval. */
+ * Non-positive or out-of-range PANVK_KBASE_HEAP_RENEW_INTERVAL values saturate
+ * the interval trigger to UINT32_MAX; work-triggered renewal remains
+ * independently controlled by PANVK_KBASE_HEAP_RENEW_WORK. */
 static uint32_t
 kbase_tiler_heap_renew_interval(void)
 {
