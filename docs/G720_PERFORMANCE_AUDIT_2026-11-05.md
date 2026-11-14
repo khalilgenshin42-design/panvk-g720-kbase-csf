@@ -1717,3 +1717,37 @@ No driver source, allocator policy, heap topology, ring sizing, shader schedulin
 - Wrapper dependency closure must be provided or demonstrated by the intended runtime before either wrapper ZIP is treated as a complete package.
 - No new Tomb Raider log or FPS measurement was supplied. The previously recorded clean 65K result (9.0/17.6/13.5 FPS), single 262K compiled-default result (7.8/18.9/13.9 FPS), and instrumented diagnostic (7.7/19.7/13.6 FPS) remain inconclusive; no performance gain is claimed.
 - No allocator policy, descriptor layout, heap topology, ring sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor Vulkan driver was changed. Keep the experimental package separate for the non-rooted Winlator import path.
+
+
+## 2026-11-14 12:37 UTC — scheduled active-branch CI and package revalidation
+
+### Branch provenance
+- Re-read the canonical handoff and this audit before monitoring. Pre-update active branch HEAD: ddd92b1f08e177eadb82bffe5ef954f75ae22ea4; pre-update handoff branch HEAD: 370636069f650b710b06e938f5e278024396435f.
+- The active experiment/g720-performance-audit branch has 135 Actions runs in the branch-filtered listing; the 100 newest were inspected. No newer relevant Android-only or wrapper build exists beyond runs 43428658241 and 43428658245.
+- Latest driver-source commit is 5ffd9d3353a6922718232a184c35316f498d5b85. GitHub compare from 5ffd9d3 to current branch HEAD ddd92b1 reports 4 ahead / 0 behind, with only this audit document changed. The source commit's only code-file change is a comment clarification in kbase_tiler_heap_renew_interval(); no executable behavior changed after the source snapshot built below.
+
+### GitHub Actions
+- Exact driver-source commit Android-only run 43428494162, job 131895759577: SUCCESS, 15/15 steps (checkout/verification, Python/dependencies, host tools, Android ARM64 libdrm, Meson configuration, compile/stage, dependency/manifest audit, flat package, upload, cleanup).
+- Exact driver-source commit wrapper run 43428494165: Release job 131895759805 and Debugoptimized job 131895759417 both SUCCESS, 12/12 steps each (checkout, memfd_create compatibility patch, dependencies, host tools, Meson, compilation, artifact upload, cleanup).
+- Latest active-branch workflow snapshot ee61de6157290be062b37ee91dff3154085dc542: Android-only run 43428658241, job 131896297915, SUCCESS, 15/15; wrapper run 43428658245, Release job 131896298179 and Debugoptimized job 131896298540, SUCCESS, 12/12 each. Pending steps: 0. Failed steps: 0. No job failure logs required.
+- Current branch HEAD ddd92b1 is a later audit-document-only [skip ci] commit; no executable source changed since 5ffd9d3. No new workflow was dispatched or rerun during this monitoring pass.
+
+### Android-only artifact verification
+- Artifact 14037579498, 16,754,432 bytes. Fresh outer ZIP SHA-256 e11fc0e1ebf108d1be51d96f51b0a50aa78d2f9c0f297aac8d80331e951e1540, matching GitHub's digest. ZIP integrity passes.
+- Nested flat package SHA-256 90ee4a2d740ae71c5df174ebc9e93fb1b30f519b2cbf7f8895b3440f2c850c14; nested ZIP integrity passes. It contains exactly meta.json, libvulkan_panfrost.so, libpanvk_drm.so, and SHA256SUMS; all three embedded member hashes pass.
+- Metadata is valid JSON: package 26.3.0-devel-android-kbase-ee61de615729, minimum API 30, explicitly experimental/non-conformant with device/game compatibility unverified. Both package libraries are ELF64 little-endian AArch64, Android API 30.
+- Driver RUNPATH is $ORIGIN; NEEDED includes bundled libpanvk_drm.so. Private libdrm has SONAME libpanvk_drm.so and depends only on Android libc.so. The outer staged tree contains a valid ICD manifest (API 1.4.354, architecture 64, path /usr/local/lib/libvulkan_panfrost.so) and stage/usr/android_stub/libdrm.so. Clarification: the ICD manifest and staged stub are in the outer staged tree, not members of the nested four-file flat ZIP.
+- The audit lists 24 undefined DRM imports and 212 bundled-stub definitions; audit/missing-drm-symbols.txt is empty (0 unresolved symbols). Classification: build passed; Android artifact statically/package validated for separate Winlator import; device runtime not validated.
+
+### Wrapper artifact verification
+- Release artifact 14039410095, 4,289,124 bytes; fresh outer ZIP SHA-256 ac0c631dbbd8f7f4a78dfad78f96a5ac4e2fda82d258f915f6f006e832bd8d45, matching GitHub digest.
+- Debugoptimized artifact 14038895577, 50,660,929 bytes; fresh outer ZIP SHA-256 49b33dfc5a315e7b7ce824d17b552cd9f3dca1f8f9d79b964d092036e7ee2ba5, matching GitHub digest.
+- Both ZIPs pass integrity checks and contain only libvulkan_panfrost.so, an ELF64 little-endian AArch64 Android API 30 library. Both use RUNPATH $ORIGIN/../../android_stub and need libdrm.so, X11/XCB libraries, and libxshmfence.so.1, in addition to Android platform libraries. Neither ZIP includes the referenced stub, X11/XCB dependency closure, ICD manifest, or checksum manifest. Classification: raw ELF/ZIP verified; standalone package and dependency closure not validated.
+
+### Related agent-bootstrap branch and remaining blockers
+- The handoff records a new public-repository OpenCode bootstrap branch, agent/free-panvk-agent, commit 49599fe7c85da3a06c557592cdeb55baf31a95e7. Compare from ddd92b1 shows six infrastructure/setup/workflow files changed and no PanVK driver source changes.
+- Its Android-only run 43480954800, job 132076967574, passed 15/15; wrapper run 43480954763, Release job 132076968895 and Debugoptimized job 132076968133, passed 12/12 each. Agent Android artifact 14066160614 has outer SHA-256 096d633d7183cea27c9dab44e99ddeedb9d5b05a6a55927c91d4a5e80dfafb07, nested package SHA-256 ffc6e25b168cac9bc5fd352c679ef86d08f4c18554cbc0e2f76b9158792541f8; all four flat-package files, embedded hashes, AArch64/API 30 ELF, staged ICD manifest, bundled private libdrm, and zero-unresolved-symbol audit pass. Its wrapper artifacts remain raw ELF-only with the same external dependency closure and are not standalone-package validated.
+- The prior handoff-branch wrapper run 43428666520 has also completed successfully: Release job 131896326353 and Debugoptimized job 131896325976, 12/12 steps each. Its artifacts are outside the active-branch package assessment.
+- No new phone-side Tomb Raider log, heap-threshold override log, descriptor-profile capture, Vulkan initialization log, or device-runtime result was supplied. Existing 65K/262K FPS comparisons remain inconclusive; no performance gain is claimed.
+- Next gates: controlled import of the Android flat package through Winlator Mali, Vulkan initialization/device creation/stability; matched uninstrumented 65K-default versus 262144 environment-override test with startup-log confirmation; then a separate PANVK_DESCRIPTOR_PROFILE=1 run to collect the five mutually exclusive failure buckets. Keep profiling disabled for FPS runs.
+- No driver source, allocator policy, Kbase ABI, kernel, Android system/vendor Vulkan driver, or live device configuration was changed. Documentation update only; commit uses [skip ci].
