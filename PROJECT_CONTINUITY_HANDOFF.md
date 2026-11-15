@@ -8332,3 +8332,17 @@ Device log uploaded after the spatial mip-pattern package run:
 - No new Tomb Raider logs or FPS measurements were found: current conversation uploads are repeated PanVK packages only and Library search returned no matching benchmark archive. Keep the clean 65K 9.0/17.6/13.5 FPS, single 262K compiled-default 7.8/18.9/13.9 FPS, and instrumented 7.7/19.7/13.6 FPS results inconclusive; no FPS gain is claimed.
 - Next: complete current-head CI, audit the Android package/hash, then perform matched uninstrumented 65K and 262K environment-override runs using the 65K-default binary. Require startup logs 65536 then 262144; otherwise the override is unproven. Run `PANVK_DESCRIPTOR_PROFILE=1` separately and check the five categories against aggregate `set_failures`.
 - No allocator policy/layout, heap topology, ring sizing, BO retention, shader scheduling, Kbase ABI, kernel, Vulkan extension exposure, Android system/vendor driver, or live kernel was changed. Device runtime and performance remain unverified.
+
+
+## 2026-11-15 15:01 UTC — exact-head build and Android package verification
+
+The earlier authoritative-state entry recorded the exact-head Android and wrapper runs as pending. They have now completed:
+
+- Driver-source HEAD: `73873d730110bf3394ceea19b2a4d45ddba73834`.
+- Android-only run [43716474968](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43716474968): SUCCESS, 15/15 steps.
+- Wrapper run [43716474955](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43716474955): SUCCESS; Release and Debugoptimized each 12/12 steps.
+- Android artifact [14163230171](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43716474968/artifacts/14163230171): outer SHA-256 `ed4f080a12c02587a0948d0089ba716482522cffae1e70ca973f604a64d9c1d8`; nested package SHA-256 `824b8af7149f764697a33ac2b39e7badaad66d19e89d835784c7d02f1152d318`. Both ZIP integrity checks and all embedded package hashes pass.
+- Package contains the expected four flat-root members, ARM64 Android API 30 driver and private DRM library, `$ORIGIN` RUNPATH, bundled `libpanvk_drm.so`, empty missing-DRM-symbol audit, and staged ICD manifest. This is static/package validation only; device runtime compatibility, Vulkan device creation, game stability, and performance remain unverified.
+- Exact-head wrapper builds passed, but the wrapper artifacts have not been independently validated as complete standalone packages. Keep the prior dependency-closure warning in force.
+- No device test or benchmark was run during this repository audit. Next user-device gate remains Winlator custom-driver import, Vulkan initialization/device creation, then the controlled heap-threshold test using the 65K-default binary. Keep the stock System Driver as fallback; do not modify the system/vendor Vulkan driver or kernel.
+- The source change being built is concurrency hardening for process-wide diagnostic/environment option caches via C11 `call_once`; it does not change heap defaults or establish an FPS improvement.
