@@ -1,5 +1,5 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-14 12:54 UTC
+Last updated: 2026-11-15 12:37 UTC
 
 ## Authoritative current state — 2026-11-14
 
@@ -8309,3 +8309,14 @@ Device log uploaded after the spatial mip-pattern package run:
 - No driver source, allocator policy, descriptor layout, heap topology, ring sizing, shader scheduling, Kbase ABI, kernel, or Android system/vendor Vulkan driver was changed. Device runtime compatibility remains unverified.
 
 - Audit documentation refresh commit: `ded5ae97f99cd698e79d2d5e56d45904b6563178`. The handoff refresh below is based on pre-update handoff HEAD `9d76fc5b79215491ee0866f4dd873e2aae827d1b` and uses [skip ci].
+
+
+## 2026-11-15 12:37 UTC — scheduled active-branch CI and package revalidation
+
+- Re-read the canonical handoff and active performance audit before monitoring. Pre-update handoff blob: `4260d08a60c362f732126999635959d445371f18`; pre-update audit blob: `1d5758e6434412dca5dd4e54adbb808317ae9661`.
+- Active branch `experiment/g720-performance-audit` HEAD before this documentation update: `ded5ae97f99cd698e79d2d5e56d45904b6563178`. Latest executable driver-source commit remains `5ffd9d3353a6922718232a184c35316f498d5b85`. GitHub compare reports 6 commits ahead / 0 behind and only `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md` changed; no driver source or workflow changed after the tested source.
+- No newer Android-only or Android-wrapper run has appeared since the 13 November builds. Latest branch snapshot: Android-only [run 43428658241](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43428658241), job `131896297915`, SUCCESS (15/15 steps); wrapper [run 43428658245](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43428658245), Release job `131896298179` and Debugoptimized job `131896298540`, both SUCCESS (12/12 steps). Pending 0, failed 0. Exact driver-source commit builds also pass: Android-only run `43428494162` job `131895759577` (15/15); wrapper run `43428494165` Release job `131895759805` and Debugoptimized job `131895759417` (12/12 each). No failure logs were needed.
+- Re-downloaded latest branch-snapshot artifacts. Android artifact `14037579498` outer SHA-256 `e11fc0e1ebf108d1be51d96f51b0a50aa78d2f9c0f297aac8d80331e951e1540` matches GitHub digest; nested flat package SHA-256 `90ee4a2d740ae71c5df174ebc9e93fb1b30f519b2cbf7f8895b3440f2c850c14`. Four flat-package files, embedded checksums, valid metadata, ELF64 AArch64/API 30 libraries, driver RUNPATH `$ORIGIN`, bundled private `libpanvk_drm.so`, and its libc-only dependency all pass. Outer staged tree contains valid ICD manifest (API 1.4.354, 64-bit, expected library path) and Android libdrm stub. Audit lists 24 undefined DRM imports and an empty missing-symbol report. Static/package validated; no phone runtime test.
+- Wrapper artifacts remain raw ELF-only ZIPs: Release artifact `14039410095`, outer SHA-256 `ac0c631dbbd8f7f4a78dfad78f96a5ac4e2fda82d258f915f6f006e832bd8d45`; Debugoptimized artifact `14038895577`, outer SHA-256 `49b33dfc5a315e7b7ce824d17b552cd9f3dca1f8f9d79b964d092036e7ee2ba5`. Both contain only AArch64 Android API 30 `libvulkan_panfrost.so`; their RUNPATH and NEEDED entries require external `libdrm.so`, X11/XCB libraries, and `libxshmfence.so.1`. No dependency closure or manifest is bundled; not standalone-package validated.
+- No new device runtime, Vulkan initialization, game, stability, or FPS evidence was supplied. Existing 65K/262K results remain inconclusive. Next gates remain Winlator custom-driver import/runtime validation, matched 65K-default versus environment-override test with startup-log confirmation, and a separate descriptor-profile capture.
+- Documentation-only update; no driver source, workflow, Android system/vendor Vulkan driver, or live kernel changed. Commit message uses `[skip ci]`.
