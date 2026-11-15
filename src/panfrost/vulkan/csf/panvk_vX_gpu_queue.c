@@ -21,6 +21,7 @@
 #include "pan_trace.h"
 
 #include "util/bitscan.h"
+#include "util/u_thread.h"
 #include "util/os_time.h"
 #include "vk_drm_syncobj.h"
 #include "vk_log.h"
@@ -222,38 +223,42 @@ struct kbase_gpu_wait {
    uint64_t target_minus_one;
 };
 
-/* Diagnostic override for the tiler-heap renewal cadence.
- * Non-positive or out-of-range PANVK_KBASE_HEAP_RENEW_INTERVAL values saturate
- * the interval trigger to UINT32_MAX; work-triggered renewal remains
- * independently controlled by PANVK_KBASE_HEAP_RENEW_WORK. */
-static uint32_t
-kbase_tiler_heap_renew_interval(void)
+/* Cache the process-wide renewal policy once. Queue submissions may
+ * arrive concurrently on distinct VkQueue objects, so plain function-local
+ * lazy statics would race during first use. */
+struct kbase_tiler_heap_renew_options {
+   uint32_t interval;
+   uint64_t work;
+};
+
+static struct kbase_tiler_heap_renew_options kbase_tiler_heap_renew_options;
+static once_flag kbase_tiler_heap_renew_options_once = ONCE_FLAG_INIT;
+
+static void
+kbase_tiler_heap_renew_options_init(void)
 {
-   static uint32_t interval;
+   int64_t interval =
+      debug_get_num_option("PANVK_KBASE_HEAP_RENEW_INTERVAL",
+                           KBASE_TILER_HEAP_RENEW_INTERVAL);
+   int64_t work =
+      debug_get_num_option("PANVK_KBASE_HEAP_RENEW_WORK",
+                           KBASE_TILER_HEAP_RENEW_WORK);
 
-   if (!interval) {
-      int64_t v = debug_get_num_option("PANVK_KBASE_HEAP_RENEW_INTERVAL",
-                                       KBASE_TILER_HEAP_RENEW_INTERVAL);
-      interval = (v <= 0 || v > UINT32_MAX) ? UINT32_MAX : (uint32_t)v;
-   }
+   kbase_tiler_heap_renew_options.interval =
+      (interval <= 0 || interval > UINT32_MAX) ? UINT32_MAX
+                                               : (uint32_t)interval;
+   kbase_tiler_heap_renew_options.work = work > 0 ? (uint64_t)work : 0;
 
-   return interval;
+   mesa_logi("kbase: tiler heap renewal work threshold=%" PRIu64,
+             kbase_tiler_heap_renew_options.work);
 }
 
-static uint64_t
-kbase_tiler_heap_renew_work(void)
+static const struct kbase_tiler_heap_renew_options *
+kbase_tiler_heap_renew_options_get(void)
 {
-   static uint64_t threshold = UINT64_MAX;
-
-   if (threshold == UINT64_MAX) {
-      int64_t v = debug_get_num_option("PANVK_KBASE_HEAP_RENEW_WORK",
-                                       KBASE_TILER_HEAP_RENEW_WORK);
-      threshold = v > 0 ? v : 0;
-      mesa_logi("kbase: tiler heap renewal work threshold=%" PRIu64,
-                threshold);
-   }
-
-   return threshold;
+   call_once(&kbase_tiler_heap_renew_options_once,
+             kbase_tiler_heap_renew_options_init);
+   return &kbase_tiler_heap_renew_options;
 }
 
 static VkResult
@@ -3121,11 +3126,13 @@ panvk_queue_submit_ioctl_kbase(struct panvk_queue_submit *submit,
          queue->kbase_tiler_work_count += submit->tiler_work_estimate;
    }
 
-   uint64_t renew_work = kbase_tiler_heap_renew_work();
+   const struct kbase_tiler_heap_renew_options *renew_options =
+      kbase_tiler_heap_renew_options_get();
    const bool renew_by_interval =
-      queue->kbase_tiler_submit_count >= kbase_tiler_heap_renew_interval();
+      queue->kbase_tiler_submit_count >= renew_options->interval;
    const bool renew_by_work =
-      renew_work && queue->kbase_tiler_work_count >= renew_work;
+      renew_options->work &&
+      queue->kbase_tiler_work_count >= renew_options->work;
    if (submit->tiler_work_estimate && (renew_by_interval || renew_by_work)) {
       const bool profile_renew = kbase_profile_enabled();
       const int64_t renew_start =

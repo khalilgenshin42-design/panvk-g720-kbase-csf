@@ -21,6 +21,7 @@
 #include "vk_util.h"
 
 #include "util/bitset.h"
+#include "util/u_thread.h"
 
 #include "genxml/gen_macros.h"
 
@@ -48,13 +49,21 @@ struct panvk_desc_profile_stats {
 };
 static struct panvk_desc_profile_stats panvk_desc_profile;
 
+static once_flag panvk_desc_profile_once = ONCE_FLAG_INIT;
+static bool panvk_desc_profile_is_enabled;
+
+static void
+panvk_desc_profile_init(void)
+{
+   panvk_desc_profile_is_enabled =
+      debug_get_bool_option("PANVK_DESCRIPTOR_PROFILE", false);
+}
+
 static bool
 panvk_desc_profile_enabled(void)
 {
-   static int enabled = -1;
-   if (enabled < 0)
-      enabled = debug_get_bool_option("PANVK_DESCRIPTOR_PROFILE", false);
-   return enabled;
+   call_once(&panvk_desc_profile_once, panvk_desc_profile_init);
+   return panvk_desc_profile_is_enabled;
 }
 
 static void
