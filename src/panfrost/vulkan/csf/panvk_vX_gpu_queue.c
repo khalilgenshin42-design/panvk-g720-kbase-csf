@@ -99,16 +99,23 @@ struct kbase_profile_stats {
 };
 static struct kbase_profile_stats kbase_profile;
 
+static once_flag kbase_profile_once = ONCE_FLAG_INIT;
+static bool kbase_profile_is_enabled;
+
+static void
+kbase_profile_init(void)
+{
+   kbase_profile_is_enabled =
+      debug_get_bool_option("PANVK_KBASE_PROFILE", false);
+   mesa_logi("kbase profile: %s (live snapshots every 32 submits)",
+             kbase_profile_is_enabled ? "enabled" : "disabled");
+}
+
 static bool
 kbase_profile_enabled(void)
 {
-   static int enabled = -1;
-   if (enabled < 0) {
-      enabled = debug_get_bool_option("PANVK_KBASE_PROFILE", false);
-      mesa_logi("kbase profile: %s (live snapshots every 32 submits)",
-                enabled ? "enabled" : "disabled");
-   }
-   return enabled;
+   call_once(&kbase_profile_once, kbase_profile_init);
+   return kbase_profile_is_enabled;
 }
 
 static void

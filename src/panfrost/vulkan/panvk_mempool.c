@@ -13,6 +13,7 @@
 #include "kmod/pan_kmod.h"
 
 #include "util/u_debug.h"
+#include "util/u_thread.h"
 #include "vk_log.h"
 
 /* Opt-in transient BO-pool telemetry. No counters or logging unless enabled. */
@@ -25,13 +26,21 @@ struct panvk_mempool_profile_stats {
 
 static struct panvk_mempool_profile_stats panvk_mempool_profile;
 
+static once_flag panvk_mempool_profile_once = ONCE_FLAG_INIT;
+static bool panvk_mempool_profile_is_enabled;
+
+static void
+panvk_mempool_profile_init(void)
+{
+   panvk_mempool_profile_is_enabled =
+      debug_get_bool_option("PANVK_MEMPOOL_PROFILE", false);
+}
+
 static bool
 panvk_mempool_profile_enabled(void)
 {
-   static int enabled = -1;
-   if (enabled < 0)
-      enabled = debug_get_bool_option("PANVK_MEMPOOL_PROFILE", false);
-   return enabled;
+   call_once(&panvk_mempool_profile_once, panvk_mempool_profile_init);
+   return panvk_mempool_profile_is_enabled;
 }
 
 static void
