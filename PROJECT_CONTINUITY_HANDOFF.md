@@ -1,5 +1,5 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-15 12:37 UTC
+Last updated: 2026-11-15 12:51 UTC
 
 ## Authoritative current state — 2026-11-14
 
@@ -8320,3 +8320,15 @@ Device log uploaded after the spatial mip-pattern package run:
 - Wrapper artifacts remain raw ELF-only ZIPs: Release artifact `14039410095`, outer SHA-256 `ac0c631dbbd8f7f4a78dfad78f96a5ac4e2fda82d258f915f6f006e832bd8d45`; Debugoptimized artifact `14038895577`, outer SHA-256 `49b33dfc5a315e7b7ce824d17b552cd9f3dca1f8f9d79b964d092036e7ee2ba5`. Both contain only AArch64 Android API 30 `libvulkan_panfrost.so`; their RUNPATH and NEEDED entries require external `libdrm.so`, X11/XCB libraries, and `libxshmfence.so.1`. No dependency closure or manifest is bundled; not standalone-package validated.
 - No new device runtime, Vulkan initialization, game, stability, or FPS evidence was supplied. Existing 65K/262K results remain inconclusive. Next gates remain Winlator custom-driver import/runtime validation, matched 65K-default versus environment-override test with startup-log confirmation, and a separate descriptor-profile capture.
 - Documentation-only update; no driver source, workflow, Android system/vendor Vulkan driver, or live kernel changed. Commit message uses `[skip ci]`.
+
+
+## 2026-11-15 — source-concurrency audit and exact-head CI gate
+
+- Re-read the active performance audit and this handoff before the update. Current PanVK source HEAD is `73873d730110bf3394ceea19b2a4d45ddba73834`; active branch is `experiment/g720-performance-audit`. The audit refresh commit is `4afd6c7d0dedc9e2fe727b6fab62eec408ae528f`.
+- Source audit found plain function-local lazy option caches that could race on concurrent first use across distinct Vulkan queues, descriptor pools, or BO-pool operations. Commit `d6557723d9c53e717caf098e98e7a7263d081fa2` moved descriptor-profile and heap-renewal option initialization to C11 `call_once`; commit `73873d730110bf3394ceea19b2a4d45ddba73834` extended this to Kbase and transient-BO profiling flags. All four caches now use `once_flag` / `ONCE_FLAG_INIT` / `call_once` via `util/u_thread.h`. No diagnostic semantics or option values changed.
+- Heap defaults remain interval 128 and work threshold 65,536. The effective work threshold still logs once; the option is cached at first Kbase queue submission. Non-positive work values disable only work-triggered renewal. Descriptor failure categories remain overflow, no-free-set-only, heap-capacity-only, both-capacity, and VMA; aggregate counter and Vulkan results are unchanged.
+- Current exact-head CI is pending: Android-only [run 43716474968](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43716474968) and wrapper [run 43716474955](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43716474955). Intermediate commit `d6557723d9c53e717caf098e98e7a7263d081fa2` also has pending Android-only run `43716418873` and wrapper run `43716418887`; final-head runs are the release gate. Do not offer a package from the older uploaded artifact as current-head.
+- The newly attached `PanVK-G720-64c43833-flat.zip` is a duplicate, SHA-256 `83ebb994328d6ba2e52fbd63f16c25b567f4fbe3763b853a1e17584df23f8433`; ZIP and embedded hashes pass, both libraries are ELF64 AArch64 Android API 30, RUNPATH is `$ORIGIN`, and private `libpanvk_drm.so` is bundled. Its metadata identifies source `64c43833`, so it predates the thread-safe cache fixes and is not the current candidate.
+- No new Tomb Raider logs or FPS measurements were found: current conversation uploads are repeated PanVK packages only and Library search returned no matching benchmark archive. Keep the clean 65K 9.0/17.6/13.5 FPS, single 262K compiled-default 7.8/18.9/13.9 FPS, and instrumented 7.7/19.7/13.6 FPS results inconclusive; no FPS gain is claimed.
+- Next: complete current-head CI, audit the Android package/hash, then perform matched uninstrumented 65K and 262K environment-override runs using the 65K-default binary. Require startup logs 65536 then 262144; otherwise the override is unproven. Run `PANVK_DESCRIPTOR_PROFILE=1` separately and check the five categories against aggregate `set_failures`.
+- No allocator policy/layout, heap topology, ring sizing, BO retention, shader scheduling, Kbase ABI, kernel, Vulkan extension exposure, Android system/vendor driver, or live kernel was changed. Device runtime and performance remain unverified.
