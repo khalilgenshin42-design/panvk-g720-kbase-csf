@@ -541,3 +541,15 @@ After the sample-count correction's exact-head CI and package audit complete, im
 3. Send the complete `panvk_vrs_render_probe.log`.
 
 These probes do not yet cover changing 1x1 then 2x2 between draws in one command buffer with the same pipeline, nor the sample-shading-enabled fallback. Those remain explicit follow-up cases. No FPS gain or full VRS correctness is claimed.
+
+
+## 2026-11-16 — sample-mask correction build failure and retry
+
+The first sample-count correction commit `385e51bb951829e95c17d55410855f9cb982ca80` failed both Android and wrapper compilation. The compiler diagnostic was specific: `initializer element is not a compile-time constant` for `{{1, 1}, sample_counts}`, because the rate array was declared `static const` while its sample mask is computed at runtime.
+
+The source was corrected on `work/vrs-rate-sample-count-fix` by removing `static` from the local rate-table declaration, retaining `const` automatic storage. Current retry HEAD: `c22dc2f595046ddf640ce8c148453f230cde7cfc`.
+
+- Android-only retry [43902597004](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43902597004): in progress at this note.
+- Wrapper/probe retry [43902595797](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43902595797): in progress at this note; the Windows probe-build job completed successfully, while Release and Debugoptimized wrapper builds were still compiling.
+
+The failed first attempt is not a driver-runtime failure; it is a C storage-duration/initializer issue. No package was produced from the failed commit. Do not claim the correction builds until the retry's exact-head Android and both wrapper jobs complete.
