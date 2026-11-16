@@ -1,5 +1,5 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-16 14:05 UTC
+Last updated: 2026-11-16 13:50 UTC (runtime clock; see timestamp reconciliation in latest addendum)
 
 ## Authoritative current state — 2026-11-16
 
