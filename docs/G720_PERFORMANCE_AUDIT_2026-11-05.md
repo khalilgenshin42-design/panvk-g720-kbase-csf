@@ -1933,3 +1933,10 @@ Exact-head Android-only run [43900657540](https://github.com/khalilgenshin42-des
 No new phone-side logs, Vulkan initialization/device-creation result, Winlator import, benchmark archive, heap-threshold startup log, descriptor-profile capture, or FPS result was available. No direct Android/Termux/Winlator control bridge exists. Existing 65K/262K FPS observations remain inconclusive; no performance gain is claimed.
 
 Next device action after the VRS sample-count branch's exact-head CI and package audit: import that package only through Winlator Mali's custom-driver importer, run `Run-Dynamic-VRS.cmd` and `tools/run-vrs-mip-pattern.cmd`, and provide the complete `panvk_vrs_render_probe.log`. Keep System Driver as fallback. Never modify the Android system/vendor Vulkan driver or kernel.
+
+
+### VRS sample-count correction retry addendum (2026-11-16)
+
+The initial `work/vrs-rate-sample-count-fix` commit `385e51b` failed Android and wrapper compilation because `sample_counts` was runtime-derived but the local rate array was `static const`. The array is now automatic `const` storage at branch HEAD `c22dc2f595046ddf640ce8c148453f230cde7cfc`.
+
+Exact-head retry runs [43902597004](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43902597004) (Android-only) and [43902595797](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43902595797) (wrapper plus probe) are pending at this addendum. The Windows probe-build job has succeeded; Android, Release and Debugoptimized compilation have not yet completed. No package is available from the corrected head at this point.
