@@ -492,3 +492,52 @@ This is a source patch, not a validated driver build. The next gate is a success
 4. sample-shading enabled to prove the effective sysval remains 1x1.
 
 Do not replace the installed driver until the new package passes the build, ELF/dependency audit, import test, and device render checks. Primitive and attachment FSR remain unexposed. The source branch is experimental and has not yet passed compilation or device validation.
+
+
+## 2026-11-16 — dynamic sysval build/package audit and VRS capability correction
+
+This entry supersedes the preceding statement that the per-draw sysval patch had not yet compiled. It does **not** claim target-device runtime validation.
+
+### Current branch and source review
+
+- Current branch HEAD: `experiment/g720-dynamic-fsr-sysval` at `c4f091e86c29eae88d2a659813d80b416f95fbf0`. The VRS branch `experiment/g720-fragment-shading-rate` at `95f6ea30a26790d329ce66f149f15d31665ca49e` is an ancestor; the dynamic-FSR branch contains the per-draw sysval implementation and subsequent probe work.
+- `panvk_graphics_sysvals.fs.frag_rate` stores log2(width) in bits 2..3 and log2(height) in bits 0..1. `lower_dynamic_vrs_frag_center()` loads this FAU sysval and derives the dynamic fragment centre without recompiling for each rate.
+- `cmd_prepare_draw_sysvals()` updates it from current dynamic FSR state at draw preparation, only for KEEP/KEEP (the valid pipeline-only configuration while primitive and attachment FSR remain disabled). It selects 1x1 when sample shading is enabled, matching CSF draw emission.
+- The shader cache key distinguishes dynamic FSR from static FSR and includes the effective static rate for static lowering.
+- The helper is called from the inspected CSF ordinary, indirect, tessellation, geometry-shader and software-stage draw paths. Source inspection supports coverage of the identified draw paths; it does not prove correct GPU execution or every possible command-buffer edge case.
+- Primitive FSR and attachment FSR remain disabled; non-trivial combiner operations remain unadvertised. The extension is still experimental.
+
+### CI and static package evidence
+
+- Exact-head Android-only run [42645674486](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42645674486): SUCCESS at `c4f091e`.
+- Exact-head wrapper run [42645674848](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42645674848): Release and Debugoptimized SUCCESS at `c4f091e`.
+- Exact-head Windows probe build [42645674514](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42645674514): SUCCESS.
+- Android package artifact [13688885153](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42645674486/artifacts/13688885153): outer ZIP SHA-256 `fbfa977275e8d54ffe176c8ff9999ff706166ae7b55b41a6a553975e8aca4fc2`; nested flat package SHA-256 `02691a2f06125d4ffd7d0725fb31c99a5d54bc1f4b32b819cfb57fc0d800b7ff`. ZIP integrity and all embedded member hashes pass. Metadata identifies `26.3.0-devel-android-kbase-c4f091e86c29`, min API 30. Driver and private DRM helper are ELF64 AArch64 Android API 30; driver RUNPATH is `$ORIGIN`; private `libpanvk_drm.so` has only `libc.so` as NEEDED. The package audit reports 24 undefined DRM imports, 212 private definitions and zero missing DRM symbols.
+- Windows probe artifact [13685924631](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/42645674514/artifacts/13685924631): outer ZIP SHA-256 `8c70c4cae93e1f12bd8d7b4d284f63e1ca1686fa3a38ce8ce233b309c8812af4`; PE32+ x86-64 probe SHA-256 `5e0526c4735fed05a83647825a210653bf83740dc403a94128a8141d6e9a639b`. It contains `Run-Dynamic-VRS.cmd` and `tools/run-vrs-mip-pattern.cmd`.
+
+Classification: exact-head CI and static package validation passed. No new Android/Winlator runtime test, Vulkan initialization, render probe log, stability result or FPS result was available for the per-draw sysval implementation.
+
+### Additional source-audit finding: advertised VRS sample-count mask
+
+The current `panvk_GetPhysicalDeviceFragmentShadingRatesKHR()` table has two inconsistencies:
+
+- The comment says the larger `4x4/4x2/2x4/1x2` rates are exposed at 1x MSAA only, but the `2x4` and `1x2` entries also include `VK_SAMPLE_COUNT_2_BIT`.
+- The `1x1` entry uses `~0u`, which includes undefined/reserved sample-count flag bits and is broader than the actual device framebuffer sample-count mask returned by `panvk_get_sample_counts()`.
+
+A conservative correction was started on isolated branch `work/vrs-rate-sample-count-fix`, based on `c4f091e`:
+
+- Derive the 1x1 rate's `sampleCounts` from the same `panvk_get_sample_counts(arch, max_tib_size, max_cbuf_atts, 16)` calculation used for physical-device framebuffer limits.
+- Restrict `2x4` and `1x2` to 1x MSAA, matching the existing source comment until target-device MSAA evidence justifies more.
+- Add Android-only workflow assertions against reintroducing `~0u` or the unverified 2x MSAA entries.
+
+The correction commit is `385e51bb951829e95c17d55410855f9cb982ca80`. Its Android-only and wrapper CI runs are pending at the time of this entry; the probe-build job has succeeded. Do not use its package until both exact-head build workflows finish and its artifact is audited.
+
+### Required device validation
+
+After the sample-count correction's exact-head CI and package audit complete, import that experimental package only through Winlator Mali's custom-driver importer (keep System Driver as fallback; do not touch Android system/vendor Vulkan files or the kernel). Use the probe from artifact `13685924631`:
+
+1. Run `Run-Dynamic-VRS.cmd` to exercise the coordinate-reading dynamic-KEEP case.
+2. Run `tools/run-vrs-mip-pattern.cmd` to compare static and dynamic `1x1, 2x1, 1x2, 2x2, 4x2, 2x4, 4x4` spatial mip patterns, pixels and invocation counts.
+3. Send the complete `panvk_vrs_render_probe.log`.
+
+These probes do not yet cover changing 1x1 then 2x2 between draws in one command buffer with the same pipeline, nor the sample-shading-enabled fallback. Those remain explicit follow-up cases. No FPS gain or full VRS correctness is claimed.
