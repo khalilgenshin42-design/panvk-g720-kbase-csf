@@ -17,6 +17,7 @@ on:
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
+      - work/kbase-timestamp-capability-fix
 
 permissions:
   contents: read
@@ -40,6 +41,11 @@ jobs:
           grep -q "direct_vs_fs &= has_fragment_stage && !direct_fs_reads_clip_cull" src/panfrost/vulkan/panvk_vX_shader.c
           grep -q ".shaderClipDistance = false" src/panfrost/vulkan/panvk_vX_physical_device.c
           grep -q ".shaderCullDistance = false" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -Fq "props->gpu_can_query_timestamp = false;" src/panfrost/lib/kmod/kbase_kmod.c
+          grep -Fq "props->timestamp_frequency = 0;" src/panfrost/lib/kmod/kbase_kmod.c
+          grep -Fq "timestamp_frequency != 0" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -Fq "!device->kbase_node_path[0]" src/panfrost/vulkan/panvk_vX_physical_device.c
+          grep -Fq "!physical_device->kbase_node_path[0]" src/panfrost/vulkan/panvk_physical_device.c
 
       - name: Set up Python
         uses: actions/setup-python@v5
