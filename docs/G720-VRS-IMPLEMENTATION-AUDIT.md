@@ -598,3 +598,16 @@ The isolated follow-up `work/vrs-sample-count-rasterization-limit` at exact HEAD
 The exact-head wrapper/probe run [43906343923](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43906343923) is still in progress: the capability-probe job passed, but Release and Debugoptimized wrapper compilation have not completed and no wrapper artifacts are available yet. Artifact 14244179654 is only the small VRS capability probe, not the render probe.
 
 The independent render probe remains artifact 13685924631 from source c4f (ZIP SHA-256 `8c70c4cae93e1f12bd8d7b4d284f63e1ca1686fa3a38ce8ce233b309c8812af4`), containing the render executable and runner scripts. No device import or runtime test has occurred. The new Android package is a valid static candidate, but wait for exact-head wrapper success before asking for the Winlator test.
+
+
+### Follow-up — 2026-11-16: exact-head wrapper CI completed
+
+The same follow-up HEAD `b1525b9a33923876f724a742aaebc7a7325a2a58` now has a fully successful wrapper/probe workflow:
+
+- Run [43906343923](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43906343923): all jobs succeeded, including Win64 capability-probe compilation and both Android wrapper variants (Release and Debugoptimized, 12 steps each).
+- Release artifact 14246900452 outer SHA-256 `b58e93fa48628ce5c888fb335308e3d607d8731bf8f6b6c760e44f09a280779d`; one raw ELF64 AArch64/API 30 `libvulkan_panfrost.so` (SHA-256 `899ba2f9d5772d6053009094ab322c7ca2a671c04f1d4dffbd1d11f0bd9d645c`).
+- Debugoptimized artifact 14245188335 outer SHA-256 `4cc41f39af9e3b60e3804d978fac9fd63bb6b76d713c2de794ff87d772c495bc`; one raw ELF64 AArch64/API 30 `libvulkan_panfrost.so` (SHA-256 `793ce367792802e6da497defd89da13d19fdd0cc13ec408027cb784619602610`).
+- Both wrapper ELFs use RUNPATH `$ORIGIN/../../android_stub` and need `libdrm.so`, X11/XCB, and `libxshmfence` in addition to Android system libraries. They are build outputs only, not standalone packages or safe Winlator imports.
+- Capability-probe artifact 14244179654 is a single PE32+ x86-64 `panvk-vrs-probe.exe`; it is not the render probe. The correct render probe remains artifact 13685924631 from run 42645674514, with its runner scripts.
+
+The Android package from artifact 14245318290 and the exact-head wrapper build are now both CI-verified and the flat package is statically audited. This permits a controlled Winlator custom-driver test, but does not establish device compatibility, Vulkan conformance, stability, or game performance. Keep the System Driver fallback and do not touch Android system/vendor files.
