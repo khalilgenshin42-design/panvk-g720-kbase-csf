@@ -386,15 +386,17 @@ kbase_dev_query_props(struct kbase_kmod_dev *kbase_dev,
    mesa_logi("kbase: raw coherency mode %u", coherency_mode);
    props->is_io_coherent = false;
 
-   /* Timestamp: expose if gpu_id is non-zero (safe assumption). */
-   props->gpu_can_query_timestamp = (props->gpu_id != 0);
+   /* The Kbase GPU timestamp frequency is not exposed through the GPU
+    * properties blob.  PanVK's CSF timestamp queries write the hardware
+    * MALI_CS_STATE_TIMESTAMP counter, so advertising timestamp support
+    * without its frequency would expose timestampValidBits > 0 while
+    * timestampPeriod is 0, which is not a usable Vulkan timestamp domain.
+    * Keep Vulkan GPU timestamp queries disabled until the counter frequency
+    * and its relationship to the Kbase timeinfo counters are validated.
+    * The kbase_kmod_query_timestamp() OS/system timestamp path remains
+    * available for internal host-side timestamping. */
+   props->gpu_can_query_timestamp = false;
    props->timestamp_device_coherent = (coherency_mode != 0);
-   /* The GPU cycle counter frequency is not exposed through the GPU props
-    * blob in the kbase uAPI.  It can be inferred at runtime by correlating
-    * KBASE_IOCTL_GET_CPU_GPU_TIMEINFO with OS monotonic time, but that
-    * requires a sampling window.  Leave it as 0 so the upper layers use
-    * OS timestamps instead of cycle counts; callers that need accurate
-    * frequency should perform their own calibration. */
    props->timestamp_frequency = 0;
 
    /* Priorities: kbase currently only advertises medium. */
