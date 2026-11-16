@@ -553,3 +553,33 @@ The source was corrected on `work/vrs-rate-sample-count-fix` by removing `static
 - Wrapper/probe retry [43902595797](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43902595797): in progress at this note; the Windows probe-build job completed successfully, while Release and Debugoptimized wrapper builds were still compiling.
 
 The failed first attempt is not a driver-runtime failure; it is a C storage-duration/initializer issue. No package was produced from the failed commit. Do not claim the correction builds until the retry's exact-head Android and both wrapper jobs complete.
+
+
+## 2026-11-16 — VRS sample-count mask must also respect the 4x rasterization limit
+
+A second audit of the sample-count correction found one remaining Vulkan property inconsistency in the `work/vrs-rate-sample-count-fix` candidate at `c22dc2f595046ddf640ce8c148453f230cde7cfc`.
+
+The candidate correctly replaced the invalid `~0u` 1x1 mask with `panvk_get_sample_counts(...)`, and conservatively restricted the larger 4x4/4x2/2x4/1x2 rates to 1x MSAA. However, on the G720 model:
+
+- `pan_query_tib_size()` returns the G720 TIB size of 32 KiB or 64 KiB.
+- `pan_get_max_cbufs()` caps the color attachment count at 8.
+- With `format_size = 16`, `pan_get_max_msaa()` computes at least 16x for either G720 TIB size, capped at 16x.
+- Consequently `panvk_get_sample_counts(..., 16)` returns 1x, 2x, 4x, 8x and 16x bits on architecture v12.
+
+The VRS physical-device properties still advertise `maxFragmentShadingRateRasterizationSamples = VK_SAMPLE_COUNT_4_BIT`. Vulkan's current valid-usage rule requires the highest bit in every returned rate's `sampleCounts` to be no greater than that property. See the [Vulkan fragment-shading-rate properties](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceFragmentShadingRatePropertiesKHR.html) and [fragment-shading-rate query rules](https://docs.vulkan.org/spec/latest/chapters/primsrast.html).
+
+Therefore the c22 1x1 entry still over-advertises 8x/16x for VRS. This is a source/property-query correctness issue, not a runtime failure. **Do not import or device-test the c22 package.**
+
+A conservative follow-up was created on isolated branch `work/vrs-sample-count-rasterization-limit`, based on c22:
+
+- Mask the 1x1 sampleCounts to 1x/2x/4x, matching the currently advertised 4x VRS rasterization limit.
+- Clarify the source comment.
+- Add Android workflow guards for the mask and the 4x property.
+- Add the new branch to the Android-only workflow filter.
+
+Current follow-up HEAD: `b1525b9a33923876f724a742aaebc7a7325a2a58`.
+
+- Android-only exact-head run [43906343930](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43906343930): in progress at the time of this note.
+- Wrapper/probe exact-head run [43906343923](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43906343923): in progress at the time of this note.
+
+No package has been audited from this follow-up yet, and no new target-device VRS/MSAA test is available. Keep pipeline-only VRS and all other branches separate. The next device candidate must come from this follow-up only after both exact-head build workflows finish and the Android package passes independent hash/ELF/dependency checks.
