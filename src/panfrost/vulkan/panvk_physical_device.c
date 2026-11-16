@@ -2340,14 +2340,19 @@ panvk_GetPhysicalDeviceFragmentShadingRatesKHR(
 
    const unsigned max_tib_size = pan_query_tib_size(pdev->model);
    const unsigned max_cbuf_atts = pan_get_max_cbufs(arch, max_tib_size);
+   /* The advertised VRS rasterization sample limit is 4x. Vulkan
+    * requires every returned rate's sampleCounts mask to stay within that
+    * limit, including the 1x1 entry. Keep 8x/16x MSAA out until higher-sample
+    * VRS is explicitly supported and validated. */
    const VkSampleCountFlags sample_counts =
-      panvk_get_sample_counts(arch, max_tib_size, max_cbuf_atts, 16);
+      panvk_get_sample_counts(arch, max_tib_size, max_cbuf_atts, 16) &
+      (VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT);
 
    VK_OUTARRAY_MAKE_TYPED(VkPhysicalDeviceFragmentShadingRateKHR, out,
                           pFragmentShadingRates, pFragmentShadingRateCount);
 
    /* Required KHR rates are 2x2 and 2x1 at 1x/4x MSAA (also 2x here), plus 1x1 at
-    * every supported sample count. The larger 4x4/4x2 and 2x4/1x2 rates
+    * every VRS-supported sample count up to the advertised 4x rasterization limit. The larger 4x4/4x2 and 2x4/1x2 rates
     * are exposed conservatively at 1x MSAA only. */
    const struct {
       VkExtent2D size;
