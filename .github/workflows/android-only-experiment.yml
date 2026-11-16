@@ -51,6 +51,10 @@ jobs:
           grep -q "CmdBindResourceHeapEXT" src/panfrost/vulkan/panvk_vX_cmd_desc_state.c
           grep -Fq "VkSampleCountFlags sample_counts =" src/panfrost/vulkan/panvk_physical_device.c
           grep -Fq "{{1, 1}, sample_counts}" src/panfrost/vulkan/panvk_physical_device.c
+          grep -Fq "panvk_get_sample_counts(arch, max_tib_size, max_cbuf_atts, 16) &" src/panfrost/vulkan/panvk_physical_device.c
+          grep -Fq "(VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT)" src/panfrost/vulkan/panvk_physical_device.c
+          ! grep -Fq "panvk_get_sample_counts(arch, max_tib_size, max_cbuf_atts, 16);" src/panfrost/vulkan/panvk_physical_device.c
+          grep -Fq ".maxFragmentShadingRateRasterizationSamples = VK_SAMPLE_COUNT_4_BIT" src/panfrost/vulkan/panvk_vX_physical_device.c
           grep -Fq "{{2, 4}, VK_SAMPLE_COUNT_1_BIT}" src/panfrost/vulkan/panvk_physical_device.c
           grep -Fq "{{1, 2}, VK_SAMPLE_COUNT_1_BIT}" src/panfrost/vulkan/panvk_physical_device.c
           ! grep -Fq "{{1, 1}, ~0u}" src/panfrost/vulkan/panvk_physical_device.c
