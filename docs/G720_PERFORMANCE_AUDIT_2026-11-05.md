@@ -1940,3 +1940,47 @@ Next device action after the VRS sample-count branch's exact-head CI and package
 The initial `work/vrs-rate-sample-count-fix` commit `385e51b` failed Android and wrapper compilation because `sample_counts` was runtime-derived but the local rate array was `static const`. The array is now automatic `const` storage at branch HEAD `c22dc2f595046ddf640ce8c148453f230cde7cfc`.
 
 Exact-head retry runs [43902597004](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43902597004) (Android-only) and [43902595797](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43902595797) (wrapper plus probe) are pending at this addendum. The Windows probe-build job has succeeded; Android, Release and Debugoptimized compilation have not yet completed. No package is available from the corrected head at this point.
+
+
+## 2026-11-16 16:20 UTC — follow-up audit: timestamp gating and VRS sample-count limits
+
+### Active branch and CI
+
+- Active branch pre-update HEAD: `6738002070997bd62c8c732eeb8901641fb87330`; executable source remains `73873d730110bf3394ceea19b2a4d45ddba73834`. Compare is 6 ahead / 0 behind, with only this audit document changed.
+- Exact-source Android-only run [43716474968](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43716474968) and wrapper run [43716474955](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43716474955) remain successful. Their artifacts are tied to source SHA 73873; Android artifact digest is `ed4f080a12c02587a0948d0089ba716482522cffae1e70ca973f604a64d9c1d8`.
+- No PanVK source or workflow change is present on this active performance branch. It still does not implement `VK_KHR_fragment_shading_rate`, `VK_KHR_ray_query`, or acceleration structures.
+
+### Isolated Kbase timestamp capability correction
+
+Branch `work/kbase-timestamp-capability-fix`, HEAD `f5084ae0ebc8a4a8e38ac4007a6ca96daffe96b9`, contains three conservative source commits plus CI guards:
+
+- Kbase reports `gpu_can_query_timestamp=false` and `timestamp_frequency=0` until the hardware counter frequency/domain is validated.
+- Calibrated timestamp, shader clock, present timing, timestamp compute/graphics, and queue timestampValidBits exposure are gated on a valid nonzero frequency and a non-Kbase path.
+- Android run [43900657540](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43900657540) and wrapper run [43900657634](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43900657634) succeeded.
+- Android artifact 14240094671 outer SHA-256: `1bbd821ecef8c541267671bea86d4a2a6852ed1a8033366072f2e990e67d3e74`; nested package SHA-256: `28752b6aa0ec594af9f6334fbe61e4d1211b46b68b15d98f1b83c86b249265e9`. Embedded hashes pass; metadata `26.3.0-devel-android-kbase-f5084ae0ebc8`, min API 30; driver and private DRM helper ELF64 AArch64/API 30; RUNPATH `$ORIGIN`; 24 undefined DRM imports are resolved by 212 helper definitions; no missing symbols. Wrapper artifacts are raw ELF-only with external X11/XCB/xshmfence dependencies, not standalone packages. No target-device timestamp test exists. Keep this branch isolated.
+
+### VRS sample-count correction and second-order property bug
+
+The first correction branch `work/vrs-rate-sample-count-fix`, HEAD `c22dc2f595046ddf640ce8c148453f230cde7cfc`, successfully builds but is **not a device candidate**.
+
+- Its Android run [43902597004](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43902597004) and wrapper/probe run [43902595797](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43902595797) succeeded.
+- Package artifact 14243545386 outer SHA-256 `dea579bee3791ec8e4043dd79de6741abcfc72d8e165d761e8a6a3ca5152c605`; nested flat package SHA-256 `b607254ecfc0fa95eda013ec8108967c5c8ccdcd23123dd95e0e5b3b001f8de3`. ZIP integrity and all embedded hashes pass; metadata `26.3.0-devel-android-kbase-c22dc2f59504`, min API 30; AArch64/API 30; driver RUNPATH `$ORIGIN`; private DRM closure complete; 24 imports/212 definitions/zero missing.
+- The package still advertises 8x/16x sample bits in the 1x1 VRS entry while the VRS properties advertise `maxFragmentShadingRateRasterizationSamples=4x`. The Vulkan VRS query valid-usage rule requires every entry's highest sample count to be no greater than this property. See [VRS properties](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceFragmentShadingRatePropertiesKHR.html) and [query rules](https://docs.vulkan.org/spec/latest/chapters/primsrast.html).
+- This is explained by G720's 32/64 KiB TIB, max eight color attachments, and `pan_get_max_msaa(..., 16)`, which yields 16x (capped at 16) and therefore causes `panvk_get_sample_counts(..., 16)` to return 1x/2x/4x/8x/16x. The prior fix removed `~0u` but did not intersect the result with the advertised 4x VRS limit.
+
+A conservative follow-up branch was created: `work/vrs-sample-count-rasterization-limit`, HEAD `b1525b9a33923876f724a742aaebc7a7325a2a58`, based on c22. It masks the 1x1 VRS sampleCounts to 1x/2x/4x, updates the source comment, and adds Android workflow assertions plus a branch filter.
+
+- Exact-head Android run [43906343930](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43906343930) and wrapper/probe run [43906343923](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43906343923) were still in progress at this audit checkpoint. The Windows capability-probe job succeeded; Android and both wrapper build variants were still compiling.
+- No package from the follow-up exists yet. Do not import c22; wait for the follow-up's exact-head Android/wrapper success and independent package audit.
+
+The correct Winlator **render** probe is separate from the smaller capability probe: artifact 13685924631 from run 42645674514. Re-downloaded ZIP SHA-256 `8c70c4cae93e1f12bd8d7b4d284f63e1ca1686fa3a38ce8ce233b309c8812af4`; it contains the PE32+ x86-64 render executable (SHA-256 `5e0526c4735fed05a83647825a210653bf83740dc403a94128a8141d6e9a639b`) and the dynamic/mip-pattern runner scripts. This probe source is unchanged between c4f and the sample-count follow-up.
+
+### Source review and device evidence
+
+- Descriptor allocation still performs variable-count overflow checks, 64-bit size calculation, free-set and heap-capacity checks, VMA failure handling, and mutually exclusive opt-in failure counters. Existing Vulkan error results remain unchanged.
+- Descriptor and Kbase profile/heap option initialization uses C11 `call_once`; heap-renew defaults remain interval 128 and work threshold 65,536. Non-positive work threshold disables only work-triggered renewal; the interval trigger remains independent. Environment values must be set before the first Kbase submission and process restart is required between variants.
+- Production SYNC_ADD64 remains SYSTEM-scope. `PANVK_KBASE_SYNC_ADD64_CSG_SCOPE` is an opt-in diagnostic switch and must remain disabled until target hardware validates cross-CSG visibility. CQS completion/error-event handling remains as previously audited; no new queue-source change was found.
+- The old `work/android-libdrm-runtime-audit` branch is stale (last commit 2026-09-01), diverges by five unique commits, and includes older MC8/tessellation work with a temporary early-return runtime isolation path. No recent CI exists; do not cherry-pick it.
+- No new phone-side logs, Vulkan device-creation result, Winlator import, benchmark archive, heap-threshold startup log, descriptor-profile capture, or FPS measurement was available. No direct Android/Termux/Winlator bridge exists. No system/vendor driver or kernel was modified.
+
+Next device action only after the follow-up branch builds and its package passes static audit: import the `work/vrs-sample-count-rasterization-limit` package through Winlator Mali's custom-driver importer, keep System Driver as fallback, run `Run-Dynamic-VRS.cmd` and `tools/run-vrs-mip-pattern.cmd` from the verified render-probe ZIP, and provide the complete `panvk_vrs_render_probe.log`. Do not import the c22 package.
