@@ -583,3 +583,18 @@ Current follow-up HEAD: `b1525b9a33923876f724a742aaebc7a7325a2a58`.
 - Wrapper/probe exact-head run [43906343923](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43906343923): in progress at the time of this note.
 
 No package has been audited from this follow-up yet, and no new target-device VRS/MSAA test is available. Keep pipeline-only VRS and all other branches separate. The next device candidate must come from this follow-up only after both exact-head build workflows finish and the Android package passes independent hash/ELF/dependency checks.
+
+
+### Follow-up — 2026-11-16: corrected sample-mask package built and statically audited
+
+The isolated follow-up `work/vrs-sample-count-rasterization-limit` at exact HEAD `b1525b9a33923876f724a742aaebc7a7325a2a58` has now completed its Android-only package workflow successfully.
+
+- Android run [43906343930](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43906343930): success; all 15 steps passed, including Android ARM64 compilation, staged install audit, flat package generation, and artifact upload.
+- Artifact 14245318290 outer SHA-256: `ab4055b70929a2a64dbdec88ce6106ddf8e8709de61b5bb2837e4824255ecc1a` (16,822,686 bytes); ZIP integrity passes.
+- Flat package SHA-256: `03d35c615bcd605a87cddfcaf3b9de9d90980f2f0ca6469fb5d05266176a5013`. Four members: `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, `SHA256SUMS`. All three embedded hashes pass.
+- Metadata: `26.3.0-devel-android-kbase-b1525b9a3392`, min API 30, explicitly non-conformant and runtime-unverified.
+- Driver and private helper are ELF64 AArch64, Android API 30. Driver RUNPATH is `$ORIGIN`; driver NEEDED includes `libpanvk_drm.so`; helper NEEDED is only `libc.so`. The 24 DRM imports are all provided by 212 helper definitions; the audit missing-symbol list is empty. Staged ICD manifest reports Vulkan API 1.4.354 and the expected AArch64 library path.
+
+The exact-head wrapper/probe run [43906343923](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43906343923) is still in progress: the capability-probe job passed, but Release and Debugoptimized wrapper compilation have not completed and no wrapper artifacts are available yet. Artifact 14244179654 is only the small VRS capability probe, not the render probe.
+
+The independent render probe remains artifact 13685924631 from source c4f (ZIP SHA-256 `8c70c4cae93e1f12bd8d7b4d284f63e1ca1686fa3a38ce8ce233b309c8812af4`), containing the render executable and runner scripts. No device import or runtime test has occurred. The new Android package is a valid static candidate, but wait for exact-head wrapper success before asking for the Winlator test.
