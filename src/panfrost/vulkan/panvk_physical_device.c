@@ -2335,7 +2335,13 @@ panvk_GetPhysicalDeviceFragmentShadingRatesKHR(
    VkPhysicalDeviceFragmentShadingRateKHR *pFragmentShadingRates)
 {
    VK_FROM_HANDLE(panvk_physical_device, pdev, physicalDevice);
-   assert(pan_arch(pdev->kmod.dev->props.gpu_id) >= 12);
+   const unsigned arch = pan_arch(pdev->kmod.dev->props.gpu_id);
+   assert(arch >= 12);
+
+   const unsigned max_tib_size = pan_query_tib_size(pdev->model);
+   const unsigned max_cbuf_atts = pan_get_max_cbufs(arch, max_tib_size);
+   const VkSampleCountFlags sample_counts =
+      panvk_get_sample_counts(arch, max_tib_size, max_cbuf_atts, 16);
 
    VK_OUTARRAY_MAKE_TYPED(VkPhysicalDeviceFragmentShadingRateKHR, out,
                           pFragmentShadingRates, pFragmentShadingRateCount);
@@ -2349,14 +2355,13 @@ panvk_GetPhysicalDeviceFragmentShadingRatesKHR(
    } rates[] = {
       {{4, 4}, VK_SAMPLE_COUNT_1_BIT},
       {{4, 2}, VK_SAMPLE_COUNT_1_BIT},
-      {{2, 4}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT},
+      {{2, 4}, VK_SAMPLE_COUNT_1_BIT},
       {{2, 2}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT |
                   VK_SAMPLE_COUNT_4_BIT},
       {{2, 1}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT |
                   VK_SAMPLE_COUNT_4_BIT},
-      {{1, 2}, VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT |
-                  VK_SAMPLE_COUNT_4_BIT},
-      {{1, 1}, ~0u},
+      {{1, 2}, VK_SAMPLE_COUNT_1_BIT},
+      {{1, 1}, sample_counts},
    };
 
    for (uint32_t i = 0; i < ARRAY_SIZE(rates); i++) {
