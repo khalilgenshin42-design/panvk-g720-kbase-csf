@@ -19,6 +19,7 @@ on:
       - experiment/g720-fragment-shading-rate
       - experiment/g720-dynamic-fsr-sysval
       - work/vrs-rate-sample-count-fix
+      - work/vrs-sample-count-rasterization-limit
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
