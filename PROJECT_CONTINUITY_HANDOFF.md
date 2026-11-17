@@ -1,5 +1,5 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-16 (daily audit refresh; timestamp and VRS sample-count follow-up)
+Last updated: 2026-11-17 (performance-audit branch and exact-source package revalidation)
 
 ## Authoritative current state — 2026-11-16
 
@@ -8391,3 +8391,15 @@ The earlier authoritative-state entry recorded the exact-head Android and wrappe
 - No new Android/Termux/Winlator runtime logs, Vulkan device-creation result, benchmark archive, or FPS measurement were available in this audit. No system/vendor driver or kernel changes were made.
 
 Next device action only after `work/vrs-sample-count-rasterization-limit` exact-head Android/wrapper CI and package audit succeed: import that branch's package through Winlator Mali's custom-driver importer, keep System Driver as fallback, run `Run-Dynamic-VRS.cmd` and `tools/run-vrs-mip-pattern.cmd` using the verified render-probe ZIP, and return the complete `panvk_vrs_render_probe.log`. Do not import the c22 package or modify Android system/vendor files.
+
+
+## 2026-11-17 — performance-audit branch, package, and benchmark revalidation
+
+- Re-read both branch-specific documents. The performance-audit branch pre-update HEAD is `52979bac6c687b1da55a4f2519e65ec9206e90e8`; executable source remains `73873d730110bf3394ceea19b2a4d45ddba73834`. Compare reports 9 ahead / 0 behind with only `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md` changed. No newer driver source or workflow change was found.
+- Descriptor allocation still has five opt-in, mutually exclusive failure counters (overflow, no-free-set only, heap-capacity only, both capacity conditions, VMA failure), plus the aggregate. Existing Vulkan error results and allocator policy are unchanged. The additional heap-capacity read is only performed on the failure path when descriptor profiling is enabled. Relaxed-atomic live snapshots may be observed during concurrent updates; use a quiescent final snapshot for category-sum validation.
+- Heap-renew policy remains interval 128 / work threshold 65,536 by default. The C11 `call_once` cache is process-wide; configure the environment before the first Kbase submission and restart between A/B variants. The effective-threshold log does not prove the source of the value. The separate compiled-262K candidate is not an environment-propagation test.
+- Exact-source Android run [43716474968](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43716474968) passed 15/15 steps; exact-source wrapper run [43716474955](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43716474955) passed Release and Debugoptimized, 12/12 steps each. Android artifact 14163230171 outer digest: `ed4f080a12c02587a0948d0089ba716482522cffae1e70ca973f604a64d9c1d8`.
+- Re-uploaded `PanVK-G720-73873-flat.zip` is the exact verified package, SHA-256 `824b8af7149f764697a33ac2b39e7badaad66d19e89d835784c7d02f1152d318`. ZIP/member hashes, AArch64/API-30 ELF metadata, `$ORIGIN` RUNPATH, private DRM helper, and 24/24 DRM/GBM import closure pass. Package is experimental/non-conformant and has no device runtime validation.
+- No new Tomb Raider log or device measurement was supplied. Preserve 65K 9.0/17.6/13.5, single compiled-262K 7.8/18.9/13.9, and instrumented 7.7/19.7/13.6 FPS as inconclusive; no gain claim. Old telemetry remains 4,068 renewals, about 52.8 seconds aggregate renewal wait, zero ring wraps, 1.8 KiB sampled occupancy high-water, zero transient BO allocation/creation failures, and 299 descriptor failures not classifiable retrospectively.
+- Next device action remains the verified 65K-default package A/B: unset work threshold and prove log 65,536; restart with `PANVK_KBASE_HEAP_RENEW_WORK=262144` and prove log 262,144. Keep profiling off for performance runs; do the five-bucket descriptor capture separately. Do not modify the Android system/vendor driver or kernel.
+- No source or live-device changes were made in this refresh.
