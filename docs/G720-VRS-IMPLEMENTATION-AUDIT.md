@@ -492,3 +492,15 @@ This is a source patch, not a validated driver build. The next gate is a success
 4. sample-shading enabled to prove the effective sysval remains 1x1.
 
 Do not replace the installed driver until the new package passes the build, ELF/dependency audit, import test, and device render checks. Primitive and attachment FSR remain unexposed. The source branch is experimental and has not yet passed compilation or device validation.
+
+
+## 2026-11-19 — descriptor-heap safety gate for VRS candidate
+
+Reviewing the actual b1525 candidate revealed that it also exposes `VK_EXT_descriptor_heap` and `descriptorHeap` on PAN_ARCH >= 9. The current command-buffer implementation does not perform the extension's mandatory bidirectional invalidation between heap state and descriptor-set/descriptor-buffer/push state; it also updates both graphics/compute heap records but marks only graphics descriptor state dirty. `CmdPushDataEXT` does not clear push-descriptor state. See the current Vulkan descriptor-heaps state rules: https://docs.vulkan.org/spec/latest/chapters/descriptorheaps.html.
+
+The b1525 Android package is therefore superseded and must not be imported while the extension is advertised. A separate safety candidate was created from b1525:
+
+- `work/vrs-sample-count-no-descriptor-heap`, head `b5e30b3775aaf12825f7d624b77939cfb7b98414`.
+- The device extension and feature are both forced false; VRS remains pipeline-only on v12+, with the 1x1 rate mask capped at 1x/2x/4x.
+- Android-only run 44553408179 and wrapper/probe run 44553408360 were pending; static checkout checks and the VRS probe build passed, but compile/package jobs had not completed.
+- No device runtime evidence exists. Do not import until exact-head CI and package audits complete.
