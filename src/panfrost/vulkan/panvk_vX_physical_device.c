@@ -160,7 +160,8 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_depth_clip_control = true,
       .EXT_device_address_binding_report = true,
       .EXT_device_memory_report = true,
-      .EXT_descriptor_heap = PAN_ARCH >= 9,
+      /* Heap/set state invalidation is incomplete; keep the extension hidden. */
+      .EXT_descriptor_heap = false,
 #ifdef VK_USE_PLATFORM_DISPLAY_KHR
       .EXT_display_control = true,
 #endif
@@ -406,8 +407,9 @@ panvk_per_arch(get_physical_device_features)(
        * descriptor limits would be too low for the descriptorIndexing feature.
        */
       .descriptorIndexing = PAN_ARCH >= 9,
-      /* VK_EXT_descriptor_heap */
-      .descriptorHeap = PAN_ARCH >= 9,
+      /* VK_EXT_descriptor_heap remains disabled until bidirectional
+       * heap <-> descriptor-set/push-descriptor invalidation is implemented. */
+      .descriptorHeap = false,
       .descriptorHeapCaptureReplay = false,
       .shaderInputAttachmentArrayDynamicIndexing = true,
       .shaderUniformTexelBufferArrayDynamicIndexing = true,
