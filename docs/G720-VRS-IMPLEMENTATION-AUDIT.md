@@ -504,3 +504,16 @@ The b1525 Android package is therefore superseded and must not be imported while
 - The device extension and feature are both forced false; VRS remains pipeline-only on v12+, with the 1x1 rate mask capped at 1x/2x/4x.
 - Android-only run 44553408179 and wrapper/probe run 44553408360 were pending; static checkout checks and the VRS probe build passed, but compile/package jobs had not completed.
 - No device runtime evidence exists. Do not import until exact-head CI and package audits complete.
+
+
+## 2026-11-19 — exact-head safe VRS candidate built and statically audited
+
+The b1525 branch's descriptor-heap extension exposure was found to be unsafe: the command-buffer implementation omits required bidirectional invalidation between heap and non-heap descriptor state, and it fails to mark compute descriptor state dirty after heap binding. `CmdPushDataEXT` also leaves push-descriptor state intact. The current Vulkan descriptor-heaps specification requires these state invalidations (https://docs.vulkan.org/spec/latest/chapters/descriptorheaps.html). Do not import the earlier b1525 package.
+
+The isolated branch `work/vrs-sample-count-no-descriptor-heap` was built at source commit `b5e30b3775aaf12825f7d624b77939cfb7b98414`. It disables `VK_EXT_descriptor_heap` and the `descriptorHeap` feature while retaining pipeline-only VRS and the corrected 1x/2x/4x sample-count cap.
+
+- Android-only run 44553408179: SUCCESS, 15/15 steps.
+- Wrapper run 44553408360: SUCCESS; Release 12/12, Debugoptimized 12/12, capability probe 7/7.
+- Android artifact 14542499046: outer SHA-256 `231b4118b24c252b04a6c686becfacad5127441e255075c223ab9bf68bbca309`; inner package SHA-256 `a3a985334089846d0132222769d48d43298054056a6c5123c9a84cb7a66b5018`; AArch64/API 30, `$ORIGIN`, private DRM helper, zero missing DRM symbols, ICD API 1.4.354. Metadata remains experimental/non-conformant.
+- Wrapper Release and Debugoptimized artifacts remain raw ELF-only and depend on external X11/XCB/libdrm/xshmfence libraries.
+- No device runtime validation has occurred. Import only the b5e30 flat package through Winlator's custom-driver importer with System Driver fallback, then run the dynamic VRS and mip-pattern probe bundle. No performance claim is made.
