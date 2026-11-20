@@ -517,3 +517,18 @@ The isolated branch `work/vrs-sample-count-no-descriptor-heap` was built at sour
 - Android artifact 14542499046: outer SHA-256 `231b4118b24c252b04a6c686becfacad5127441e255075c223ab9bf68bbca309`; inner package SHA-256 `a3a985334089846d0132222769d48d43298054056a6c5123c9a84cb7a66b5018`; AArch64/API 30, `$ORIGIN`, private DRM helper, zero missing DRM symbols, ICD API 1.4.354. Metadata remains experimental/non-conformant.
 - Wrapper Release and Debugoptimized artifacts remain raw ELF-only and depend on external X11/XCB/libdrm/xshmfence libraries.
 - No device runtime validation has occurred. Import only the b5e30 flat package through Winlator's custom-driver importer with System Driver fallback, then run the dynamic VRS and mip-pattern probe bundle. No performance claim is made.
+
+
+## 2026-11-20 — correction to descriptor-heap source review
+
+A fresh read of `experiment/g720-descriptor-heaps` at `04947cb94a9987bbe8f6b98d63142a5b64b1abf3` corrects one detail in the 2026-11-19 note above: `cmd_bind_desc_heap()` updates both graphics and compute heap records and calls both `gfx_state_set_dirty(cmdbuf, DESC_STATE)` and `compute_state_set_dirty(cmdbuf, DESC_STATE)`. The earlier statement that only graphics descriptor state was marked dirty was inaccurate.
+
+The correctness blocker is still real, but is specifically state invalidation rather than dirty-bit coverage:
+
+- `cmd_bind_desc_heap()` does not invalidate the currently bound non-heap descriptor-set/push-descriptor state.
+- `cmd_desc_state_bind_sets()` and `cmd_get_push_desc_set()` do not invalidate bound heap state.
+- `CmdPushDataEXT` updates push-uniform state but does not invalidate non-heap descriptor state.
+
+The current Vulkan descriptor-heaps specification requires heap-state commands to invalidate all non-heap descriptor state and non-heap descriptor commands (including push-data interactions) to invalidate heap state as specified: https://docs.vulkan.org/spec/latest/chapters/descriptorheaps.html.
+
+The safe VRS candidate at source `b5e30b3775aaf12825f7d624b77939cfb7b98414` continues to set both `.EXT_descriptor_heap = false` and `.descriptorHeap = false`. Its current branch tip before this documentation update was `230c25f9c7538d0de1a9dc49b60c9d9ab894d228`; only documentation commits followed the tested source. Exact-head CI and static package validation remain successful as recorded above. No descriptor-heap implementation change, merge, or device test was performed.
