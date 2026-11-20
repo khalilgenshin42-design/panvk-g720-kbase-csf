@@ -529,6 +529,6 @@ The correctness blocker is still real, but is specifically state invalidation ra
 - `cmd_desc_state_bind_sets()` and `cmd_get_push_desc_set()` do not invalidate bound heap state.
 - `CmdPushDataEXT` updates push-uniform state but does not invalidate non-heap descriptor state.
 
-The current Vulkan descriptor-heaps specification requires heap-state commands to invalidate all non-heap descriptor state and non-heap descriptor commands (including push-data interactions) to invalidate heap state as specified: https://docs.vulkan.org/spec/latest/chapters/descriptorheaps.html.
+The current Vulkan descriptor-heaps specification requires heap-state commands (including CmdPushDataEXT) to invalidate all non-heap descriptor state, and non-heap descriptor-state commands to invalidate all heap state: https://docs.vulkan.org/spec/latest/chapters/descriptorheaps.html.
 
 The safe VRS candidate at source `b5e30b3775aaf12825f7d624b77939cfb7b98414` continues to set both `.EXT_descriptor_heap = false` and `.descriptorHeap = false`. Its current branch tip before this documentation update was `230c25f9c7538d0de1a9dc49b60c9d9ab894d228`; only documentation commits followed the tested source. Exact-head CI and static package validation remain successful as recorded above. No descriptor-heap implementation change, merge, or device test was performed.
