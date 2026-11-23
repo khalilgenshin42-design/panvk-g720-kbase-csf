@@ -1,4 +1,6 @@
 # PanVK G720 project continuity handoff
+Last updated: 2026-11-23 (13:08 Africa/Tunis; source, CI, package, and benchmark-evidence revalidation)
+
 ## Latest authoritative state — 2026-11-23 13:08 Africa/Tunis
 
 This section supersedes the 2026-11-22 16:10 summary below. Preserve prior entries as history.
@@ -13,7 +15,6 @@ This section supersedes the 2026-11-22 16:10 summary below. Preserve prior entri
 - No PanVK source, allocator policy, CI workflow, Kbase ABI, kernel, ring/heap topology, or Android system/vendor driver was modified. No new driver build was triggered.
 - Next device sequence: smoke-test the separate timestamp-correction artifact 14240094671 through Winlator Mali's custom-driver importer, retaining System Driver as fallback. Capture ICD load, physical/logical device creation, timestamp feature/property reporting, one minimal render/submit, and teardown. Keep this correctness test separate from performance measurements. Then use source-73873 65K-default package for matched uninstrumented heap A/B: unset `PANVK_KBASE_HEAP_RENEW_WORK` and require log 65536; restart with exactly `PANVK_KBASE_HEAP_RENEW_WORK=262144` before first Kbase submission and require log 262144. If absent or still 65536, override is unproven. Leave profiling disabled for FPS runs; collect Kbase telemetry and descriptor buckets in separate instrumented processes. Preserve the stock System Driver and do not modify the kernel.
 
-Last updated: 2026-11-23 (13:08 Africa/Tunis; source, CI, package, and benchmark-evidence revalidation)
 
 
 ## Latest authoritative state — 2026-11-22 16:10 Africa/Tunis
