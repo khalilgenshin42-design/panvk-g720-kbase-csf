@@ -1,4 +1,5 @@
 # PanVK G720 project continuity handoff
+Last updated: 2026-11-25 (16:19 Africa/Tunis; branch, CI, artifact, and source re-audit)
 
 ## Latest authoritative state — 2026-11-25 16:19 Africa/Tunis
 
