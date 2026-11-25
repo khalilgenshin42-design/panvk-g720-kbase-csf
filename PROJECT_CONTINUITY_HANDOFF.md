@@ -1,4 +1,6 @@
 # PanVK G720 project continuity handoff
+Last updated: 2026-11-25 (13:55 Africa/Tunis; active-branch CI and artifact revalidation)
+
 
 ## Latest authoritative state — 2026-11-25 13:55 Africa/Tunis
 
@@ -12,7 +14,6 @@ This section supersedes the 2026-11-24 monitoring state below. Preserve all earl
 - No new Xiaomi 15T/Winlator import, Vulkan loader/device-creation log, timestamp-property capture, dynamic-VRS result, heap-threshold startup proof, descriptor-profile capture, stability result, or FPS sample was available. Active-source timestamp inconsistency remains documented; timestamp-correction candidate `f5084ae0` remains separate, unmerged, and device-unvalidated. Descriptor heaps remain disabled pending bidirectional heap/non-heap descriptor-state invalidation. Preserve the non-rooted Android/Termux constraint and keep PanVK as a separate Winlator custom-driver import with System Driver fallback. No kernel, Kbase ABI, system/vendor Vulkan driver, device configuration, source code, or workflow was modified.
 - Next device gate remains the isolated timestamp-correction Android package [14240094671](https://github.com/khalilgenshin42-design/panvk-g720-kbase-csf/actions/runs/43900657540/artifacts/14240094671) through Winlator's custom-driver importer, retaining System Driver as fallback. Capture ICD loading, physical/logical device creation, timestamp properties/extensions, one minimal render/submit, and teardown. Keep this correctness smoke test separate from the `73873` heap/performance baseline. No claim of runtime success is made.
 
-Last updated: 2026-11-25 (13:55 Africa/Tunis; active-branch CI and artifact revalidation)
 
 ## Latest authoritative state — 2026-11-24 16:48 Africa/Tunis
 
