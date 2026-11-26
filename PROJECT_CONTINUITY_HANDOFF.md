@@ -1,4 +1,16 @@
 # PanVK G720 project continuity handoff
+
+## Latest authoritative state — 2026-11-26 13:44 Africa/Tunis
+
+This section supersedes the 13:38 monitoring section below and reconciles its branch-lineage references. Preserve earlier history.
+
+- At the start of this reconciliation, performance branch HEAD was `9876a2f4482376299ea65170a8281eab6334f624` and handoff branch HEAD was `6f8fa2789144a00b7948b6a7214a7d2ddda50d9c`. Their immediate parent documentation commits are `c811f312bcf1709b70c4cce20be52c29f2b2d2e9` (audit blob `7570aeae33a168e3e07e46ce60dbd10b5c0fade0`) and `33d5680e6b690e6282d3a35af9e56e6db422d336` (handoff blob `a669d7427f0afb062cc890be87e3d0e823a96c00`). The 13:38 section's pre-update commit references are corrected by this parent/child lineage. Active executable source remains `73873d730110bf3394ceea19b2a4d45ddba73834`; source-to-performance branch is 42 ahead / 0 behind with only the audit Markdown changed. Handoff is 5 commits ahead / 0 behind `6447c29da4e69b3d6957e74785cbc3417d7503a5`, changing only this handoff Markdown. No source or workflow changed.
+- Target-branch Actions inventory remains 139 runs. Latest Android-only `43716474968` and wrapper `43716474955` succeeded at exact source `73873d73` on 2026-11-15; Android 15/15 steps, wrapper Release and Debugoptimized 12/12 each. No newer target-branch build appears in the current 100 newest records.
+- The new `_app_logs_2026-11-25_23-23-40.zip` contains only a WinlatorMali process-exit snapshot (Xiaomi 25069PTEBG / MT6899, Android 16), not a PanVK or Tomb Raider log. It shows normal and `SwipeUpClean` exits without an exception stack. No new benchmark, heap-threshold startup proof, descriptor profile, or PanVK device evidence was found.
+- Active source still defaults to 65,536 tiler-work units and interval 128. The 262,144 environment value is accepted by source but unproven in Winlator until the startup log shows it. Renewal uses saturating graphics tiler-work estimates and drains graphics before heap replacement. Descriptor failure counters already split overflow, no-free-set-only, heap-capacity-only, both-capacity, and VMA; preserve Vulkan return codes and wait for a fresh device capture before allocator changes.
+- Historical Tomb Raider average remains 13.6 FPS versus 13.5 FPS prior; no gain is established. Historical telemetry remains 4,068 renewals, 52.804 seconds wait, zero ring wraps, 1.8 KiB occupancy high-water, zero transient BO failures and 299 unclassified historical descriptor failures.
+- Next device gate: at least three matched uninstrumented A/B Tomb Raider pairs on exact source `73873d73`: default unset must log 65,536; override `PANVK_KBASE_HEAP_RENEW_WORK=262144` must log 262,144 before first Kbase submission. Keep profiling disabled for FPS and run Kbase/descriptor diagnostics separately. Use Winlator's separate custom-driver importer and retain System Driver fallback. Do not modify Android system/vendor driver, kernel, Kbase ABI, ring/heap topology, BO retention, shader dispatch or unimplemented Vulkan extensions.
+
 Last updated: 2026-11-26 13:38 Africa/Tunis (active-branch CI and artifact re-audit)
 
 ## Latest authoritative state — 2026-11-26 13:38 Africa/Tunis
