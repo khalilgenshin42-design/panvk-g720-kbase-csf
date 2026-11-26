@@ -1,5 +1,19 @@
 # PanVK G720 project continuity handoff
-Last updated: 2026-11-25 (16:19 Africa/Tunis; branch, CI, artifact, and source re-audit)
+Last updated: 2026-11-26 (13:36 Africa/Tunis; source, CI, Library-upload, and benchmark-evidence audit)
+
+## Latest authoritative state — 2026-11-26 13:36 Africa/Tunis
+
+This section supersedes the 2026-11-25 16:19 monitoring state below. Preserve earlier entries as history.
+
+- Canonical performance branch HEAD before this update: `b7a8097d427d25bbe1f459d44e05b88876dd35ba`; canonical handoff branch HEAD before this update: `241faf0db9b76ac11a34d565dff6958108003262`. Active executable source remains `73873d730110bf3394ceea19b2a4d45ddba73834`. Source-to-performance-branch comparison is 40 ahead / 0 behind, with only `docs/G720_PERFORMANCE_AUDIT_2026-11-05.md` changed. Handoff comparison from `5346050d6ec8ae9f57586549960415e684f4df35` is 4 ahead / 0 behind, with only `PROJECT_CONTINUITY_HANDOFF.md` changed. This pass changes documentation only; no driver source or workflow is modified.
+- Target-branch Actions inventory remains 139 runs. Latest Android-only `43716474968` and wrapper `43716474955` both succeeded at exact source `73873d73` on 2026-11-15. Android job is 15/15; wrapper Release and Debugoptimized are 12/12 each. No newer target-branch run appears in the current branch-filtered response. No build was triggered.
+- The only new Library upload is `_app_logs_2026-11-25_23-23-40.zip` (489 bytes; SHA-256 `85f6048ec0e2db11dfbbf8b387ae4921212eb112db72e81ccd97addfdc010697`). It contains only a WinlatorMali app-exit snapshot for Xiaomi 25069PTEBG / MT6899, Android 16. It records normal exits and system `SwipeUpClean` exits, but no exception stack or PanVK/Vulkan/Kbase trace. No new Tomb Raider benchmark, threshold startup proof, descriptor diagnostic, device import, or FPS result was found.
+- Active Kbase queue source remains at 65,536 work units and 128 submissions by default. The environment option is parsed and logged through Mesa debug options, cached with `call_once`; the 262,144 override is accepted by source but not proven to be passed by Winlator. Renewal accumulates saturating tiler-work estimates for graphics submissions and drains graphics before heap replacement. Interval and work triggers remain independent.
+- Descriptor failure splitting is already present in active source: overflow, no-free-set-only, heap-capacity-only, both-capacity, and VMA. Existing Vulkan error codes remain unchanged. The historical 299 failures cannot be retrospectively split. Do not alter allocator policy until a new descriptor-profile run identifies the cause.
+- Historical benchmark remains 7.7 min / 19.7 max / 13.6 average FPS versus prior 13.5 average; no improvement is established. Historical telemetry remains 4,068 renewals, 52.804 seconds aggregate renewal wait, zero ring wraps, 1.8 KiB sampled occupancy high-water, zero transient BO failures, and 299 pre-split descriptor failures.
+- Kbase-reported `shader_present` remains the source of usable shader-core masks; do not hard-code seven workers. Active source does not advertise `VK_KHR_ray_query` or acceleration structures. Do not expose unimplemented extensions. Preserve the separate Winlator custom-driver import and System Driver rollback; do not modify Android system/vendor driver, kernel, or Kbase ABI.
+- Next device gate: use exact source `73873d73` package for at least three matched uninstrumented Tomb Raider A/B pairs. A: unset `PANVK_KBASE_HEAP_RENEW_WORK` and require startup threshold log 65536. B: set it to 262144 before first Kbase submission and require the log to show 262144. Match workload, resolution, DXVK 1.7.2, wrapper, and thermal conditions; keep all profiling disabled for FPS. Run Kbase and descriptor profiling separately afterward. Timestamp-correction candidate `f5084ae0` remains an independent, unmerged, device-unvalidated correctness test.
+
 
 ## Latest authoritative state — 2026-11-25 16:19 Africa/Tunis
 
