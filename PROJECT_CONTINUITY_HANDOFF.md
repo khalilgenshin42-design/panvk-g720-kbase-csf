@@ -997,7 +997,8 @@ Downloaded and audited the exact artifact:
   - `libpanvk_drm.so`: `55b2a44016d44f4ef3ce802d62b23b146e98ad915894a38b9fcaf096ee8e2b8c`.
   - `meta.json`: `2c5fd2c5d742195226650799f710449689565f872e18ccc7f480ea8ff6af41ce`.
 - Flat package contains exactly root-level `meta.json`, `libvulkan_panfrost.so`, `libpanvk_drm.so`, and `SHA256SUMS`; no nested paths.
-- Driver and helper are both ELF64 AArch64 Android API 30 shared objects.- Flat package driver SONAME: `libvulkan_panfrost.so`; its private dependency is `libpanvk_drm.so` with RUNPATH `$ORIGIN`. The packaging script deliberately renames the bundled Android libdrm support library to `libpanvk_drm.so` and rewrites DT_NEEDED to avoid interposing on platform `libdrm.so`.
+- Driver and helper are both ELF64 AArch64 Android API 30 shared objects.
+- Flat package driver SONAME: `libvulkan_panfrost.so`; its private dependency is `libpanvk_drm.so` with RUNPATH `$ORIGIN`. The packaging script deliberately renames the bundled Android libdrm support library to `libpanvk_drm.so` and rewrites DT_NEEDED to avoid interposing on platform `libdrm.so`.
 - `libpanvk_drm.so` has SONAME `libpanvk_drm.so` and only depends on Android `libc.so`.
 - Metadata: `PanVK Mali G720 (experimental)`, package version `26.3.0-devel-android-kbase-a87d179f3cdb`, min API 30. It explicitly states this is not Vulkan conformant and device/game compatibility is unverified.
 - Staged Meson install also produced the Panfrost ICD JSON with API version `1.4.354`, plus the staged driver and Android support libs. The Winlator/Adrenotools flat ZIP uses its own `meta.json` loader manifest.
@@ -1997,6 +1998,7 @@ Reference: `zenithblue-oss/panvk-kbase-android`, patches 023 and 193. This is a 
 2. Add focused tests for VS-only and GS/TCS/TES clip/cull outputs, unused lanes, combined and separate arrays, FS reads of cull distance, and IDVS plus GPU-prerast paths. Compile first; device CTS on the actual MC7 remains mandatory before enabling.
 3. Separately resolve the strict wrapper's xcb-dri2 dependency with a real ARM64 build or a source-reviewed optional-path change, then rerun full wrapper build and ELF/dependency/package audits.
 4. Keep the experimental driver and wrapper separate from the phone's stock/vendor Vulkan driver; preserve System Driver fallback.
+
 ## 2026-11-05 continuation — JimVulkan/mali-panvk reference audit
 
 User suggested `https://github.com/JimVulkan/mali-panvk`; audited its latest `main` at commit `58f2c55854bd48b18df756edb11f187af9cd2fde` (2026-11-04 12:19 UTC).
@@ -2995,7 +2997,8 @@ No claim of feature support, build success, or runtime correctness is made.
 ### Additional correctness issue in the existing cull emulation
 
 The current direct VS->FS cull emulation converts each cull distance to a
-per-vertex 0/1 indicator (negative becomes 1), interpolates it, then discardswhen the interpolated value is >= 0.9999. This approximates Vulkan's
+per-vertex 0/1 indicator (negative becomes 1), interpolates it, then discards
+when the interpolated value is >= 0.9999. This approximates Vulkan's
 primitive-level cull-distance rule, but the epsilon can discard a very small
 region of a primitive when only some vertices have a negative value. It must
 be tested against a reference implementation and should not be treated as a
@@ -3994,7 +3997,8 @@ The exact GameNative Mesa wrapper source is publicly available in `GameNative/me
 - Wrapper `wrapper_physical_device.c` enables `VK_EXT_map_memory_placed` emulation by default unless `WRAPPER_DISABLE_PLACED=1`.
 - `wrapper_device_memory.c::wrapper_AllocateMemory` intercepts each host-visible allocation when `memoryMapPlaced` is enabled, and in `WRAPPER_RESOURCE_TYPE=auto` mode tries DMA-heap, AHB, or opaque-FD external memory backends before falling back to the base ICD.
 - This test is Tomb Raider Definitive Edition running under the 64-bit ARM64EC Wine path. It does not need 32-bit low-address mapping for the guest process. Avoiding wrapper external-memory emulation for host-visible allocations is therefore a plausible way to reduce allocation overhead and avoid extra dma-buf/AHB work for this specific x64 game.
-- Proposed isolated test: add environment variable `WRAPPER_DISABLE_PLACED=1` to this container only; do not change any other setting. This disables the wrapper extension/feature emulation and routes host-visible allocations directly to PanVK. It is not a universal setting for 32-bit x86 games; those may require the wrapper's placed mapping emulation.- Keep `dxvk.memoryTrack=True` unchanged for this first A/B comparison. It is a separate likely overhead candidate to test later.
+- Proposed isolated test: add environment variable `WRAPPER_DISABLE_PLACED=1` to this container only; do not change any other setting. This disables the wrapper extension/feature emulation and routes host-visible allocations directly to PanVK. It is not a universal setting for 32-bit x86 games; those may require the wrapper's placed mapping emulation.
+- Keep `dxvk.memoryTrack=True` unchanged for this first A/B comparison. It is a separate likely overhead candidate to test later.
 - Baseline for this exact test configuration: Tomb Raider Definitive Edition, Winlator Mali 1.2.1, `wrapper-gamenative`, DXVK 1.7.2, 900x506, Min 9.4 / Max 19.4 / Avg 14.0 FPS. The test also had a swapchain recreation error and Wine vkQueueSubmit assertion in the log.
 - This experiment is expected to test CPU/allocator overhead, not promise a fixed FPS gain. Compare same benchmark route, resolution, quality, wrapper, DXVK, and thermal state. If the game fails to launch or memory mapping fails, remove the variable and return to baseline.
 
@@ -4994,6 +4998,7 @@ This distinction is now part of the diagnostic decision tree. The driver-side al
 
 
 ### Pipeline-FSR static/dynamic state source audit
+
 While the corrected package builds, audited the pipeline-state plumbing to ensure the extension is not merely an enumeration stub:
 - `src/vulkan/runtime/vk_graphics_state.h` contains `vk_fragment_shading_rate_state`, the FSR dynamic-state enum, and the `fsr` member in both dynamic and pipeline graphics state.
 - `src/vulkan/runtime/vk_graphics_state.c` parses `VkPipelineFragmentShadingRateStateCreateInfoKHR` from pipeline `pNext`, initializes the fragment extent and both combiner operations, and defaults to 1x1 with KEEP/KEEP when the structure is absent. The generic `FOREACH_STATE_GROUP`/state-init machinery routes the FSR state through the same pipeline-state initialization/copy path.
@@ -5992,7 +5997,8 @@ The diagnostic package and probe are now built from the same exact feature-branc
 1. Download the Android Actions artifact and extract the **inner** `PanVK-G720-experimental.zip`.
 2. Import that inner ZIP only through Winlator Mali's custom driver importer. Do not replace or modify Android's system/vendor Vulkan driver or kernel.
 3. Keep the existing Winlator wrapper, container, and game configuration unchanged.
-4. Extract the Windows probe artifact and run `tools\\run-vrs-cases.cmd` in that same container.5. Send all five logs (`panvk_vrs_keep.log`, `panvk_vrs_max.log`, `panvk_vrs_min.log`, `panvk_vrs_mul.log`, `panvk_vrs_replace.log`) and the matching Winlator/logcat archive.
+4. Extract the Windows probe artifact and run `tools\\run-vrs-cases.cmd` in that same container.
+5. Send all five logs (`panvk_vrs_keep.log`, `panvk_vrs_max.log`, `panvk_vrs_min.log`, `panvk_vrs_mul.log`, `panvk_vrs_replace.log`) and the matching Winlator/logcat archive.
 
 The run is for VRS pixel-signature and CS-fault diagnosis, not performance benchmarking. Preserve the existing 1x1 and 2x2 KEEP controls. MAX previously caused VK_ERROR_DEVICE_LOST; the new driver adds cold-error CS ring/subqueue diagnostics and queued Kbase CSF notification logging. MIN/MUL/REPLACE were not previously independently tested. Do not resume Tomb Raider or Borderlands FPS comparisons until the VRS correctness/fault investigation is complete.
 
@@ -6991,7 +6997,8 @@ compiler behavior until a focused probe isolates it.
    sysval lowering to establish whether dynamic rate can be read in shader
    code or reconstructed from command state.
 2. Extend the probe to isolate `gl_FragCoord.xy` and invocation identity,
-   and add a dynamic-vs-static shader that does not read `gl_FragCoord`.   This will separate coarse shading behavior from fragment-coordinate
+   and add a dynamic-vs-static shader that does not read `gl_FragCoord`.
+   This will separate coarse shading behavior from fragment-coordinate
    lowering.
 3. Only then implement a correct dynamic sample-centre path if the backend
    can support it. Rerun static 1x1/2x2 controls and dynamic 2x2.
@@ -7989,6 +7996,7 @@ The user ran the derivative-extended Windows probe on the target Winlator Mali-G
 - Corrected Windows probe CI completed successfully: run `42516974283` on source commit `907cc8f02dbde4eab27896a911ca2201cf2eae3f`. All steps passed, including shader compilation, MinGW build, PE verification, and artifact upload. Artifact ID `13632071195`, size 124,045 bytes, SHA-256 `4325e48f0e91e22e5c6daee6d55ccca8b949c82a42d6be7d053dea76d7d2238b`. This is the first build artifact containing the actual `--case=mip-lod` execution path; device validation is still pending.
 
 - Added `tools/run-vrs-mip-lod.cmd` (`90a556a50daa62180f7ff9592b405b9c28ba98f4`) as a one-click Windows runner, and updated the probe workflow to include it in the uploaded artifact (`a619595480ae12b04c2455e908481e854bfa367b`). A fresh artifact is being built from the packaging commit; prefer that artifact over the earlier successful executable-only package so the runner is included.
+
 
 ## 2026-11-08 — Implicit mip-LOD probe package ready for device validation
 
