@@ -17,6 +17,7 @@ on:
       - experiment/csf-notification-serialization-ci
       - work/android-libdrm-runtime-audit-latest
       - work/winlator-adpkg-packaging
+      - work/stage-icd-runpath-fix
 
 permissions:
   contents: read
@@ -135,6 +136,11 @@ jobs:
         run: |
           meson compile -C build-android-only
           DESTDIR="$GITHUB_WORKSPACE/stage" meson install -C build-android-only
+          # Meson install strips the build-tree RUNPATH. Restore the path
+          # required by the installed ICD manifest and bundled Android stub.
+          INSTALLED_DRIVER="$GITHUB_WORKSPACE/stage/usr/local/lib/libvulkan_panfrost.so"
+          test -f "$INSTALLED_DRIVER"
+          patchelf --set-rpath '$ORIGIN/../../android_stub' "$INSTALLED_DRIVER"
 
       - name: Audit driver, manifest, dependencies and staged files
         run: |
@@ -168,16 +174,24 @@ jobs:
             exit 1
           fi
 
-          # RUNPATH on the installed ICD is $ORIGIN/../../android_stub.
-          # From usr/local/lib this resolves to usr/android_stub.
+          # The manifest points at usr/local/lib; this RUNPATH resolves its
+          # private Android libdrm stub at usr/android_stub after installation.
           mkdir -p stage/usr/android_stub
           cp shims/libdrm.so stage/usr/android_stub/libdrm.so
           readelf -d stage/usr/android_stub/libdrm.so > audit/staged-libdrm-dynamic-section.txt
+          STAGED_DRIVER="stage/usr/local/lib/libvulkan_panfrost.so"
+          readelf -d "$STAGED_DRIVER" > audit/staged-driver-dynamic-section.txt
+          grep -Fq 'Library runpath: [$ORIGIN/../../android_stub]' audit/staged-driver-dynamic-section.txt
+          sha256sum "$DRIVER" | tee audit/sha256.txt
+          cp "$DRIVER" stage/libvulkan_panfrost.so
+          # This convenience copy is at the stage root, so use its own
+          # package-relative path to the same bundled stub.
+          patchelf --set-rpath '$ORIGIN/usr/android_stub' stage/libvulkan_panfrost.so
+          readelf -d stage/libvulkan_panfrost.so > audit/stage-root-driver-dynamic-section.txt
+          grep -Fq 'Library runpath: [$ORIGIN/usr/android_stub]' audit/stage-root-driver-dynamic-section.txt
           find stage -type f -print | sort | tee audit/staged-files.txt
           find stage -type f \( -name '*icd*.json' -o -name '*vulkan*.json' \) -print -exec cat {} \; > audit/icd-manifests.txt
           find stage -type f -name '*.so' -exec sh -c 'echo "### $1"; readelf -d "$1" | grep -E "NEEDED|SONAME|RPATH|RUNPATH" || true' _ {} \; > audit/staged-so-dependencies.txt
-          sha256sum "$DRIVER" | tee audit/sha256.txt
-          cp "$DRIVER" stage/libvulkan_panfrost.so
 
       - name: Build flat Winlator/Adrenotools package
         env:
